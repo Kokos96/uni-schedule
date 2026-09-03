@@ -1,15 +1,15 @@
 [
-  { "id": "c_14b", "code": "№14/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_5b", "code": "№5/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_10b", "code": "№10/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_9b", "code": "№9/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_2b", "code": "2/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_1b", "code": "1/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_3b", "code": "3/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_130t", "code": "130/Т", "building": "Корпус Т", "floor": 1 },
-  { "id": "c_128t", "code": "128/Т", "building": "Корпус Т", "floor": 1 },
-  { "id": "c_7t", "code": "№7/Т", "building": "Корпус Т", "floor": 1 },
-  { "id": "c_11b", "code": "№11/Б", "building": "Корпус Б", "floor": 1 },
-  { "id": "c_302l", "code": "302/l", "building": "Корпус L", "floor": 3 },
-  { "id": "c_509l", "code": "509/l", "building": "Корпус L", "floor": 5 }
+  { "id": "c_14b", "code": "№14/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_5b", "code": "№5/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_10b", "code": "№10/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_9b", "code": "№9/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_2b", "code": "2/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_1b", "code": "1/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_3b", "code": "3/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_130t", "code": "130/Т", "building": "вул. Тарнавського", "floor": 1 },
+  { "id": "c_128t", "code": "128/Т", "building": "вул. Тарнавського", "floor": 1 },
+  { "id": "c_7t", "code": "№7/Т", "building": "вул. Тарнавського", "floor": 1 },
+  { "id": "c_11b", "code": "№11/Б", "building": "вул. Драгоманова", "floor": 1 },
+  { "id": "c_302l", "code": "302/l", "building": "Головний корпус", "floor": 3 },
+  { "id": "c_509l", "code": "509/l", "building": "Головний корпус", "floor": 5 }
 ]

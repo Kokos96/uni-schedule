@@ -1,7 +1,7 @@
 import React from 'react';
-import { Calendar, CheckCircle2, Users, School, Settings } from 'lucide-react';
+import { Calendar, CheckCircle2, Users, Settings } from 'lucide-react';
 
-export type TabType = 'schedule' | 'stats' | 'teachers' | 'classrooms' | 'settings';
+export type TabType = 'schedule' | 'stats' | 'teachers' | 'settings';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -13,7 +13,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentTab, onTabChange })
     { id: 'schedule', label: 'Розклад', icon: Calendar },
     { id: 'stats', label: 'Відвідуваність', icon: CheckCircle2 },
     { id: 'teachers', label: 'Викладачі', icon: Users },
-    { id: 'classrooms', label: 'Аудиторії', icon: School },
     { id: 'settings', label: 'Опції', icon: Settings },
   ] as const;
 

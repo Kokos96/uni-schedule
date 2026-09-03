@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lesson, Teacher, Classroom, AttendanceStatus } from '../../types';
 import { Check, X, Clock, MapPin, User } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface PairCardProps {
   lesson: Lesson;
@@ -26,7 +27,10 @@ export const PairCard: React.FC<PairCardProps> = ({
   }[lesson.type];
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
       className={`rounded-2xl p-4 transition-all duration-200 border ${
         isCurrent
           ? 'bg-[#1C1C1E] border-[#0A84FF] shadow-lg shadow-[#0A84FF]/10'
@@ -78,9 +82,9 @@ export const PairCard: React.FC<PairCardProps> = ({
         <button
           type="button"
           onClick={() => onToggleAttendance('present')}
-          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
             attendanceStatus === 'present'
-              ? 'bg-emerald-500 text-white font-semibold'
+              ? 'bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-500/20'
               : 'bg-white/5 text-neutral-300 hover:bg-white/10'
           }`}
         >
@@ -90,9 +94,9 @@ export const PairCard: React.FC<PairCardProps> = ({
         <button
           type="button"
           onClick={() => onToggleAttendance('absent')}
-          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
             attendanceStatus === 'absent'
-              ? 'bg-rose-500 text-white font-semibold'
+              ? 'bg-rose-500 text-white font-semibold shadow-md shadow-rose-500/20'
               : 'bg-white/5 text-neutral-300 hover:bg-white/10'
           }`}
         >
@@ -102,9 +106,9 @@ export const PairCard: React.FC<PairCardProps> = ({
         <button
           type="button"
           onClick={() => onToggleAttendance('excused')}
-          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all active:scale-95 ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
             attendanceStatus === 'excused'
-              ? 'bg-amber-500 text-black font-semibold'
+              ? 'bg-amber-500 text-black font-semibold shadow-md shadow-amber-500/20'
               : 'bg-white/5 text-neutral-300 hover:bg-white/10'
           }`}
         >
@@ -112,6 +116,6 @@ export const PairCard: React.FC<PairCardProps> = ({
           Поважна
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 };
