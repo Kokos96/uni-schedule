@@ -1,27 +1,41 @@
 import React, { useState } from 'react';
 import { AttendanceRecord, Lesson } from '../../types';
 import scheduleData from '../../data/schedule.json';
-import { CalendarDays } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface StatsViewProps {
   records: AttendanceRecord[];
 }
 
 export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
-  const [filterMode, setFilterMode] = useState<'all' | 'month'>('month');
+  const [filterMode, setFilterMode] = useState<'month' | 'all'>('month');
 
-  const now = new Date();
-  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  
+  // Окремий стан для обраного місяця (за замовчуванням — поточний місяць системи)
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+
   const monthNames = [
     'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
     'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
   ];
-  const currentMonthTitle = monthNames[now.getMonth()];
 
-  // Фільтруємо записи за обраним періодом
+  const selectedYear = selectedDate.getFullYear();
+  const selectedMonthIndex = selectedDate.getMonth();
+  const selectedMonthTitle = monthNames[selectedMonthIndex];
+
+  // Рядок у форматі "YYYY-MM" для точної фільтрації записів
+  const selectedYearMonth = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, '0')}`;
+
+  const changeMonth = (offset: number) => {
+    setSelectedDate((prev) => {
+      const next = new Date(prev);
+      next.setMonth(next.getMonth() + offset);
+      return next;
+    });
+  };
+
+  // Фільтрація: або обраний місяць, або весь семестр
   const filteredRecords = filterMode === 'month'
-    ? records.filter((r) => r.date.startsWith(currentYearMonth))
+    ? records.filter((r) => r.date.startsWith(selectedYearMonth))
     : records;
 
   const allLessons = scheduleData.flatMap((d) => d.lessons) as Lesson[];
@@ -34,7 +48,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
   const totalAttended = presentCount + excusedCount;
   const percentage = totalMarked > 0 ? Math.round((totalAttended / totalMarked) * 100) : 100;
 
-  // Групування по предметах
+  // Групування за предметами
   const subjectsMap: Record<string, { present: number; absent: number; excused: number }> = {};
 
   filteredRecords.forEach((rec) => {
@@ -49,10 +63,10 @@ export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
 
   return (
     <div className="p-4 space-y-4 max-w-md mx-auto">
+      {/* Перемикач режимів: Місяць / Семестр */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold tracking-tight text-white">Відвідуваність</h2>
-        
-        {/* Перемикач: Увесь час / Місяць */}
+
         <div className="flex bg-[#1C1C1E] p-1 rounded-xl border border-white/5">
           <button
             type="button"
@@ -63,7 +77,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
-            {currentMonthTitle}
+            По місяцях
           </button>
           <button
             type="button"
@@ -74,19 +88,47 @@ export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
                 : 'text-neutral-400 hover:text-white'
             }`}
           >
-            Семестр
+            Весь семестр
           </button>
         </div>
       </div>
 
-      {/* Головна картка */}
+      {/* Селектор гортання місяців (активний у режимі "По місяцях") */}
+      {filterMode === 'month' && (
+        <div className="bg-[#1C1C1E] px-4 py-2.5 rounded-2xl border border-white/5 flex items-center justify-between">
+          <span className="text-xs text-neutral-400">Період звіту:</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => changeMonth(-1)}
+              className="p-1 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-300 transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-bold text-white min-w-[100px] text-center">
+              {selectedMonthTitle} {selectedYear}
+            </span>
+            <button
+              type="button"
+              onClick={() => changeMonth(1)}
+              className="p-1 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-300 transition-all"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Головна картка статистики */}
       <div className="bg-[#1C1C1E] border border-white/5 rounded-3xl p-5 text-center">
         <div className="text-5xl font-extrabold text-white mb-1 tracking-tight">
           {percentage}%
         </div>
         <p className="text-xs font-medium text-neutral-400 flex items-center justify-center gap-1.5">
           <CalendarDays className="w-3.5 h-3.5 text-[#0A84FF]" />
-          {filterMode === 'month' ? `Статистика за ${currentMonthTitle}` : 'Статистика за весь період'}
+          {filterMode === 'month'
+            ? `Дані за ${selectedMonthTitle} ${selectedYear}`
+            : 'Загальні дані за весь семестр'}
         </p>
 
         <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-white/5 text-center">
@@ -105,10 +147,10 @@ export const StatsView: React.FC<StatsViewProps> = ({ records }) => {
         </div>
       </div>
 
-      {/* Список предметів */}
+      {/* Розбивка по предметах */}
       <div className="space-y-2.5">
         <h3 className="text-sm font-semibold text-neutral-300 px-1">
-          {filterMode === 'month' ? `Предмети у цьому місяці` : 'Усі предмети'}
+          {filterMode === 'month' ? `Предмети за ${selectedMonthTitle}` : 'Усі предмети'}
         </h3>
         {Object.keys(subjectsMap).length === 0 ? (
           <p className="text-xs text-neutral-500 text-center py-6">

@@ -16,13 +16,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('schedule');
   
-  // Керування реальною вибраною датою
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
 
   const { settings, updateSettings } = useSettings();
   const { records, toggleAttendance, getStatus } = useAttendance();
 
-  // Допоміжні функції роботи з датою
   const formatIsoDate = (d: Date) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -32,7 +30,6 @@ export const App: React.FC = () => {
 
   const selectedIso = formatIsoDate(currentDate);
 
-  // Визначення дня тижня (1 = Пн, ..., 5 = Пт, 0/6 = Вихідні)
   const dayOfWeek = currentDate.getDay();
   const scheduleDayNumber = dayOfWeek === 0 ? 7 : dayOfWeek;
 
@@ -48,10 +45,9 @@ export const App: React.FC = () => {
     setCurrentDate(new Date());
   };
 
-  // Отримання списку 5 днів навколо поточної дати для зручної стрічки
   const getWeekDates = () => {
     const curr = new Date(currentDate);
-    const first = curr.getDate() - (curr.getDay() === 0 ? 6 : curr.getDay() - 1); // Понеділок
+    const first = curr.getDate() - (curr.getDay() === 0 ? 6 : curr.getDay() - 1);
     return [0, 1, 2, 3, 4].map((offset) => {
       const d = new Date(curr);
       d.setDate(first + offset);
@@ -65,7 +61,6 @@ export const App: React.FC = () => {
   const currentDayData = scheduleData.find((d) => d.dayNumber === scheduleDayNumber);
   const rawLessons = (currentDayData ? currentDayData.lessons : []) as Lesson[];
 
-  // Фільтрація
   const filteredLessons = rawLessons.filter((lesson) => {
     if (lesson.subgroup && lesson.subgroup !== settings.subgroup) return false;
     if (lesson.departments && !lesson.departments.includes(settings.department)) return false;
@@ -84,40 +79,38 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-black text-white pb-24 pt-safe select-none">
-      {/* Шапка */}
-      <header className="px-4 py-3 max-w-md mx-auto flex justify-between items-center border-b border-white/5">
-        <div>
-          <span className="text-[11px] font-semibold text-[#0A84FF] uppercase tracking-wider">
-            ФЕП-33с • {settings.department.toUpperCase()} • Підгр. {settings.subgroup}
-          </span>
-          <h1 className="text-xl font-bold tracking-tight">Розклад занять</h1>
-        </div>
-        <button
-          type="button"
-          onClick={resetToToday}
-          className="text-xs bg-white/5 hover:bg-white/10 text-neutral-300 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
-          title="Повернутися на сьогодні"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Сьогодні
-        </button>
+      {/* Лаконічна верхня панель */}
+      <header className="px-4 py-3 max-w-md mx-auto border-b border-white/5">
+        <span className="text-[11px] font-semibold text-[#0A84FF] uppercase tracking-wider">
+          ФЕП-33с • {settings.department.toUpperCase()} • Підгр. {settings.subgroup}
+        </span>
+        <h1 className="text-xl font-bold tracking-tight">Розклад занять</h1>
       </header>
 
       {/* 1. РОЗКЛАД */}
       {activeTab === 'schedule' && (
         <main className="max-w-md mx-auto px-4 py-4 space-y-4">
-          {/* Блок перемикання чисел тижня */}
           <div className="bg-[#1C1C1E] p-3 rounded-2xl border border-white/5 space-y-3">
-            {/* Місяць і стрілки гортання тижнів */}
+            {/* Місяць, стрілки гортання та кнопка повернення на Сьогодні */}
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-bold text-white capitalize">
                 {currentDate.getDate()} {monthNamesGenitive[currentDate.getMonth()]}, {currentDate.getFullYear()}
               </span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={resetToToday}
+                  className="text-[11px] font-medium bg-white/5 hover:bg-white/10 text-neutral-300 px-2 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95"
+                  title="Повернутися на сьогодні"
+                >
+                  <RotateCcw className="w-3 h-3 text-[#0A84FF]" />
+                  Сьогодні
+                </button>
+                <div className="w-[1px] h-3.5 bg-white/10 mx-0.5" />
                 <button
                   type="button"
                   onClick={() => changeDateByDays(-7)}
-                  className="p-1.5 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-400 hover:text-white transition-all"
+                  className="p-1 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-400 hover:text-white transition-all"
                   title="Попередній тиждень"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -125,7 +118,7 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => changeDateByDays(7)}
-                  className="p-1.5 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-400 hover:text-white transition-all"
+                  className="p-1 rounded-lg hover:bg-white/10 active:scale-90 text-neutral-400 hover:text-white transition-all"
                   title="Наступний тиждень"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -133,7 +126,7 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Стрічка днів (Пн - Пт) із числами */}
+            {/* Стрічка днів */}
             <div className="flex gap-1.5">
               {weekDates.map((d, index) => {
                 const isSelected = formatIsoDate(d) === selectedIso;
@@ -160,7 +153,7 @@ export const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Список пар з анімацією переходу */}
+          {/* Список пар */}
           <AnimatePresence mode="wait">
             <motion.div
               key={selectedIso}
