@@ -1,4 +1,5 @@
-{
+[
+  {
     "dayNumber": 1,
     "dayName": "Понеділок",
     "lessons": [
@@ -53,4 +54,237 @@
         "weekType": "both"
       }
     ]
+  },
+  {
+    "dayNumber": 2,
+    "dayName": "Вівторок",
+    "lessons": [
+      {
+        "id": "tue_1_soft_1",
+        "order": 1,
+        "startTime": "08:30",
+        "endTime": "09:50",
+        "name": "М'які обчислення",
+        "type": "Лабораторна",
+        "teacherId": "t_rabosh",
+        "classroomId": "c_14b",
+        "weekType": "both",
+        "subgroup": 1
+      },
+      {
+        "id": "tue_1_comp_2",
+        "order": 1,
+        "startTime": "08:30",
+        "endTime": "09:50",
+        "name": "Методи та технології обчислень",
+        "type": "Лабораторна",
+        "teacherId": "t_kaskun",
+        "classroomId": "c_5b",
+        "weekType": "both",
+        "subgroup": 2
+      },
+      {
+        "id": "tue_2_data_1",
+        "order": 2,
+        "startTime": "10:10",
+        "endTime": "11:30",
+        "name": "Методи та технології інженерії даних",
+        "type": "Лабораторна",
+        "teacherId": "t_demkiv",
+        "classroomId": "c_10b",
+        "weekType": "both",
+        "subgroup": 1
+      },
+      {
+        "id": "tue_2_soft_2",
+        "order": 2,
+        "startTime": "10:10",
+        "endTime": "11:30",
+        "name": "М'які обчислення",
+        "type": "Лабораторна",
+        "teacherId": "t_rabosh",
+        "classroomId": "c_14b",
+        "weekType": "both",
+        "subgroup": 2
+      },
+      {
+        "id": "tue_3_data_2",
+        "order": 3,
+        "startTime": "11:50",
+        "endTime": "13:10",
+        "name": "Методи та технології інженерії даних",
+        "type": "Лабораторна",
+        "teacherId": "t_fostyak",
+        "classroomId": "c_9b",
+        "weekType": "both",
+        "subgroup": 2
+      },
+      {
+        "id": "tue_4_soft_lec",
+        "order": 4,
+        "startTime": "13:30",
+        "endTime": "14:50",
+        "name": "М'які обчислення",
+        "type": "Лекція",
+        "teacherId": "t_olenych",
+        "classroomId": "c_2b",
+        "weekType": "both"
+      }
+    ]
+  },
+  {
+    "dayNumber": 3,
+    "dayName": "Середа",
+    "lessons": [
+      {
+        "id": "wed_5_comp_lec",
+        "order": 5,
+        "startTime": "15:05",
+        "endTime": "16:25",
+        "name": "Методи та технології обчислень",
+        "type": "Лекція",
+        "teacherId": "t_mysiuk",
+        "classroomId": "c_1b",
+        "weekType": "both"
+      },
+      {
+        "id": "wed_6_py_lec",
+        "order": 6,
+        "startTime": "16:40",
+        "endTime": "18:00",
+        "name": "Професійний Python",
+        "type": "Лекція",
+        "teacherId": "t_sveleba",
+        "classroomId": "c_130t",
+        "weekType": "both"
+      },
+      {
+        "id": "wed_7_c_lab",
+        "order": 7,
+        "startTime": "18:10",
+        "endTime": "19:30",
+        "name": "Вибрані розділи мови програмування C",
+        "type": "Лабораторна",
+        "teacherId": "t_bovgyra",
+        "classroomId": "c_10b",
+        "weekType": "both"
+      },
+      {
+        "id": "wed_7_py_2",
+        "order": 7,
+        "startTime": "18:10",
+        "endTime": "19:30",
+        "name": "Професійний Python",
+        "type": "Лабораторна",
+        "teacherId": "t_sveleba",
+        "classroomId": "c_7t",
+        "weekType": "both",
+        "subgroup": 2
+      },
+      {
+        "id": "wed_8_py_1",
+        "order": 8,
+        "startTime": "19:40",
+        "endTime": "21:00",
+        "name": "Професійний Python",
+        "type": "Лабораторна",
+        "teacherId": "t_sveleba",
+        "classroomId": "c_7t",
+        "weekType": "both",
+        "subgroup": 1
+      }
+    ]
+  },
+  {
+    "dayNumber": 4,
+    "dayName": "Четвер",
+    "lessons": [
+      {
+        "id": "thu_5_c_lec",
+        "order": 5,
+        "startTime": "15:05",
+        "endTime": "16:25",
+        "name": "Вибрані розділи мови програмування C",
+        "type": "Лекція",
+        "teacherId": "t_bovgyra",
+        "classroomId": "c_3b",
+        "weekType": "both"
+      }
+    ]
+  },
+  {
+    "dayNumber": 5,
+    "dayName": "П'ятниця",
+    "lessons": [
+      {
+        "id": "fri_1_comp_1",
+        "order": 1,
+        "startTime": "08:30",
+        "endTime": "09:50",
+        "name": "Методи та технології обчислень",
+        "type": "Лабораторна",
+        "teacherId": "t_kaskun",
+        "classroomId": "c_9b",
+        "weekType": "both",
+        "subgroup": 1
+      },
+      {
+        "id": "fri_1_dsp_2",
+        "order": 1,
+        "startTime": "08:30",
+        "endTime": "09:50",
+        "name": "Цифрова обробка інформації",
+        "type": "Лабораторна",
+        "teacherId": "t_polovynko",
+        "classroomId": "c_7t",
+        "weekType": "both",
+        "subgroup": 2
+      },
+      {
+        "id": "fri_2_nosql_lab",
+        "order": 2,
+        "startTime": "10:10",
+        "endTime": "11:30",
+        "name": "Нереляційні та розподілені бази даних",
+        "type": "Лабораторна",
+        "teacherId": "t_zhyshkovych",
+        "classroomId": "c_11b",
+        "weekType": "both"
+      },
+      {
+        "id": "fri_2_dsp_1",
+        "order": 2,
+        "startTime": "10:10",
+        "endTime": "11:30",
+        "name": "Цифрова обробка інформації",
+        "type": "Лабораторна",
+        "teacherId": "t_polovynko",
+        "classroomId": "c_7t",
+        "weekType": "both",
+        "subgroup": 1
+      },
+      {
+        "id": "fri_3_dsp_lec",
+        "order": 3,
+        "startTime": "11:50",
+        "endTime": "13:10",
+        "name": "Цифрова обробка інформації",
+        "type": "Лекція",
+        "teacherId": "t_polovynko",
+        "classroomId": "c_130t",
+        "weekType": "both"
+      },
+      {
+        "id": "fri_4_nosql_lec",
+        "order": 4,
+        "startTime": "13:30",
+        "endTime": "14:50",
+        "name": "Нереляційні та розподілені бази даних",
+        "type": "Лекція",
+        "teacherId": "t_zhyshkovych",
+        "classroomId": "c_128t",
+        "weekType": "both"
+      }
+    ]
   }
+]
