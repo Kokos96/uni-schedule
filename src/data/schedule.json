@@ -1,0 +1,56 @@
+{
+    "dayNumber": 1,
+    "dayName": "Понеділок",
+    "lessons": [
+      {
+        "id": "mon_3_freelance_lec",
+        "order": 3,
+        "startTime": "11:50",
+        "endTime": "13:10",
+        "name": "Freelance: робота онлайн",
+        "type": "Лекція",
+        "teacherId": "t_shot",
+        "classroomId": "c_509l",
+        "weekType": "both",
+        "isElective": true,
+        "electiveKey": "freelance"
+      },
+      {
+        "id": "mon_4_freelance_pr",
+        "order": 4,
+        "startTime": "13:30",
+        "endTime": "14:50",
+        "name": "Freelance: робота онлайн",
+        "type": "Практична",
+        "teacherId": "t_shot",
+        "classroomId": "c_302l",
+        "weekType": "both",
+        "isElective": true,
+        "electiveKey": "freelance"
+      },
+      {
+        "id": "mon_4_innov_lec",
+        "order": 4,
+        "startTime": "13:30",
+        "endTime": "14:50",
+        "name": "Інноваційний менеджмент",
+        "type": "Лекція",
+        "teacherId": "t_bigdai",
+        "classroomId": "c_3b",
+        "weekType": "both",
+        "isElective": true,
+        "electiveKey": "management"
+      },
+      {
+        "id": "mon_5_eng_data",
+        "order": 5,
+        "startTime": "15:05",
+        "endTime": "16:25",
+        "name": "Методи та технології інженерії даних",
+        "type": "Лекція",
+        "teacherId": "t_demkiv",
+        "classroomId": "c_1b",
+        "weekType": "both"
+      }
+    ]
+  }
