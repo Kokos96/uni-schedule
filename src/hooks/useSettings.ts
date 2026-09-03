@@ -1,17 +1,22 @@
 import { useState, useEffect } from 'react';
 import { UserSettings } from '../types';
 
-const SETTINGS_KEY = 'uni_schedule_settings_v1';
+const SETTINGS_KEY = 'uni_schedule_settings_v2';
 
 const defaultSettings: UserSettings = {
   subgroup: 1,
+  department: 'sp',
   electiveCourse: 'freelance',
 };
 
 export const useSettings = () => {
   const [settings, setSettings] = useState<UserSettings>(() => {
-    const saved = localStorage.getItem(SETTINGS_KEY);
-    return saved ? JSON.parse(saved) : defaultSettings;
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+    } catch {
+      return defaultSettings;
+    }
   });
 
   useEffect(() => {

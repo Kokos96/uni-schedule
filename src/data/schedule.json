@@ -43,6 +43,19 @@
         "electiveKey": "management"
       },
       {
+        "id": "mon_4_space_lec",
+        "order": 4,
+        "startTime": "13:30",
+        "endTime": "14:50",
+        "name": "Людина і космос",
+        "type": "Лекція",
+        "teacherId": "t_bovgyra",
+        "classroomId": "c_1b",
+        "weekType": "both",
+        "isElective": true,
+        "electiveKey": "space"
+      },
+      {
         "id": "mon_5_eng_data",
         "order": 5,
         "startTime": "15:05",
@@ -167,7 +180,8 @@
         "type": "Лабораторна",
         "teacherId": "t_bovgyra",
         "classroomId": "c_10b",
-        "weekType": "both"
+        "weekType": "both",
+        "departments": ["rks", "rkt"]
       },
       {
         "id": "wed_7_py_2",
@@ -208,7 +222,8 @@
         "type": "Лекція",
         "teacherId": "t_bovgyra",
         "classroomId": "c_3b",
-        "weekType": "both"
+        "weekType": "both",
+        "departments": ["rks", "rkt"]
       }
     ]
   },
@@ -249,7 +264,8 @@
         "type": "Лабораторна",
         "teacherId": "t_zhyshkovych",
         "classroomId": "c_11b",
-        "weekType": "both"
+        "weekType": "both",
+        "departments": ["sp", "oit"]
       },
       {
         "id": "fri_2_dsp_1",
@@ -283,7 +299,8 @@
         "type": "Лекція",
         "teacherId": "t_zhyshkovych",
         "classroomId": "c_128t",
-        "weekType": "both"
+        "weekType": "both",
+        "departments": ["sp", "oit"]
       }
     ]
   }

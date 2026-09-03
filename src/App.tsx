@@ -24,11 +24,17 @@ export const App: React.FC = () => {
   const currentDayData = scheduleData.find((d) => d.dayNumber === selectedDay);
   const rawLessons = (currentDayData ? currentDayData.lessons : []) as Lesson[];
 
-  // Фільтрація за підгрупою та вибірковою парою з налаштувань
+  // Повна фільтрація: підгрупа, кафедральний спецпотік та вибіркова дисципліна
   const filteredLessons = rawLessons.filter((lesson) => {
+    // 1. Фільтр підгрупи
     if (lesson.subgroup && lesson.subgroup !== settings.subgroup) {
       return false;
     }
+    // 2. Фільтр кафедри (СП/ОІТ -> NoSQL, РКС/РКТ -> Мова C)
+    if (lesson.departments && !lesson.departments.includes(settings.department)) {
+      return false;
+    }
+    // 3. Фільтр вибіркових предметів
     if (lesson.isElective && settings.electiveCourse !== 'both') {
       if (lesson.electiveKey && lesson.electiveKey !== settings.electiveCourse) {
         return false;
@@ -53,7 +59,7 @@ export const App: React.FC = () => {
       <header className="px-4 py-3 max-w-md mx-auto flex justify-between items-center border-b border-white/5">
         <div>
           <span className="text-[11px] font-semibold text-[#0A84FF] uppercase tracking-wider">
-            ФЕП-33с • Підгрупа {settings.subgroup}
+            ФЕП-33с • {settings.department.toUpperCase()} • Підгр. {settings.subgroup}
           </span>
           <h1 className="text-xl font-bold tracking-tight">Розклад занять</h1>
         </div>
