@@ -2,19 +2,230 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ==========================================================================
+   GRAPHITE GLASS DESIGN SYSTEM — TOKENS (uni-schedule 2.0)
+   ========================================================================== */
+
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
+
+  /* --- Core RGB Channels (for Tailwind <alpha-value> support) --- */
+  --rgb-canvas: 36 37 34;            /* #242522 */
+  --rgb-surface: 48 49 45;           /* #30312D */
+  --rgb-surface-elevated: 57 58 53;  /* #393A35 */
+  --rgb-border: 74 75 69;            /* #4A4B45 */
+  --rgb-text-primary: 240 238 232;   /* #F0EEE8 */
+  --rgb-text-secondary: 168 166 158; /* #A8A69E */
+
+  --rgb-amber: 216 139 69;           /* #D88B45 */
+  --rgb-terracotta: 215 123 89;      /* #D77B59 */
+  --rgb-sage: 170 181 160;           /* #AAB5A0 */
+  --rgb-beige: 216 203 184;          /* #D8CBB8 */
+
+  /* --- Semantic Surface & Text Tokens --- */
+  --bg-canvas: #242522;
+  --bg-surface: #30312D;
+  --bg-surface-elevated: #393A35;
+  --bg-surface-secondary: #2B2C28;
+  --border-subtle: #4A4B45;
+  --border-strong: #5E6058;
+
+  --text-primary: #F0EEE8;
+  --text-secondary: #A8A69E;
+  --text-muted: #94928A;
+  --text-on-accent: #242522;
+
+  /* --- Contrast-Safe Accent Foregrounds --- */
+  --accent-amber: #D88B45;
+  --accent-amber-fg: #EDA96B;
+  --accent-amber-soft: rgba(216, 139, 69, 0.14);
+  --accent-terracotta: #D77B59;
+  --accent-terracotta-fg: #EC9B7E;
+  --accent-terracotta-soft: rgba(215, 123, 89, 0.14);
+  --accent-sage: #AAB5A0;
+  --accent-sage-fg: #B8C3AE;
+  --accent-sage-soft: rgba(170, 181, 160, 0.14);
+  --accent-beige: #D8CBB8;
+  --accent-beige-fg: #D8CBB8;
+  --accent-beige-soft: rgba(216, 203, 184, 0.12);
+
+  /* --- Non-Text Chart / UI Graphic Tokens --- */
+  --chart-amber: #D88B45;
+  --chart-terracotta: #D77B59;
+  --chart-sage: #AAB5A0;
+
+  /* --- Selective Glassmorphism --- */
+  --bg-glass: rgba(48, 49, 45, 0.72);
+  --bg-glass-strong: rgba(57, 58, 53, 0.84);
+  --border-glass: rgba(240, 238, 232, 0.11);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-glass: 0 12px 32px -10px rgba(0, 0, 0, 0.45);
+  --shadow-elevated: 0 6px 20px -6px rgba(0, 0, 0, 0.35);
+  --glow-amber: 0 10px 30px -10px rgba(216, 139, 69, 0.22);
+  --backdrop-scrim: rgba(20, 21, 19, 0.64);
+
+  /* --- Lesson Types --- */
+  --badge-lecture-bg: rgba(216, 203, 184, 0.12);
+  --badge-lecture-border: rgba(216, 203, 184, 0.24);
+  --badge-lecture-fg: #D8CBB8;
+
+  --badge-practice-bg: rgba(215, 123, 89, 0.14);
+  --badge-practice-border: rgba(215, 123, 89, 0.28);
+  --badge-practice-fg: #EC9B7E;
+
+  --badge-lab-bg: rgba(170, 181, 160, 0.14);
+  --badge-lab-border: rgba(170, 181, 160, 0.28);
+  --badge-lab-fg: #B8C3AE;
+
+  /* --- Attendance States --- */
+  --status-present-bg: #AAB5A0;
+  --status-present-fg: #242522;
+  --status-absent-bg: #D77B59;
+  --status-absent-fg: #242522;
+  --status-excused-bg: #D88B45;
+  --status-excused-fg: #242522;
 }
 
-body {
-  background-color: #000000;
-  color: #FFFFFF;
-  margin: 0;
-  -webkit-font-smoothing: antialiased;
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-  overscroll-behavior-y: none;
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* --- Core RGB Channels --- */
+  --rgb-canvas: 242 240 235;         /* #F2F0EB */
+  --rgb-surface: 250 249 246;        /* #FAF9F6 */
+  --rgb-surface-elevated: 233 231 225; /* #E9E7E1 */
+  --rgb-border: 213 210 202;         /* #D5D2CA */
+  --rgb-text-primary: 41 42 40;      /* #292A28 */
+  --rgb-text-secondary: 92 91 85;    /* #5C5B55 */
+
+  --rgb-amber: 216 139 69;           /* #D88B45 */
+  --rgb-terracotta: 215 123 89;      /* #D77B59 */
+  --rgb-sage: 170 181 160;           /* #AAB5A0 */
+  --rgb-beige: 216 203 184;          /* #D8CBB8 */
+
+  /* --- Semantic Surface & Text Tokens --- */
+  --bg-canvas: #F2F0EB;
+  --bg-surface: #FAF9F6;
+  --bg-surface-elevated: #E9E7E1;
+  --bg-surface-secondary: #E9E7E1;
+  --border-subtle: #D5D2CA;
+  --border-strong: #BCB8AE;
+
+  --text-primary: #292A28;
+  --text-secondary: #5C5B55;
+  --text-muted: #686760;
+  --text-on-accent: #FAF9F6;
+
+  /* --- Contrast-Safe Accent Foregrounds (WCAG AA >= 4.5:1 on #FAF9F6) --- */
+  --accent-amber: #D88B45;
+  --accent-amber-fg: #8F4D12;
+  --accent-amber-soft: rgba(216, 139, 69, 0.14);
+  --accent-terracotta: #D77B59;
+  --accent-terracotta-fg: #963F20;
+  --accent-terracotta-soft: rgba(215, 123, 89, 0.14);
+  --accent-sage: #AAB5A0;
+  --accent-sage-fg: #45553B;
+  --accent-sage-soft: rgba(170, 181, 160, 0.22);
+  --accent-beige: #D8CBB8;
+  --accent-beige-fg: #63584A;
+  --accent-beige-soft: rgba(216, 203, 184, 0.34);
+
+  /* --- Non-Text Chart / UI Graphic Tokens (SC 1.4.11 >= 3.0:1 on #FAF9F6) --- */
+  --chart-amber: #B06520;
+  --chart-terracotta: #B25232;
+  --chart-sage: #5E7052;
+
+  /* --- Selective Glassmorphism --- */
+  --bg-glass: rgba(250, 249, 246, 0.78);
+  --bg-glass-strong: rgba(250, 249, 246, 0.90);
+  --border-glass: rgba(41, 42, 40, 0.10);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.70);
+  --shadow-glass: 0 12px 32px -12px rgba(41, 42, 40, 0.14);
+  --shadow-elevated: 0 4px 16px -4px rgba(41, 42, 40, 0.08);
+  --glow-amber: 0 10px 28px -10px rgba(216, 139, 69, 0.24);
+  --backdrop-scrim: rgba(41, 42, 40, 0.32);
+
+  /* --- Lesson Types --- */
+  --badge-lecture-bg: rgba(216, 203, 184, 0.36);
+  --badge-lecture-border: rgba(168, 152, 130, 0.40);
+  --badge-lecture-fg: #5F5446;
+
+  --badge-practice-bg: rgba(215, 123, 89, 0.16);
+  --badge-practice-border: rgba(215, 123, 89, 0.34);
+  --badge-practice-fg: #963F20;
+
+  --badge-lab-bg: rgba(170, 181, 160, 0.25);
+  --badge-lab-border: rgba(122, 138, 108, 0.35);
+  --badge-lab-fg: #45553B;
+
+  /* --- Attendance States --- */
+  --status-present-bg: #4E6043;
+  --status-present-fg: #FAF9F6;
+  --status-absent-bg: #A94726;
+  --status-absent-fg: #FAF9F6;
+  --status-excused-bg: #9D5818;
+  --status-excused-fg: #FAF9F6;
+}
+
+@layer base {
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    margin: 0;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent-amber);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background-color: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--glass-highlight), var(--shadow-glass);
+    backdrop-filter: blur(16px) saturate(135%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
+  }
+
+  .glass-strong {
+    background-color: var(--bg-glass-strong);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--glass-highlight), var(--shadow-glass);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+  }
+
+  .glass-amber-lit {
+    background-color: var(--bg-glass);
+    background-image: radial-gradient(
+      120% 90% at 10% 0%,
+      rgba(var(--rgb-amber) / 0.14) 0%,
+      transparent 60%
+    );
+    border: 1px solid rgba(var(--rgb-amber) / 0.42);
+    box-shadow: inset 0 1px 0 rgba(var(--rgb-amber) / 0.18), var(--glow-amber);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-panel,
+    .glass-strong,
+    .glass-amber-lit {
+      background-color: var(--bg-surface-elevated);
+    }
+  }
 }
 
 .pt-safe {
@@ -23,4 +234,22 @@ body {
 
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 120ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .animate-pulse,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+  }
 }
