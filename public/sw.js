@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const SHELL_CACHE = `rozklad-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `rozklad-assets-${CACHE_VERSION}`;
 const ACTIVE_CACHES = new Set([SHELL_CACHE, ASSET_CACHE]);
@@ -12,8 +12,8 @@ const PRECACHE_URLS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
-  '/icons/apple-touch-icon.png',
-  '/icons/favicon-32x32.png',
+  '/icons/apple-touch-icon.png?v=4',
+  '/icons/favicon-32x32.png?v=4',
 ];
 
 self.addEventListener('install', (event) => {
