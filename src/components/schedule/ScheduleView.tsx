@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ArrowCounterClockwise,
   ArrowRight,
-  CalendarDays,
-  CalendarRange,
-  ChevronLeft,
-  ChevronRight,
+  Calendar,
+  CalendarDots,
+  CaretLeft,
+  CaretRight,
   Clock,
-  Columns2,
-  RotateCcw,
+  Columns,
   SlidersHorizontal,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import type { CurrentPairState } from '../../hooks/useCurrentPair';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import {
@@ -276,13 +276,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 ? {
                     label: 'Повернутися на сьогодні',
                     onClick: onResetToToday,
-                    icon: <RotateCcw className="h-3.5 w-3.5" />,
+                    icon: <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" />,
                   }
                 : onNavigateToDeadlines
                   ? {
                       label: 'Переглянути дедлайни',
                       onClick: onNavigateToDeadlines,
-                      icon: <ArrowRight className="h-3.5 w-3.5" />,
+                      icon: <ArrowRight className="h-3.5 w-3.5" weight="regular" />,
                     }
                   : undefined
             }
@@ -342,7 +342,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 onClick={onResetToToday}
                 className="inline-flex min-h-[32px] items-center gap-1.5 rounded-xl border border-amber/35 bg-amber-soft px-2.5 text-xs font-medium text-amber-fg transition-colors hover:border-amber/60 active:scale-[0.97]"
               >
-                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                <ArrowCounterClockwise className="h-3 w-3" weight="regular" aria-hidden="true" />
                 <span>Сьогодні</span>
               </button>
             )}
@@ -361,7 +361,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 title="Попередній день (←)"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface text-ink-secondary transition-colors hover:border-line-strong hover:text-ink active:scale-[0.97]"
               >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <CaretLeft className="h-4 w-4" weight="bold" aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -370,7 +370,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 title="Наступний день (→)"
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface text-ink-secondary transition-colors hover:border-line-strong hover:text-ink active:scale-[0.97]"
               >
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                <CaretRight className="h-4 w-4" weight="bold" aria-hidden="true" />
               </button>
             </div>
           )}
@@ -385,15 +385,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               {
                 value: 'day',
                 label: 'День',
-                icon: <CalendarDays className="h-3.5 w-3.5" />,
+                icon: <Calendar className="h-3.5 w-3.5" weight="regular" />,
               },
               {
                 value: 'week',
                 label: 'Тиждень',
                 icon: isDesktop ? (
-                  <Columns2 className="h-3.5 w-3.5" />
+                  <Columns className="h-3.5 w-3.5" weight="regular" />
                 ) : (
-                  <CalendarRange className="h-3.5 w-3.5" />
+                  <CalendarDots className="h-3.5 w-3.5" weight="regular" />
                 ),
               },
             ]}
@@ -469,8 +469,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             <GlassCard variant="glass" padding="md" className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-fg" aria-hidden="true" />
-                  <h2 className="text-sm font-semibold text-ink">
+                  <Clock className="h-4 w-4 text-amber-fg" weight="regular" aria-hidden="true" />
+                  <h2 className="font-serif text-sm font-semibold text-ink">
                     Найближчі дедлайни
                   </h2>
                 </div>
@@ -481,7 +481,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-amber-fg transition-colors hover:bg-amber-soft"
                   >
                     <span>Усі</span>
-                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    <ArrowRight className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -535,9 +535,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <div className="flex items-center gap-2">
                   <SlidersHorizontal
                     className="h-4 w-4 text-ink-secondary"
+                    weight="regular"
                     aria-hidden="true"
                   />
-                  <h2 className="text-sm font-semibold text-ink">
+                  <h2 className="font-serif text-sm font-semibold text-ink">
                     Активний профіль
                   </h2>
                 </div>

@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { Calculator, CheckCircle2, Info, Sparkles, TrendingUp } from 'lucide-react';
+import { Calculator, CheckCircle, Info, Sparkle, TrendUp } from '@phosphor-icons/react';
 import { computeAttendanceTarget } from '../../utils/attendanceMath';
 import { GlassCard } from '../ui/GlassCard';
 import { MetaChip } from '../ui/Badge';
@@ -48,10 +48,10 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/30 bg-amber-soft text-amber-fg">
-            <Calculator className="h-4 w-4" aria-hidden="true" />
+            <Calculator weight="duotone" className="h-4 w-4" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold tracking-[-0.01em] text-ink">
+            <h3 className="font-serif text-sm font-semibold tracking-[-0.01em] text-ink">
               Калькулятор цілі
             </h3>
             <p className="text-xs text-ink-secondary">
@@ -126,7 +126,7 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
       <div className="mt-4">
         {!target.hasData ? (
           <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-elevated/60 p-3.5">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
+            <Info weight="duotone" className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
             <div className="space-y-0.5">
               <p className="text-xs font-semibold text-ink">
                 Відмітьте хоча б одну пару в розкладі
@@ -139,7 +139,7 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
           </div>
         ) : target.isMeetingGoal ? (
           <div className="flex items-start gap-3 rounded-xl border border-sage/35 bg-sage-soft p-3.5">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-sage-fg" aria-hidden="true" />
+            <CheckCircle weight="duotone" className="mt-0.5 h-4 w-4 shrink-0 text-sage-fg" aria-hidden="true" />
             <div className="space-y-1">
               <p className="text-sm font-semibold text-sage-fg">
                 Можна пропустити ще {target.canSkip} {pluralizePairsUa(target.canSkip)}
@@ -166,7 +166,7 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
           </div>
         ) : !target.isGoalReachable || target.mustAttend === null ? (
           <div className="flex items-start gap-3 rounded-xl border border-amber/35 bg-amber-soft p-3.5">
-            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
+            <Sparkle weight="duotone" className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
             <div className="space-y-1">
               <p className="text-sm font-semibold text-amber-fg">
                 Поріг 100% уже недосяжний
@@ -181,7 +181,7 @@ export const AttendanceCalculator: React.FC<AttendanceCalculatorProps> = ({
           </div>
         ) : (
           <div className="flex items-start gap-3 rounded-xl border border-terracotta/35 bg-terracotta-soft p-3.5">
-            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-terracotta-fg" aria-hidden="true" />
+            <TrendUp weight="duotone" className="mt-0.5 h-4 w-4 shrink-0 text-terracotta-fg" aria-hidden="true" />
             <div className="space-y-1">
               <p className="text-sm font-semibold text-terracotta-fg">
                 Потрібно відвідати {target.mustAttend} {pluralizePairsUa(target.mustAttend)} поспіль

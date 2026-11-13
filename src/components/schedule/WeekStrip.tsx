@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
+import { ArrowCounterClockwise, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import {
@@ -109,7 +109,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
             onClick={onResetToday}
             className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-xl border border-amber/35 bg-amber-soft px-2.5 text-xs font-semibold text-amber-fg transition-colors hover:bg-amber/20 active:opacity-85"
           >
-            <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <ArrowCounterClockwise className="h-3.5 w-3.5 shrink-0" weight="regular" aria-hidden />
             <span>Сьогодні</span>
           </button>
         )}
@@ -132,7 +132,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
             aria-label="Попередній тиждень"
             className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl border border-line bg-surface-elevated/70 text-ink-secondary transition-colors hover:border-line-strong hover:text-ink"
           >
-            <ChevronLeft className="h-4 w-4" aria-hidden />
+            <CaretLeft className="h-4 w-4" weight="bold" aria-hidden />
           </button>
           <button
             type="button"
@@ -140,7 +140,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
             aria-label="Наступний тиждень"
             className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl border border-line bg-surface-elevated/70 text-ink-secondary transition-colors hover:border-line-strong hover:text-ink"
           >
-            <ChevronRight className="h-4 w-4" aria-hidden />
+            <CaretRight className="h-4 w-4" weight="bold" aria-hidden />
           </button>
         </div>
       </div>

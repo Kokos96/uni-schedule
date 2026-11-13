@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ArrowSquareOut,
   Calendar,
   CalendarPlus,
-  ExternalLink,
-  Link2,
-  Pencil,
+  LinkSimple,
+  Note,
+  PencilSimple,
   Plus,
-  StickyNote,
-  Trash2,
-} from 'lucide-react';
+  Trash,
+} from '@phosphor-icons/react';
 import type { Classroom, Lesson, Teacher } from '../../types';
 import type {
   CreateDeadlineInput,
@@ -349,12 +349,12 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                 {
                   value: 'notes',
                   label: `Нотатки (${lessonNotes.length})`,
-                  icon: <StickyNote className="h-3.5 w-3.5" />,
+                  icon: <Note className="h-3.5 w-3.5" weight="regular" />,
                 },
                 {
                   value: 'deadline',
                   label: 'Створити дедлайн',
-                  icon: <CalendarPlus className="h-3.5 w-3.5" />,
+                  icon: <CalendarPlus className="h-3.5 w-3.5" weight="regular" />,
                 },
               ]}
             />
@@ -408,7 +408,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                       htmlFor="lesson-note-link"
                       className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-ink-secondary"
                     >
-                      <Link2 className="h-3 w-3" aria-hidden="true" />
+                      <LinkSimple className="h-3 w-3" weight="regular" aria-hidden="true" />
                       <span>Посилання (Zoom / Meet / Docs)</span>
                     </label>
                     <div className="flex items-center gap-1.5">
@@ -430,7 +430,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                           aria-label="Відкрити посилання у новій вкладці"
                           className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-xl border border-amber/35 bg-amber-soft text-amber-fg transition-colors hover:border-amber/60"
                         >
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                          <ArrowSquareOut className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
                         </a>
                       )}
                     </div>
@@ -441,7 +441,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                       htmlFor="lesson-note-deadline-date"
                       className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-ink-secondary"
                     >
-                      <Calendar className="h-3 w-3" aria-hidden="true" />
+                      <Calendar className="h-3 w-3" weight="regular" aria-hidden="true" />
                       <span>Дедлайн (необов'язково)</span>
                     </label>
                     <input
@@ -483,7 +483,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                     type="submit"
                     className="inline-flex min-h-[38px] items-center justify-center gap-1.5 rounded-xl border border-amber/40 bg-amber px-4 text-xs font-semibold text-[#242522] transition-all hover:brightness-105 active:scale-[0.98]"
                   >
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Plus className="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
                     <span>
                       {editingNoteId ? 'Зберегти зміни' : 'Зберегти нотатку'}
                     </span>
@@ -546,7 +546,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                                 aria-label="Редагувати нотатку"
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink"
                               >
-                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                <PencilSimple className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
                               </button>
                               <button
                                 type="button"
@@ -554,7 +554,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                                 aria-label="Видалити нотатку"
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-terracotta-soft hover:text-terracotta-fg"
                               >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                <Trash className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
                               </button>
                             </div>
                           </div>
@@ -571,8 +571,9 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-amber/30 bg-amber-soft px-3 py-1.5 text-xs font-medium text-amber-fg transition-colors hover:border-amber/55 hover:bg-amber/20"
                               >
-                                <ExternalLink
+                                <ArrowSquareOut
                                   className="h-3.5 w-3.5 shrink-0"
+                                  weight="regular"
                                   aria-hidden="true"
                                 />
                                 <span>{getFriendlyLinkLabel(safeLink)}</span>
@@ -702,7 +703,7 @@ export const LessonNotesDrawer: React.FC<LessonNotesDrawerProps> = ({
                   type="submit"
                   className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-amber/40 bg-amber px-4 text-xs font-semibold text-[#242522] transition-all hover:brightness-105 active:scale-[0.98]"
                 >
-                  <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                  <CalendarPlus className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
                   <span>Додати дедлайн</span>
                 </button>
               </div>

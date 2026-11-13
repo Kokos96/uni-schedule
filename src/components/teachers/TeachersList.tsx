@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ChevronDown,
+  CaretDown,
   Clock,
   GraduationCap,
+  MagnifyingGlass,
   MapPin,
-  Search,
   User,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import {
   REDUCED_MOTION_TRANSITION,
   expandCollapseVariants,
@@ -93,7 +93,8 @@ export const TeachersList: React.FC<TeachersListProps> = ({
     <div className="space-y-4">
       {/* Search bar */}
       <div className="relative">
-        <Search
+        <MagnifyingGlass
+          weight="regular"
           className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-ink-muted"
           aria-hidden="true"
         />
@@ -112,7 +113,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
             aria-label="Очистити пошук"
             className="absolute top-1/2 right-2.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:text-ink"
           >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
+            <X weight="bold" className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </div>
@@ -162,7 +163,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                       <div className="flex flex-wrap items-center gap-1.5">
                         <MetaChip
                           variant="beige"
-                          icon={<GraduationCap className="h-3 w-3" />}
+                          icon={<GraduationCap weight="duotone" className="h-3 w-3" />}
                         >
                           {teacher.department}
                         </MetaChip>
@@ -178,6 +179,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
 
                       <div className="flex items-center gap-2">
                         <User
+                          weight="duotone"
                           className="h-4 w-4 shrink-0 text-amber-fg"
                           aria-hidden="true"
                         />
@@ -202,7 +204,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                       )}
                       aria-hidden="true"
                     >
-                      <ChevronDown className="h-4 w-4" />
+                      <CaretDown weight="bold" className="h-4 w-4" />
                     </span>
                   </button>
 
@@ -252,6 +254,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                                       </span>
                                       <span className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums text-ink-secondary">
                                         <Clock
+                                          weight="regular"
                                           className="h-3 w-3 text-amber-fg"
                                           aria-hidden="true"
                                         />
@@ -280,6 +283,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                                   {slot.classroom && (
                                     <div className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-secondary">
                                       <MapPin
+                                        weight="regular"
                                         className="h-3 w-3 shrink-0 text-amber-fg"
                                         aria-hidden="true"
                                       />

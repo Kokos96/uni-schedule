@@ -1,13 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  BarChart3,
   Calendar,
+  ChartBar,
   CheckSquare,
-  Settings,
+  Gear,
   Users,
-  type LucideIcon,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import {
@@ -31,15 +31,15 @@ export interface BottomNavProps {
 interface NavTabItem {
   id: TabType;
   label: string;
-  icon: LucideIcon;
+  icon: PhosphorIcon;
 }
 
 const NAV_TABS: readonly NavTabItem[] = [
   { id: 'schedule', label: 'Розклад', icon: Calendar },
   { id: 'deadlines', label: 'Дедлайни', icon: CheckSquare },
-  { id: 'stats', label: 'Статистика', icon: BarChart3 },
+  { id: 'stats', label: 'Статистика', icon: ChartBar },
   { id: 'directory', label: 'Довідник', icon: Users },
-  { id: 'settings', label: 'Опції', icon: Settings },
+  { id: 'settings', label: 'Опції', icon: Gear },
 ] as const;
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -92,7 +92,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <span className="relative z-10 flex items-center justify-center">
                 <Icon
                   className="h-[19px] w-[19px] shrink-0 transition-colors"
-                  strokeWidth={isActive ? 2.25 : 1.75}
+                  weight={isActive ? 'duotone' : 'regular'}
                   aria-hidden
                 />
                 {showBadge && (

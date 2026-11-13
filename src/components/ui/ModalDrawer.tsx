@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { X } from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -225,7 +225,7 @@ export const ModalDrawer: React.FC<ModalDrawerProps> = ({
                   {title && (
                     <h2
                       id={titleId}
-                      className="text-base font-semibold leading-[1.35] tracking-[-0.015em] text-ink"
+                      className="font-serif text-base font-semibold leading-[1.35] tracking-[-0.015em] text-ink"
                     >
                       {title}
                     </h2>
@@ -246,7 +246,7 @@ export const ModalDrawer: React.FC<ModalDrawerProps> = ({
                     aria-label="Закрити"
                     className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-transparent text-ink-secondary transition-colors duration-150 hover:border-line hover:bg-surface-elevated hover:text-ink active:scale-[0.97]"
                   >
-                    <X className="h-4 w-4" aria-hidden="true" />
+                    <X className="h-4 w-4" weight="bold" aria-hidden="true" />
                   </button>
                 )}
               </div>

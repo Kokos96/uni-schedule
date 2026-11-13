@@ -1,6 +1,6 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, WifiOff, X } from 'lucide-react';
+import { ArrowsClockwise, WifiSlash, X } from '@phosphor-icons/react';
 import {
   glassPanelVariants,
   reducedPageTransitionVariants,
@@ -47,7 +47,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber/25 bg-amber-soft text-amber-fg"
               aria-hidden
             >
-              <WifiOff className="h-4 w-4" />
+              <WifiSlash className="h-4 w-4" weight="duotone" />
             </span>
             <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-ink">
               Офлайн-режим: розклад і нотатки доступні локально
@@ -71,7 +71,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber/30 bg-amber-soft text-amber-fg"
                 aria-hidden
               >
-                <RefreshCw className="h-4 w-4" />
+                <ArrowsClockwise className="h-4 w-4" weight="duotone" />
               </span>
               <p className="min-w-0 text-xs font-medium leading-snug text-ink">
                 Доступне оновлення версії
@@ -96,7 +96,7 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({
                 aria-label="Закрити сповіщення про оновлення"
                 className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-ink-secondary transition-colors hover:bg-surface-elevated/70 hover:text-ink"
               >
-                <X className="h-4 w-4" aria-hidden />
+                <X className="h-4 w-4" weight="bold" aria-hidden />
               </button>
             </div>
           </motion.div>

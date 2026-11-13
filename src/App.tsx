@@ -8,11 +8,11 @@ import React, {
   useState,
 } from 'react';
 import {
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-} from 'lucide-react';
+  ArrowCounterClockwise,
+  CaretLeft,
+  CaretRight,
+  Warning,
+} from '@phosphor-icons/react';
 import { AppShell } from './components/layout/AppShell';
 import { BottomNav, type TabType } from './components/layout/BottomNav';
 import { OfflineBanner } from './components/layout/OfflineBanner';
@@ -157,7 +157,7 @@ class RootErrorBoundary extends Component<
         >
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-terracotta/40 bg-terracotta-soft text-terracotta-fg">
-              <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+              <Warning className="h-5 w-5" weight="duotone" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-amber-fg">
@@ -186,7 +186,7 @@ class RootErrorBoundary extends Component<
             onClick={this.handleReload}
             className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-amber/40 bg-amber px-4 text-sm font-semibold text-[#242522] transition-all hover:brightness-105 active:scale-[0.98]"
           >
-            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <ArrowCounterClockwise className="h-4 w-4 shrink-0" weight="regular" aria-hidden="true" />
             <span>Перезавантажити застосунок</span>
           </button>
         </GlassCard>
@@ -540,7 +540,7 @@ const AppContent: React.FC = () => {
             aria-label="Попередній тиждень"
             className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-line bg-surface-elevated/70 text-ink-secondary transition-colors hover:border-line-strong hover:text-ink active:scale-[0.97]"
           >
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <CaretLeft className="h-4 w-4" weight="bold" aria-hidden="true" />
           </button>
           <span className="font-mono text-xs font-semibold tabular-nums text-ink">
             {weekRangeLabel}
@@ -551,7 +551,7 @@ const AppContent: React.FC = () => {
             aria-label="Наступний тиждень"
             className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-xl border border-line bg-surface-elevated/70 text-ink-secondary transition-colors hover:border-line-strong hover:text-ink active:scale-[0.97]"
           >
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            <CaretRight className="h-4 w-4" weight="bold" aria-hidden="true" />
           </button>
         </div>
 
@@ -565,7 +565,7 @@ const AppContent: React.FC = () => {
               onClick={handleResetToToday}
               className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-amber/35 bg-amber-soft px-2.5 text-xs font-semibold text-amber-fg transition-colors hover:bg-amber/20 active:scale-[0.97]"
             >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
               <span>Поточний тиждень</span>
             </button>
           )}

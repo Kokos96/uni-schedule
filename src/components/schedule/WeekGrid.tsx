@@ -3,12 +3,12 @@ import {
   Check,
   Clock,
   MapPin,
-  Sparkles,
-  StickyNote,
+  Note,
+  Sparkle,
   User,
   X,
-  type LucideIcon,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type {
@@ -69,7 +69,7 @@ const ATTENDANCE_DOT_META: Record<
 const ATTENDANCE_BUTTONS: ReadonlyArray<{
   status: AttendanceStatus;
   label: string;
-  Icon: LucideIcon;
+  Icon: PhosphorIcon;
   activeStyle: React.CSSProperties;
 }> = [
   {
@@ -344,7 +344,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
 
                                   {/* Top Row: Subject & Status Indicators */}
                                   <div className="flex items-start justify-between gap-1.5">
-                                    <span className="line-clamp-2 text-[12px] font-semibold leading-[1.3] text-ink">
+                                    <span className="line-clamp-2 font-serif text-[12px] font-semibold leading-[1.3] text-ink">
                                       {lesson.name}
                                     </span>
 
@@ -372,7 +372,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                                           aria-label={`Нотаток: ${noteCount}`}
                                           className="inline-flex items-center gap-0.5 rounded bg-amber-soft px-1 py-0.5 font-mono text-[9.5px] font-semibold leading-none text-amber-fg"
                                         >
-                                          <StickyNote className="h-2.5 w-2.5" aria-hidden="true" />
+                                          <Note className="h-2.5 w-2.5" weight="regular" aria-hidden="true" />
                                           <span>{noteCount}</span>
                                         </span>
                                       )}
@@ -427,7 +427,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
               }}
               className="flex w-full min-h-[42px] items-center justify-center gap-2 rounded-xl border border-amber/35 bg-amber-soft px-4 py-2 text-sm font-semibold text-amber-fg transition-colors duration-150 hover:border-amber/60 hover:bg-amber/20 active:scale-[0.98]"
             >
-              <StickyNote className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <Note className="h-4 w-4 shrink-0" weight="regular" aria-hidden="true" />
               <span>Нотатки та дедлайни</span>
               {activeNoteCount > 0 && (
                 <span className="inline-flex min-w-[20px] items-center justify-center rounded-md bg-amber px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-[#242522] leading-none">
@@ -468,7 +468,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
               {activeLesson.isElective && (
                 <MetaChip
                   variant="amber"
-                  icon={<Sparkles className="h-3 w-3" />}
+                  icon={<Sparkle className="h-3 w-3" weight="regular" />}
                 >
                   Вибіркова
                 </MetaChip>
@@ -486,6 +486,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
               <div className="flex items-start gap-2.5">
                 <User
                   className="mt-0.5 h-4 w-4 shrink-0 text-ink-secondary"
+                  weight="regular"
                   aria-hidden="true"
                 />
                 <div className="min-w-0">
@@ -508,6 +509,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
               <div className="flex items-start gap-2.5">
                 <MapPin
                   className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg"
+                  weight="regular"
                   aria-hidden="true"
                 />
                 <div className="min-w-0">
@@ -561,7 +563,11 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                           : 'border-line bg-surface-elevated/80 text-ink-secondary hover:border-line-strong hover:text-ink'
                       )}
                     >
-                      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      <Icon
+                        className="h-3.5 w-3.5 shrink-0"
+                        weight={status === 'excused' ? 'regular' : 'bold'}
+                        aria-hidden="true"
+                      />
                       <span>{label}</span>
                     </button>
                   );

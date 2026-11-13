@@ -1,17 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
-  AlertTriangle,
+  ArrowSquareOut,
   Calendar,
   Check,
   Clock,
-  ExternalLink,
-  Flame,
-  Pencil,
+  Fire,
+  MagnifyingGlass,
+  PencilSimple,
   Plus,
-  Search,
-  Trash2,
+  Trash,
+  Warning,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import type {
   CreateDeadlineInput,
   DeadlineFilter,
@@ -325,7 +325,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
           onClick={openCreateDrawer}
           className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-amber/40 bg-amber px-4 text-sm font-semibold text-[#242522] shadow-elevated transition-all hover:brightness-105 active:scale-[0.98]"
         >
-          <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <Plus weight="bold" className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>Додати дедлайн</span>
         </button>
       </div>
@@ -349,7 +349,8 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
         </div>
 
         <div className="relative w-full lg:w-72">
-          <Search
+          <MagnifyingGlass
+            weight="regular"
             className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-ink-muted"
             aria-hidden="true"
           />
@@ -368,7 +369,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
               aria-label="Очистити пошук"
               className="absolute top-1/2 right-2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:text-ink"
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <X weight="bold" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -399,7 +400,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                 ? {
                     label: 'Створити дедлайн',
                     onClick: openCreateDrawer,
-                    icon: <Plus className="h-3.5 w-3.5" />,
+                    icon: <Plus weight="bold" className="h-3.5 w-3.5" />,
                   }
                 : undefined
             }
@@ -449,7 +450,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                           : 'border-line-strong bg-surface-elevated/70 text-transparent hover:border-sage/60 hover:text-sage-fg/50'
                       )}
                     >
-                      <Check className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
+                      <Check weight="bold" className="h-4 w-4" aria-hidden="true" />
                     </button>
 
                     {/* Content */}
@@ -462,7 +463,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                             }
                             icon={
                               item.priority === 'high' ? (
-                                <Flame className="h-3 w-3" />
+                                <Fire weight="duotone" className="h-3 w-3" />
                               ) : undefined
                             }
                           >
@@ -482,9 +483,9 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                             mono
                             icon={
                               isOverdue ? (
-                                <AlertTriangle className="h-3 w-3" />
+                                <Warning weight="duotone" className="h-3 w-3" />
                               ) : (
-                                <Calendar className="h-3 w-3" />
+                                <Calendar weight="regular" className="h-3 w-3" />
                               )
                             }
                           >
@@ -510,7 +511,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                                 aria-label={`Редагувати «${item.title}»`}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink"
                               >
-                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                <PencilSimple weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
                               </button>
                               <button
                                 type="button"
@@ -518,7 +519,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                                 aria-label={`Видалити «${item.title}»`}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-terracotta-soft hover:text-terracotta-fg"
                               >
-                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                <Trash weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
                               </button>
                             </>
                           ) : (
@@ -567,7 +568,8 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 rounded-lg border border-amber/30 bg-amber-soft px-2.5 py-1 text-xs font-medium text-amber-fg transition-colors hover:border-amber/55"
                           >
-                            <ExternalLink
+                            <ArrowSquareOut
+                              weight="regular"
                               className="h-3 w-3 shrink-0"
                               aria-hidden="true"
                             />
@@ -651,7 +653,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                 htmlFor="deadline-date"
                 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-ink-secondary"
               >
-                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                <Calendar weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Дата здачі *</span>
               </label>
               <input
@@ -669,7 +671,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                 htmlFor="deadline-time"
                 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-ink-secondary"
               >
-                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                <Clock weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Час (необов'язково)</span>
               </label>
               <input
@@ -698,7 +700,7 @@ export const DeadlinesView: React.FC<DeadlinesViewProps> = ({
                 {
                   value: 'high',
                   label: 'Терміново',
-                  icon: <Flame className="h-3.5 w-3.5" />,
+                  icon: <Fire weight="duotone" className="h-3.5 w-3.5" />,
                 },
               ]}
             />

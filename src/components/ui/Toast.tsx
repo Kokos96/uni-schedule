@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { AlertTriangle, CheckCircle2, Info, X, XCircle, type LucideIcon } from 'lucide-react';
+import { CheckCircle, Info, Warning, X, XCircle, type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -47,7 +47,7 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const VARIANT_STYLES: Record<
   ToastVariant,
   {
-    Icon: LucideIcon;
+    Icon: PhosphorIcon;
     iconClass: string;
     accentBorder: string;
   }
@@ -63,12 +63,12 @@ const VARIANT_STYLES: Record<
     accentBorder: 'border-l-amber',
   },
   success: {
-    Icon: CheckCircle2,
+    Icon: CheckCircle,
     iconClass: 'text-sage-fg',
     accentBorder: 'border-l-sage',
   },
   warning: {
-    Icon: AlertTriangle,
+    Icon: Warning,
     iconClass: 'text-amber-fg',
     accentBorder: 'border-l-amber',
   },
@@ -128,7 +128,7 @@ const ToastCard: React.FC<ToastCardProps> = ({ item, onDismiss, reducedMotion })
         accentBorder
       )}
     >
-      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', iconClass)} aria-hidden />
+      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', iconClass)} weight="duotone" aria-hidden />
 
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-medium leading-snug text-ink">{item.title}</p>
@@ -157,7 +157,7 @@ const ToastCard: React.FC<ToastCardProps> = ({ item, onDismiss, reducedMotion })
         aria-label="Закрити сповіщення"
         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink"
       >
-        <X className="h-3.5 w-3.5" aria-hidden="true" />
+        <X className="h-3.5 w-3.5" weight="bold" aria-hidden="true" />
       </button>
     </motion.div>
   );

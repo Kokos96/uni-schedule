@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Moon, Sun, type LucideIcon } from 'lucide-react';
+import { Desktop, Moon, Sun, type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import type { ResolvedUserSettings, ThemeMode } from '../../types';
 import { SidebarNav, type TabType } from './SidebarNav';
 
@@ -27,10 +27,10 @@ const DEFAULT_TAB_TITLES: Record<TabType, string> = {
   settings: 'Опції профілю',
 };
 
-const THEME_META: Record<ThemeMode, { label: string; Icon: LucideIcon }> = {
+const THEME_META: Record<ThemeMode, { label: string; Icon: PhosphorIcon }> = {
   dark: { label: 'Темна', Icon: Moon },
   light: { label: 'Світла', Icon: Sun },
-  system: { label: 'Системна', Icon: Monitor },
+  system: { label: 'Системна', Icon: Desktop },
 };
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -89,13 +89,13 @@ export const AppShell: React.FC<AppShellProps> = ({
                   alt=""
                   width={18}
                   height={18}
-                  className="lg:hidden h-[18px] w-[18px] shrink-0 rounded border border-line/70 object-cover"
+                  className="lg:hidden h-[18px] w-[18px] shrink-0 rounded object-cover"
                 />
                 <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-amber-fg truncate">
                   {resolvedKicker}
                 </span>
               </div>
-              <h1 className="mt-0.5 text-[19px] lg:text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-ink truncate">
+              <h1 className="mt-0.5 font-serif text-[19px] lg:text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-ink truncate">
                 {resolvedTitle}
               </h1>
             </div>
@@ -111,7 +111,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 title={`Тема: ${themeMeta.label}`}
                 className="lg:hidden inline-flex h-10 min-w-[40px] items-center justify-center gap-1.5 rounded-xl border border-line bg-surface-elevated/80 px-2.5 text-xs font-medium text-ink transition-colors duration-150 hover:border-line-strong hover:bg-surface-elevated active:scale-[0.97]"
               >
-                <ThemeIcon className="h-4 w-4 text-amber-fg shrink-0" aria-hidden="true" />
+                <ThemeIcon className="h-4 w-4 text-amber-fg shrink-0" weight="duotone" aria-hidden="true" />
                 <span className="hidden xs:inline font-mono text-[11px]">
                   {themeMeta.label}
                 </span>

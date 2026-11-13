@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FlaskConical, PenLine, type LucideIcon } from 'lucide-react';
+import { BookOpen, Flask, PencilSimple, type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { LessonType } from '../../types';
@@ -18,7 +18,7 @@ const LESSON_TYPE_CONFIG: Record<
   LessonType,
   {
     shortLabel: string;
-    Icon: LucideIcon;
+    Icon: PhosphorIcon;
     style: React.CSSProperties;
   }
 > = {
@@ -33,7 +33,7 @@ const LESSON_TYPE_CONFIG: Record<
   },
   'Практична': {
     shortLabel: 'Практ',
-    Icon: PenLine,
+    Icon: PencilSimple,
     style: {
       backgroundColor: 'var(--badge-practice-bg)',
       borderColor: 'var(--badge-practice-border)',
@@ -42,7 +42,7 @@ const LESSON_TYPE_CONFIG: Record<
   },
   'Лабораторна': {
     shortLabel: 'Лаб',
-    Icon: FlaskConical,
+    Icon: Flask,
     style: {
       backgroundColor: 'var(--badge-lab-bg)',
       borderColor: 'var(--badge-lab-border)',
@@ -67,7 +67,7 @@ export const LessonTypeBadge: React.FC<LessonTypeBadgeProps> = ({
         className
       )}
     >
-      <Icon className="h-3 w-3 shrink-0" aria-hidden />
+      <Icon className="h-3 w-3 shrink-0" weight="duotone" aria-hidden />
       <span>{compact ? config.shortLabel : type}</span>
     </span>
   );

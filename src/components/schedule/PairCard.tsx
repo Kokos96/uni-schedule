@@ -1,13 +1,14 @@
 import React from 'react';
 import {
-  CalendarClock,
+  Calendar,
   Check,
   Clock,
   MapPin,
-  StickyNote,
+  Note,
   User,
   X,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import type {
   AttendanceStatus,
   Classroom,
@@ -41,7 +42,7 @@ const DEPARTMENT_SHORT_LABELS: Record<DepartmentType, string> = {
 const ATTENDANCE_OPTIONS: Array<{
   status: AttendanceStatus;
   label: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: PhosphorIcon;
   activeStyle: React.CSSProperties;
 }> = [
   {
@@ -161,7 +162,7 @@ export const PairCard: React.FC<PairCardProps> = ({
       <div className="mt-2.5 space-y-1.5 text-xs text-ink-secondary">
         {classroom && (
           <div className="flex items-center gap-2">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" aria-hidden="true" />
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" weight="regular" aria-hidden="true" />
             <span className="min-w-0 truncate">
               Ауд.{' '}
               <strong className="font-mono font-semibold text-ink">
@@ -174,7 +175,7 @@ export const PairCard: React.FC<PairCardProps> = ({
 
         {teacher && (
           <div className="flex items-center gap-2">
-            <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+            <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" weight="regular" aria-hidden="true" />
             <span className="min-w-0 truncate text-ink-secondary">
               {teacher.fullName}
             </span>
@@ -192,7 +193,7 @@ export const PairCard: React.FC<PairCardProps> = ({
           >
             {noteCount > 0 && (
               <span className="inline-flex items-center gap-1 text-amber-fg">
-                <StickyNote className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <Note className="h-3 w-3 shrink-0" weight="regular" aria-hidden="true" />
                 <span>
                   {noteCount}{' '}
                   {noteCount === 1
@@ -210,7 +211,7 @@ export const PairCard: React.FC<PairCardProps> = ({
             )}
             {activeDeadlineLabel && (
               <span className="inline-flex items-center gap-1 text-terracotta-fg">
-                <CalendarClock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <Calendar className="h-3 w-3 shrink-0" weight="regular" aria-hidden="true" />
                 <span>Дедлайн: {activeDeadlineLabel}</span>
               </span>
             )}
@@ -237,7 +238,11 @@ export const PairCard: React.FC<PairCardProps> = ({
                     : 'border-line bg-surface-elevated/70 text-ink-secondary hover:border-line-strong hover:text-ink'
                 )}
               >
-                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icon
+                  className="h-3.5 w-3.5 shrink-0"
+                  weight={status === 'excused' ? 'regular' : 'bold'}
+                  aria-hidden="true"
+                />
                 <span>{label}</span>
               </button>
             );
@@ -255,7 +260,7 @@ export const PairCard: React.FC<PairCardProps> = ({
               : 'border-line bg-surface-elevated/70 text-ink-secondary hover:border-line-strong hover:text-ink'
           )}
         >
-          <StickyNote className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Note className="h-3.5 w-3.5 shrink-0" weight="regular" aria-hidden="true" />
           <span className="hidden xs:inline">Нотатки</span>
           {noteCount > 0 && (
             <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber/20 px-1 font-mono text-[10px] font-semibold tabular-nums text-amber-fg">

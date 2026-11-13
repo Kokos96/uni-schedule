@@ -4,13 +4,14 @@ import {
   Clock,
   Coffee,
   MapPin,
+  Note,
   Plus,
-  Sparkles,
-  StickyNote,
+  Sparkle,
   Sun,
   User,
   X,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { useCurrentPair, type CurrentPairState } from '../../hooks/useCurrentPair';
 import type {
   AttendanceStatus,
@@ -68,7 +69,7 @@ function getNoteCount(
 const QUICK_ATTENDANCE: Array<{
   status: AttendanceStatus;
   label: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: PhosphorIcon;
   activeStyle: React.CSSProperties;
 }> = [
   {
@@ -230,7 +231,7 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-secondary">
             {classroom && (
               <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" aria-hidden="true" />
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" weight="regular" aria-hidden="true" />
                 <span>
                   <strong className="font-mono font-semibold text-ink">
                     {classroom.code}
@@ -241,7 +242,7 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
             )}
             {teacher && (
               <span className="inline-flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+                <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" weight="regular" aria-hidden="true" />
                 <span>{teacher.fullName}</span>
               </span>
             )}
@@ -271,7 +272,11 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
                       : 'border-line bg-surface/80 text-ink-secondary hover:border-line-strong hover:text-ink'
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <Icon
+                    className="h-3.5 w-3.5 shrink-0"
+                    weight={attStatus === 'excused' ? 'regular' : 'bold'}
+                    aria-hidden="true"
+                  />
                   <span>{label}</span>
                 </button>
               );
@@ -285,12 +290,12 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
           >
             {noteCount > 0 ? (
               <>
-                <StickyNote className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Note className="h-3.5 w-3.5 shrink-0" weight="regular" aria-hidden="true" />
                 <span>Нотатки ({noteCount})</span>
               </>
             ) : (
               <>
-                <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Plus className="h-3.5 w-3.5 shrink-0" weight="bold" aria-hidden="true" />
                 <span>Нотатка</span>
               </>
             )}
@@ -351,14 +356,14 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               {classroom && (
                 <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5 text-amber-fg" aria-hidden="true" />
+                  <MapPin className="h-3.5 w-3.5 text-amber-fg" weight="regular" aria-hidden="true" />
                   <strong className="font-mono text-ink">{classroom.code}</strong>
                   <span>· {classroom.building}</span>
                 </span>
               )}
               {teacher && (
                 <span className="inline-flex items-center gap-1">
-                  <User className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                  <User className="h-3.5 w-3.5 text-ink-muted" weight="regular" aria-hidden="true" />
                   <span>{teacher.fullName}</span>
                 </span>
               )}
@@ -368,7 +373,7 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
               onClick={() => onOpenNotes(nextLesson, todayIso)}
               className="inline-flex items-center gap-1 rounded-lg border border-amber/30 bg-amber-soft px-2.5 py-1 text-[11px] font-semibold text-amber-fg transition-colors hover:border-amber/55"
             >
-              <Plus className="h-3 w-3" aria-hidden="true" />
+              <Plus className="h-3 w-3" weight="bold" aria-hidden="true" />
               <span>Нотатка</span>
             </button>
           </div>
@@ -395,7 +400,7 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
 
         <div className="flex items-start gap-3 pt-0.5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sage/30 bg-sage-soft text-sage-fg">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
+            <Sparkle className="h-5 w-5" weight="duotone" aria-hidden="true" />
           </div>
           <div>
             <h2 className="font-serif text-lg font-medium text-ink">
@@ -429,9 +434,9 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
       <div className="flex items-start gap-3 pt-0.5">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber/30 bg-amber-soft text-amber-fg">
           {currentTimeStr >= '18:00' ? (
-            <Coffee className="h-5 w-5" aria-hidden="true" />
+            <Coffee className="h-5 w-5" weight="duotone" aria-hidden="true" />
           ) : (
-            <Sun className="h-5 w-5" aria-hidden="true" />
+            <Sun className="h-5 w-5" weight="duotone" aria-hidden="true" />
           )}
         </div>
         <div>

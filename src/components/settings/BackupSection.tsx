@@ -1,18 +1,18 @@
 import React, { useId, useRef, useState } from 'react';
 import {
-  AlertTriangle,
-  CheckCircle2,
-  ClipboardPaste,
+  ArrowsClockwise,
+  CheckCircle,
+  ClipboardText,
   Copy,
   Database,
-  Download,
-  FileJson,
+  DownloadSimple,
+  FileJs,
   GitMerge,
   HardDrive,
-  RefreshCw,
-  Trash2,
-  Upload,
-} from 'lucide-react';
+  Trash,
+  UploadSimple,
+  Warning,
+} from '@phosphor-icons/react';
 import { AttendanceRecord, UserSettings } from '../../types';
 import {
   BackupFormat,
@@ -214,10 +214,10 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/30 bg-amber-soft text-amber-fg">
-            <Database className="h-4 w-4" aria-hidden="true" />
+            <Database weight="duotone" className="h-4 w-4" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold tracking-[-0.01em] text-ink">
+            <h3 className="font-serif text-sm font-semibold tracking-[-0.01em] text-ink">
               Резервна копія та перенесення
             </h3>
             <p className="text-xs text-ink-secondary">
@@ -233,7 +233,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
 
       {/* Factual localStorage explanation */}
       <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-line bg-surface-elevated/55 p-3">
-        <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
+        <HardDrive weight="duotone" className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
         <p className="text-xs leading-relaxed text-ink-secondary">
           Усі ваші дані зберігаються локально в <span className="font-mono text-ink">localStorage</span> лише
           на цьому пристрої. Експорт у JSON дозволяє зробити резервну копію або перенести дані між
@@ -265,7 +265,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
             onClick={handleDownloadJson}
             className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-amber/40 bg-amber-soft px-3.5 py-2 text-xs font-semibold text-amber-fg transition-colors hover:border-amber/65 hover:bg-amber/20 active:scale-[0.98]"
           >
-            <Download className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <DownloadSimple weight="regular" className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>Завантажити JSON</span>
           </button>
 
@@ -274,7 +274,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
             onClick={handleCopyJson}
             className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-line bg-surface-elevated/80 px-3.5 py-2 text-xs font-semibold text-ink transition-colors hover:border-line-strong hover:bg-surface-elevated active:scale-[0.98]"
           >
-            <Copy className="h-4 w-4 shrink-0 text-ink-secondary" aria-hidden="true" />
+            <Copy weight="regular" className="h-4 w-4 shrink-0 text-ink-secondary" aria-hidden="true" />
             <span>Копіювати JSON</span>
           </button>
         </div>
@@ -301,7 +301,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
             onClick={() => fileInputRef.current?.click()}
             className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-line bg-surface-elevated/80 px-3.5 py-2 text-xs font-semibold text-ink transition-colors hover:border-amber/45 hover:bg-surface-elevated active:scale-[0.98]"
           >
-            <Upload className="h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
+            <UploadSimple weight="regular" className="h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
             <span>Обрати файл .json</span>
           </button>
 
@@ -316,7 +316,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
                 : 'border-line bg-surface-elevated/80 text-ink-secondary hover:border-line-strong hover:text-ink',
             ].join(' ')}
           >
-            <ClipboardPaste className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <ClipboardText weight="regular" className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span>Вставити JSON</span>
           </button>
         </div>
@@ -353,7 +353,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
                 onClick={() => validateAndStageImport(pastedJson)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-amber/45 bg-amber-soft px-3 py-1.5 text-xs font-semibold text-amber-fg hover:bg-amber/20"
               >
-                <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
+                <FileJs weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Перевірити JSON</span>
               </button>
             </div>
@@ -367,7 +367,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
             className="rounded-xl border border-terracotta/40 bg-terracotta-soft p-3 text-xs text-terracotta-fg"
           >
             <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Warning weight="duotone" className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="font-semibold">{importError.message}</p>
                 {importError.details && importError.details.length > 0 && (
@@ -390,7 +390,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
           onClick={() => setConfirmClearOpen(true)}
           className="inline-flex min-h-[38px] w-full items-center justify-center gap-2 rounded-xl border border-terracotta/30 bg-terracotta-soft/70 px-3.5 py-2 text-xs font-semibold text-terracotta-fg transition-colors hover:border-terracotta/55 hover:bg-terracotta-soft active:scale-[0.98]"
         >
-          <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Trash weight="regular" className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>Очистити всі дані на пристрої</span>
         </button>
       </div>
@@ -405,7 +405,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
         {pendingImport && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <MetaChip variant="sage" icon={<CheckCircle2 className="h-3 w-3" />}>
+              <MetaChip variant="sage" icon={<CheckCircle weight="duotone" className="h-3 w-3" />}>
                 JSON валідний
               </MetaChip>
               <MetaChip variant="amber" mono>
@@ -470,7 +470,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
                 onClick={() => handleApplyImport('merge')}
                 className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-sage/45 bg-sage-soft px-4 py-2 text-xs font-semibold text-sage-fg transition-colors hover:bg-sage/25 active:scale-[0.98]"
               >
-                <GitMerge className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <GitMerge weight="regular" className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Об&apos;єднати (Merge)</span>
               </button>
 
@@ -479,7 +479,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
                 onClick={() => handleApplyImport('replace')}
                 className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-2 rounded-xl border border-terracotta/45 bg-terracotta-soft px-4 py-2 text-xs font-semibold text-terracotta-fg transition-colors hover:bg-terracotta/25 active:scale-[0.98]"
               >
-                <RefreshCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <ArrowsClockwise weight="regular" className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Замінити все (Replace)</span>
               </button>
             </div>
@@ -496,7 +496,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-xl border border-terracotta/35 bg-terracotta-soft p-3.5 text-xs text-terracotta-fg">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <Warning weight="duotone" className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <p className="leading-relaxed">
               Буде видалено всі відмітки відвідуваності ({attendanceRecords.length}), нотатки (
               {notes.length}) та дедлайни ({deadlines.length}) з пам&apos;яті цього браузера.
@@ -516,7 +516,7 @@ export const BackupSection: React.FC<BackupSectionProps> = ({
               onClick={handleConfirmClearAll}
               className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-terracotta/50 bg-terracotta-soft px-4 py-2 text-xs font-semibold text-terracotta-fg hover:bg-terracotta/25"
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <Trash weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Так, очистити все</span>
             </button>
           </div>

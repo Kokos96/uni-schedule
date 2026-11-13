@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DoorOpen, Users } from 'lucide-react';
+import { DoorOpen, Users } from '@phosphor-icons/react';
 import type { Classroom, ScheduleDay, Teacher } from '../../types';
 import {
   classroomsData as defaultClassroomsData,
@@ -65,12 +65,12 @@ export const DirectoryView: React.FC<DirectoryViewProps> = ({
             {
               value: 'teachers',
               label: 'Викладачі',
-              icon: <Users className="h-4 w-4" />,
+              icon: <Users weight="duotone" className="h-4 w-4" />,
             },
             {
               value: 'classrooms',
               label: 'Аудиторії',
-              icon: <DoorOpen className="h-4 w-4" />,
+              icon: <DoorOpen weight="duotone" className="h-4 w-4" />,
             },
           ]}
         />

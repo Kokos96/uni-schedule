@@ -1,15 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Building2,
-  ChevronDown,
+  Buildings,
+  CaretDown,
   Clock,
-  Layers,
+  MagnifyingGlass,
   MapPin,
-  Search,
+  Stack,
   User,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import {
   REDUCED_MOTION_TRANSITION,
   expandCollapseVariants,
@@ -117,7 +117,8 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
       {/* Search + Building filter pills */}
       <div className="space-y-3">
         <div className="relative">
-          <Search
+          <MagnifyingGlass
+            weight="regular"
             className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-ink-muted"
             aria-hidden="true"
           />
@@ -136,7 +137,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
               aria-label="Очистити пошук"
               className="absolute top-1/2 right-2.5 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-ink-muted hover:text-ink"
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <X weight="bold" className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -162,7 +163,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                 )}
               >
                 {building !== 'Всі' && (
-                  <Building2 className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <Buildings weight="regular" className="h-3 w-3 shrink-0" aria-hidden="true" />
                 )}
                 <span>{building}</span>
               </button>
@@ -220,7 +221,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                         <MetaChip
                           variant="amber"
                           mono
-                          icon={<Layers className="h-3 w-3" />}
+                          icon={<Stack weight="duotone" className="h-3 w-3" />}
                         >
                           {room.floor} поверх
                         </MetaChip>
@@ -236,6 +237,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
 
                       <div className="flex items-center gap-2">
                         <MapPin
+                          weight="duotone"
                           className="h-4 w-4 shrink-0 text-amber-fg"
                           aria-hidden="true"
                         />
@@ -245,7 +247,8 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                       </div>
 
                       <p className="flex items-center gap-1.5 text-xs text-ink-secondary">
-                        <Building2
+                        <Buildings
+                          weight="regular"
                           className="h-3.5 w-3.5 shrink-0 text-ink-muted"
                           aria-hidden="true"
                         />
@@ -260,7 +263,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                       )}
                       aria-hidden="true"
                     >
-                      <ChevronDown className="h-4 w-4" />
+                      <CaretDown weight="bold" className="h-4 w-4" />
                     </span>
                   </button>
 
@@ -310,6 +313,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                                       </span>
                                       <span className="inline-flex items-center gap-1 font-mono text-[11px] tabular-nums text-ink-secondary">
                                         <Clock
+                                          weight="regular"
                                           className="h-3 w-3 text-amber-fg"
                                           aria-hidden="true"
                                         />
@@ -338,6 +342,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                                   {slot.teacher && (
                                     <div className="mt-1 flex items-center gap-1.5 text-[11px] text-ink-secondary">
                                       <User
+                                        weight="regular"
                                         className="h-3 w-3 shrink-0 text-ink-muted"
                                         aria-hidden="true"
                                       />

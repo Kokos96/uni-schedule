@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
+  CalendarDots,
+  CaretLeft,
+  CaretRight,
+  Funnel,
   Minus,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+  TrendDown,
+  TrendUp,
+} from '@phosphor-icons/react';
 import { AttendanceRecord, UserSettings } from '../../types';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
 import {
@@ -162,7 +162,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-amber-fg">
             Аналітика семестру
           </span>
-          <h2 className="mt-0.5 text-2xl font-bold tracking-[-0.02em] text-ink">
+          <h2 className="mt-0.5 font-serif text-2xl font-bold tracking-[-0.02em] text-ink">
             Відвідуваність
           </h2>
           <EditorialUnderline width={104} className="mt-1.5" />
@@ -186,7 +186,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 aria-label="Попередній місяць"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface hover:text-ink active:scale-95"
               >
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                <CaretLeft weight="bold" className="h-4 w-4" aria-hidden="true" />
               </button>
               <span className="min-w-[128px] px-2 text-center text-xs font-semibold text-ink">
                 {selectedMonthTitle} {selectedYear}
@@ -197,7 +197,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 aria-label="Наступний місяць"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary transition-colors hover:bg-surface hover:text-ink active:scale-95"
               >
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                <CaretRight weight="bold" className="h-4 w-4" aria-hidden="true" />
               </button>
               {!isCurrentMonth && (
                 <button
@@ -217,7 +217,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
       {/* Scope toggle bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface/80 px-4 py-3">
         <div className="flex items-center gap-2.5 text-xs text-ink-secondary">
-          <Filter className="h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
+          <Funnel weight="duotone" className="h-4 w-4 shrink-0 text-amber-fg" aria-hidden="true" />
           <span>
             Фільтр профілю:{' '}
             <strong className="font-semibold text-ink">
@@ -338,7 +338,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
               <div className="w-full min-w-0 max-w-full flex-1 space-y-2 xs:w-auto">
                 <div className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-secondary">
-                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-amber-fg" aria-hidden="true" />
+                  <CalendarDots weight="regular" className="h-3.5 w-3.5 shrink-0 text-amber-fg" aria-hidden="true" />
                   <span>
                     {filterMode === 'month'
                       ? `${selectedMonthTitle} ${selectedYear}`
@@ -368,11 +368,11 @@ export const StatsView: React.FC<StatsViewProps> = ({
                         className="max-w-full whitespace-normal text-left"
                         icon={
                           monthDelta.deltaPercent > 0 ? (
-                            <TrendingUp className="h-3 w-3" />
+                            <TrendUp weight="bold" className="h-3 w-3" />
                           ) : monthDelta.deltaPercent < 0 ? (
-                            <TrendingDown className="h-3 w-3" />
+                            <TrendDown weight="bold" className="h-3 w-3" />
                           ) : (
-                            <Minus className="h-3 w-3" />
+                            <Minus weight="bold" className="h-3 w-3" />
                           )
                         }
                       >
@@ -440,7 +440,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3
               id="subjects-breakdown-heading"
-              className="text-base font-semibold tracking-[-0.015em] text-ink"
+              className="font-serif text-base font-semibold tracking-[-0.015em] text-ink"
             >
               {filterMode === 'month'
                 ? `Предмети за ${selectedMonthTitle.toLowerCase()}`
@@ -497,7 +497,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                   <StaggerCard key={stat.subjectName} interactive>
                     <GlassCard variant="matte" padding="md" className="flex h-full flex-col justify-between gap-3">
                       <div className="flex items-start justify-between gap-3">
-                        <h4 className="text-sm font-semibold leading-snug text-ink">
+                        <h4 className="font-serif text-sm font-semibold leading-snug text-ink">
                           {stat.subjectName}
                         </h4>
                         <span className="shrink-0 font-mono text-sm font-bold tabular-nums text-ink">

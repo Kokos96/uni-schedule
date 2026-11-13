@@ -1,17 +1,17 @@
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
+  AddressBook,
   ArrowRight,
-  BookUser,
   Calendar,
+  ChartPieSlice,
   CheckSquare,
-  Monitor,
+  Desktop,
+  Gear,
   Moon,
-  PieChart,
-  Settings,
   Sun,
-  type LucideIcon,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { ResolvedUserSettings, ThemeMode } from '../../types';
@@ -37,22 +37,22 @@ export interface SidebarNavProps {
 interface NavItemConfig {
   id: TabType;
   label: string;
-  Icon: LucideIcon;
+  Icon: PhosphorIcon;
   shortcut: string;
 }
 
 const NAV_ITEMS: readonly NavItemConfig[] = [
   { id: 'schedule', label: 'Розклад', Icon: Calendar, shortcut: '1' },
   { id: 'deadlines', label: 'Дедлайни', Icon: CheckSquare, shortcut: '2' },
-  { id: 'stats', label: 'Статистика', Icon: PieChart, shortcut: '3' },
-  { id: 'directory', label: 'Довідник', Icon: BookUser, shortcut: '4' },
-  { id: 'settings', label: 'Опції', Icon: Settings, shortcut: '5' },
+  { id: 'stats', label: 'Статистика', Icon: ChartPieSlice, shortcut: '3' },
+  { id: 'directory', label: 'Довідник', Icon: AddressBook, shortcut: '4' },
+  { id: 'settings', label: 'Опції', Icon: Gear, shortcut: '5' },
 ];
 
-const THEME_LABELS: Record<ThemeMode, { label: string; Icon: LucideIcon }> = {
+const THEME_LABELS: Record<ThemeMode, { label: string; Icon: PhosphorIcon }> = {
   dark: { label: 'Темна', Icon: Moon },
   light: { label: 'Світла', Icon: Sun },
-  system: { label: 'Системна', Icon: Monitor },
+  system: { label: 'Системна', Icon: Desktop },
 };
 
 function formatDeadlineCountUa(count: number): string {
@@ -131,10 +131,10 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             alt=""
             width={28}
             height={28}
-            className="h-7 w-7 shrink-0 rounded-lg border border-line/70 object-cover shadow-elevated"
+            className="h-7 w-7 shrink-0 rounded-lg object-cover shadow-elevated"
           />
           <div className="min-w-0 flex-1">
-            <span className="block text-[16px] font-bold leading-tight tracking-[-0.02em] text-ink">
+            <span className="block font-serif text-[16px] font-bold leading-tight tracking-[-0.02em] text-ink">
               Розклад
             </span>
           </div>
@@ -188,7 +188,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
                       ? 'text-amber-fg'
                       : 'text-ink-secondary group-hover:text-ink'
                   )}
-                  strokeWidth={isActive ? 2.2 : 1.85}
+                  weight={isActive ? 'duotone' : 'regular'}
                   aria-hidden="true"
                 />
                 <span className="truncate">{item.label}</span>
@@ -272,7 +272,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
             )}
             aria-hidden="true"
           >
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" weight="regular" />
           </span>
         </button>
 
@@ -284,7 +284,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
           className="flex w-full items-center justify-between rounded-xl border border-line bg-surface-elevated/70 px-3 py-2 text-xs font-medium text-ink transition-colors duration-150 hover:border-line-strong hover:bg-surface-elevated active:scale-[0.985]"
         >
           <span className="flex items-center gap-2 text-ink-secondary">
-            <ThemeIcon className="h-3.5 w-3.5 text-amber-fg" aria-hidden="true" />
+            <ThemeIcon className="h-3.5 w-3.5 text-amber-fg" weight="duotone" aria-hidden="true" />
             <span>Тема</span>
           </span>
           <span className="font-mono text-[11px] font-semibold text-ink">
