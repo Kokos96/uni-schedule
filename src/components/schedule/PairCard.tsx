@@ -1,121 +1,269 @@
 import React from 'react';
-import { Lesson, Teacher, Classroom, AttendanceStatus } from '../../types';
-import { Check, X, Clock, MapPin, User } from 'lucide-react';
-import { motion } from 'framer-motion';
+import {
+  CalendarClock,
+  Check,
+  Clock,
+  MapPin,
+  StickyNote,
+  User,
+  X,
+} from 'lucide-react';
+import type {
+  AttendanceStatus,
+  Classroom,
+  DepartmentType,
+  Lesson,
+  Teacher,
+} from '../../types';
+import { cn } from '../../utils/cn';
+import { LessonTypeBadge, MetaChip, StatusDot } from '../ui/Badge';
+import { GlassCard } from '../ui/GlassCard';
 
-interface PairCardProps {
+export interface PairCardProps {
   lesson: Lesson;
   teacher?: Teacher;
   classroom?: Classroom;
+  isCurrent?: boolean;
   attendanceStatus: AttendanceStatus | null;
   onToggleAttendance: (status: AttendanceStatus) => void;
-  isCurrent?: boolean;
+  noteCount?: number;
+  activeDeadlineLabel?: string | null;
+  onOpenNotes: () => void;
 }
+
+const DEPARTMENT_SHORT_LABELS: Record<DepartmentType, string> = {
+  sp: 'СП',
+  oit: 'ОІТ',
+  rks: 'РКС',
+  rkt: 'РКТ',
+};
+
+const ATTENDANCE_OPTIONS: Array<{
+  status: AttendanceStatus;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  activeStyle: React.CSSProperties;
+}> = [
+  {
+    status: 'present',
+    label: 'Був',
+    Icon: Check,
+    activeStyle: {
+      backgroundColor: 'var(--status-present-bg)',
+      color: 'var(--status-present-fg)',
+      borderColor: 'transparent',
+    },
+  },
+  {
+    status: 'absent',
+    label: 'Н-ка',
+    Icon: X,
+    activeStyle: {
+      backgroundColor: 'var(--status-absent-bg)',
+      color: 'var(--status-absent-fg)',
+      borderColor: 'transparent',
+    },
+  },
+  {
+    status: 'excused',
+    label: 'Поважна',
+    Icon: Clock,
+    activeStyle: {
+      backgroundColor: 'var(--status-excused-bg)',
+      color: 'var(--status-excused-fg)',
+      borderColor: 'transparent',
+    },
+  },
+];
 
 export const PairCard: React.FC<PairCardProps> = ({
   lesson,
   teacher,
   classroom,
+  isCurrent = false,
   attendanceStatus,
   onToggleAttendance,
-  isCurrent,
+  noteCount = 0,
+  activeDeadlineLabel = null,
+  onOpenNotes,
 }) => {
-  const badgeColor = {
-    Лекція: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
-    Практична: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
-    Лабораторна: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
-  }[lesson.type];
+  const pairOrder = String(lesson.order).padStart(2, '0');
+  const parityLabel =
+    lesson.weekType === 'numerator'
+      ? 'Чисельник'
+      : lesson.weekType === 'denominator'
+        ? 'Знаменник'
+        : null;
+
+  const departmentsLabel =
+    lesson.departments && lesson.departments.length > 0
+      ? lesson.departments.map((d) => DEPARTMENT_SHORT_LABELS[d]).join(' · ')
+      : null;
+
+  const hasIndicators = noteCount > 0 || Boolean(activeDeadlineLabel);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className={`rounded-2xl p-4 transition-all duration-200 border ${
-        isCurrent
-          ? 'bg-[#1C1C1E] border-[#0A84FF] shadow-lg shadow-[#0A84FF]/10'
-          : 'bg-[#1C1C1E]/80 border-white/5'
-      }`}
+    <GlassCard
+      variant={isCurrent ? 'amber-lit' : 'matte'}
+      brackets={isCurrent}
+      interactive
+      padding="md"
+      className={cn(
+        'transition-shadow duration-200',
+        isCurrent && 'shadow-amber-glow'
+      )}
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
+      {/* Top row: order + time + badges */}
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 text-xs font-bold text-neutral-300">
-            {lesson.order}
+          <span
+            className={cn(
+              'inline-flex h-6 min-w-[1.75rem] items-center justify-center rounded-md border px-1.5 font-mono text-[11px] font-semibold tabular-nums',
+              isCurrent
+                ? 'border-amber/40 bg-amber-soft text-amber-fg'
+                : 'border-line bg-surface-elevated text-ink-secondary'
+            )}
+          >
+            {pairOrder}
           </span>
-          <span className="text-xs font-medium text-neutral-400">
+
+          <span className="font-mono text-xs font-medium tabular-nums text-ink-secondary">
             {lesson.startTime} – {lesson.endTime}
           </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {lesson.subgroup && (
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/20">
-              Підгр. {lesson.subgroup}
+
+          {isCurrent && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber/35 bg-amber-soft px-2 py-0.5 text-[11px] font-semibold text-amber-fg">
+              <StatusDot tone="amber" pulse size="sm" />
+              <span>Зараз</span>
             </span>
           )}
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${badgeColor}`}>
-            {lesson.type}
-          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {lesson.subgroup && (
+            <MetaChip variant="beige">Підгр. {lesson.subgroup}</MetaChip>
+          )}
+          {lesson.isElective && <MetaChip variant="amber">Вибіркова</MetaChip>}
+          {parityLabel && <MetaChip variant="neutral">{parityLabel}</MetaChip>}
+          {departmentsLabel && (
+            <MetaChip variant="neutral">{departmentsLabel}</MetaChip>
+          )}
+          <LessonTypeBadge type={lesson.type} />
         </div>
       </div>
 
-      <h3 className="text-base font-semibold text-white tracking-tight mb-3">
+      {/* Subject title */}
+      <h3 className="font-serif text-[17px] font-medium leading-[1.35] tracking-[-0.01em] text-ink">
         {lesson.name}
       </h3>
 
-      <div className="space-y-1.5 text-xs text-neutral-300 mb-4">
+      {/* Classroom & teacher metadata */}
+      <div className="mt-2.5 space-y-1.5 text-xs text-ink-secondary">
         {classroom && (
           <div className="flex items-center gap-2">
-            <MapPin className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-            <span>Аудиторія: <strong className="text-white font-medium">{classroom.code}</strong> ({classroom.building})</span>
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" aria-hidden="true" />
+            <span className="min-w-0 truncate">
+              Ауд.{' '}
+              <strong className="font-mono font-semibold text-ink">
+                {classroom.code}
+              </strong>{' '}
+              <span className="text-ink-secondary">· {classroom.building}</span>
+            </span>
           </div>
         )}
+
         {teacher && (
           <div className="flex items-center gap-2">
-            <User className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-            <span className="truncate">{teacher.fullName}</span>
+            <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+            <span className="min-w-0 truncate text-ink-secondary">
+              {teacher.fullName}
+            </span>
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 pt-2 border-t border-white/5">
-        <span className="text-[11px] text-neutral-400 mr-auto font-medium">Відмітка:</span>
+      {/* Inline note & deadline indicator pill */}
+      {hasIndicators && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenNotes}
+            className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface-elevated/80 px-2.5 py-1.5 text-[11px] font-medium text-ink-secondary transition-colors hover:border-amber/40 hover:text-ink active:scale-[0.98]"
+          >
+            {noteCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-amber-fg">
+                <StickyNote className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>
+                  {noteCount}{' '}
+                  {noteCount === 1
+                    ? 'нотатка'
+                    : noteCount < 5
+                      ? 'нотатки'
+                      : 'нотаток'}
+                </span>
+              </span>
+            )}
+            {noteCount > 0 && activeDeadlineLabel && (
+              <span className="text-line-strong" aria-hidden="true">
+                ·
+              </span>
+            )}
+            {activeDeadlineLabel && (
+              <span className="inline-flex items-center gap-1 text-terracotta-fg">
+                <CalendarClock className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span>Дедлайн: {activeDeadlineLabel}</span>
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Attendance & Notes actions */}
+      <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-line/70 pt-3">
+        <div className="flex flex-1 items-center gap-1.5" role="group" aria-label="Відмітка відвідуваності">
+          {ATTENDANCE_OPTIONS.map(({ status, label, Icon, activeStyle }) => {
+            const isSelected = attendanceStatus === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => onToggleAttendance(status)}
+                style={isSelected ? activeStyle : undefined}
+                className={cn(
+                  'inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium transition-all duration-150 active:scale-[0.97]',
+                  isSelected
+                    ? 'font-semibold shadow-elevated'
+                    : 'border-line bg-surface-elevated/70 text-ink-secondary hover:border-line-strong hover:text-ink'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <button
           type="button"
-          onClick={() => onToggleAttendance('present')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
-            attendanceStatus === 'present'
-              ? 'bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-500/20'
-              : 'bg-white/5 text-neutral-300 hover:bg-white/10'
-          }`}
+          onClick={onOpenNotes}
+          aria-label={`Нотатки до пари ${lesson.name}`}
+          className={cn(
+            'inline-flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all duration-150 active:scale-[0.97]',
+            noteCount > 0
+              ? 'border-amber/35 bg-amber-soft text-amber-fg hover:border-amber/55'
+              : 'border-line bg-surface-elevated/70 text-ink-secondary hover:border-line-strong hover:text-ink'
+          )}
         >
-          <Check className="w-3.5 h-3.5" />
-          Був
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleAttendance('absent')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
-            attendanceStatus === 'absent'
-              ? 'bg-rose-500 text-white font-semibold shadow-md shadow-rose-500/20'
-              : 'bg-white/5 text-neutral-300 hover:bg-white/10'
-          }`}
-        >
-          <X className="w-3.5 h-3.5" />
-          Н-ка
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleAttendance('excused')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all active:scale-90 ${
-            attendanceStatus === 'excused'
-              ? 'bg-amber-500 text-black font-semibold shadow-md shadow-amber-500/20'
-              : 'bg-white/5 text-neutral-300 hover:bg-white/10'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          Поважна
+          <StickyNote className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="hidden xs:inline">Нотатки</span>
+          {noteCount > 0 && (
+            <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber/20 px-1 font-mono text-[10px] font-semibold tabular-nums text-amber-fg">
+              {noteCount}
+            </span>
+          )}
         </button>
       </div>
-    </motion.div>
+    </GlassCard>
   );
 };
