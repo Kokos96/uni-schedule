@@ -1,9 +1,40 @@
 {
-  "name": "Розклад Університету",
+  "id": "/",
+  "name": "Розклад ФЕП-33с",
   "short_name": "Розклад",
+  "description": "Розклад занять групи ФЕП-33с — швидкий доступ до пар, таймера та змін онлайн і офлайн",
+  "lang": "uk",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
-  "icons": []
+  "orientation": "portrait-primary",
+  "background_color": "#242522",
+  "theme_color": "#242522",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }
