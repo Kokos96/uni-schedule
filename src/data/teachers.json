@@ -6,7 +6,7 @@
   { "id": "t_olenych", "fullName": "Оленич Ігор Богданович", "department": "ФЕКТ", "subjects": ["М'які обчислення"] },
   { "id": "t_mysiuk", "fullName": "Мисюк Роман Володимирович", "department": "ФЕКТ", "subjects": ["Методи та технології обчислень"] },
   { "id": "t_sveleba", "fullName": "Свелеба Сергій Андрійович", "department": "ФЕКТ", "subjects": ["Професійний Python"] },
-  { "id": "t_bovgyra", "fullName": "Бовгира Олег Вікторович", "department": "ФЕКТ", "subjects": ["Вибрані розділи мови програмування C"] },
+  { "id": "t_bovgyra", "fullName": "Бовгира Олег Вікторович", "department": "ФЕКТ", "subjects": ["Вибрані розділи мови програмування C", "Людина і космос"] },
   { "id": "t_polovynko", "fullName": "Половинко Ігор Іванович", "department": "ФЕКТ", "subjects": ["Цифрова обробка інформації"] },
   { "id": "t_zhyshkovych", "fullName": "Жишкович Андрій Володимирович", "department": "ФЕКТ", "subjects": ["Нереляційні та розподілені бази даних"] },
   { "id": "t_shot", "fullName": "Шот Анна Петрівна", "department": "ФЕКТ", "subjects": ["Freelance: робота онлайн"] },
