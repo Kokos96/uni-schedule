@@ -80,51 +80,27 @@ export const AppShell: React.FC<AppShellProps> = ({
       <div className="lg:pl-64 xl:pl-[272px] min-h-screen flex flex-col">
         {banner}
 
-        <header className="sticky top-0 z-20 glass-panel border-x-0 border-t-0 border-b border-line-glass pt-safe">
-          <div className="w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 py-2.5 lg:py-3 flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <img
-                  src="/icons/icon-192.png"
-                  alt=""
-                  width={18}
-                  height={18}
-                  className="lg:hidden h-[18px] w-[18px] shrink-0 rounded object-cover"
-                />
-                <span className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.06em] text-amber-fg truncate">
-                  {resolvedKicker}
-                </span>
-              </div>
-              <h1 className="mt-0.5 font-serif text-[19px] lg:text-[22px] font-bold leading-[1.2] tracking-[-0.02em] text-ink truncate">
-                {resolvedTitle}
-              </h1>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {headerActions}
-
-              {/* Quick theme toggle on mobile/tablet where sidebar is hidden */}
-              <button
-                type="button"
-                onClick={onCycleTheme}
-                aria-label={`Тема оформлення: ${themeMeta.label}. Натисніть, щоб змінити`}
-                title={`Тема: ${themeMeta.label}`}
-                className="lg:hidden inline-flex h-10 min-w-[40px] items-center justify-center gap-1.5 rounded-xl border border-line bg-surface-elevated/80 px-2.5 text-xs font-medium text-ink transition-colors duration-150 hover:border-line-strong hover:bg-surface-elevated active:scale-[0.97]"
-              >
-                <ThemeIcon className="h-4 w-4 text-amber-fg shrink-0" weight="duotone" aria-hidden="true" />
-                <span className="hidden xs:inline font-mono text-[11px]">
-                  {themeMeta.label}
-                </span>
-              </button>
-            </div>
-          </div>
-        </header>
-
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-4 pb-28 lg:pb-10 focus:outline-none"
+          className="relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-28 lg:pt-6 lg:pb-10 focus:outline-none"
         >
+          <h1 className="sr-only">{resolvedTitle}</h1>
+
+          {/* Quick theme toggle on mobile/tablet where sidebar is hidden */}
+          <div className="lg:hidden absolute top-[max(0.875rem,calc(env(safe-area-inset-top)+0.375rem))] right-3 xs:right-4 z-20 flex items-center gap-2">
+            {headerActions}
+            <button
+              type="button"
+              onClick={onCycleTheme}
+              aria-label={`Тема оформлення: ${themeMeta.label}. Натисніть, щоб змінити`}
+              title={`Тема: ${themeMeta.label}`}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface/90 text-ink shadow-elevated backdrop-blur-md transition-colors duration-150 hover:border-line-strong hover:bg-surface-elevated active:scale-[0.97]"
+            >
+              <ThemeIcon className="h-4 w-4 text-amber-fg shrink-0" weight="duotone" aria-hidden="true" />
+            </button>
+          </div>
+
           {children}
         </main>
       </div>
