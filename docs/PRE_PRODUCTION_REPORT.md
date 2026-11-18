@@ -1,4 +1,4 @@
-# Звіт передпродакшн-верифікації (Stage 7 — Pre-Production Report)
+# Звіт передпродакшн-верифікації (Stage 7 & 7.1 — Pre-Production Report)
 
 Дата: `2026-11-19`  
 Репозиторій: `/home/kostia/projects/rozklad/` (`https://github.com/Kokos96/uni-schedule`)
@@ -7,105 +7,81 @@
 
 ## 1. Git branch та commit
 - Активна гілка: `feat/final-hardening`
-- Базовий commit перед стартом Stage 7: `1c64a63` (після коміту Stage 7 — див. повідомлення з фінальним commit hash).
-- Гілка `main` не змінювалася (`ed8205d`), merge та production deployment не виконувалися.
+- Базовий commit Stage 7: `b90724e75366c8690ef8099f03557da72f0223a7` (Stage 7.1 додає тести та оновлення звітів поверх нього).
+- Гілка `main` не змінювалася (`ed8205dd8d284fdcd7b6dbd2f9953b42ef829ccf`), merge та production deployment не виконувалися.
 
 ## 2. Стан робочого дерева та `.gitignore`
-- Робоче дерево перед стартом було чистим.
-- `.gitignore` розширено для захисту від коміту локальних БД та секретів: `.dev.vars`, `.dev.vars.*`, `!.dev.vars.example`, `*.pem`, `*.key`, `*.db`, `*.sqlite`, `*.sqlite3`, `*.db-wal`, `*.db-shm`, `.wrangler/`, `workers/api/.wrangler/`, `.env`, `.env.*`.
+- `.gitignore` захищає від коміту локальних БД та секретів: `.dev.vars`, `.dev.vars.*`, `!.dev.vars.example`, `*.pem`, `*.key`, `*.db`, `*.sqlite`, `*.sqlite3`, `*.db-wal`, `*.db-shm`, `.wrangler/`, `workers/api/.wrangler/`, `.env`, `.env.*`.
+- `package-lock.json` та залежності не змінювалися.
 
-## 3. Версії Node.js, npm та Wrangler
-- **Системний Node.js у WSL:** `v18.19.1` (недостатній для `wrangler@4.x`, тому для локального запуску Wrangler розгорнуто user-space Node у `~/.local/node` без змін `package.json`, `package-lock.json` та системних конфігів).
-- **User-space Node.js:** `v22.23.5`
-- **npm:** `10.9.9`
-- **Wrangler:** `4.48.0`
-- **Перевірка `workers/api` (`npm run typecheck`):** `tsc --noEmit` — `0` помилок.
-- **Перевірка frontend (`npm run build`):** `tsc --noEmit && vite build` — `0` помилок (`9.11s`).
+## 3. Версії Node.js, npm, Wrangler та компіляція
+- **Системний Node.js у WSL:** `v18.19.1` (для `wrangler@4.x` використовується user-space Node у `~/.local/node/bin`).
+- **User-space Node.js:** `v22.23.5` | **npm:** `10.9.9` | **Wrangler:** `4.48.0`.
+- **Worker TypeScript check (`(cd workers/api && npm run typecheck)`):** `tsc --noEmit` — `0` помилок (**PASSED**, static check).
+- **Frontend TypeScript check & Build (`npm run build`):** `tsc --noEmit && vite build` — `0` помилок, зібрано за `6.69s` (**PASSED**, static/build check).
 
-## 4. Результат застосування всіх D1-міграцій
-На локальній Wrangler D1 (`uni-schedule-db`) успішно застосовані та перевірені на ідемпотентність усі 4 міграції:
-- `0001_initial.sql` ✅
-- `0002_push_notifications.sql` ✅
-- `0003_attendance_sync.sql` ✅
-- `0004_attendance_versioning.sql` ✅
-- Повторний запуск `npx wrangler d1 migrations apply uni-schedule-db --local` повернув `✅ No migrations to apply!`.
+## 4. D1-міграції, схема та реальні обмеження (FK / UNIQUE / CHECK / Rollback)
+- **Команда міграцій:** `npx wrangler d1 migrations apply uni-schedule-db --local` — **PASSED** (`✅ No migrations to apply!` при повторному запуску; `0001_initial.sql` – `0004_attendance_versioning.sql` ідемпотентні, **real local D1**).
+- **Схема `sqlite_master`:** підтверджено наявність **12** прикладних таблиць (`users`, `user_devices`, `universities`, `student_profiles`, `university_groups`, `schedule_entries`, `schedule_sync_logs`, `rate_limit_buckets`, `push_subscriptions`, `notification_preferences`, `notification_logs`, `attendance_records`, окрім системних `d1_migrations` і `_cf_METADATA`) та **9** індексів.
+- **Перевірка реальних constraints та rollback:**
+  - **Команда:** `node --test workers/api/tests/localD1ConstraintsAndCron.test.mjs` (тест №1)
+  - **Тип:** `real local D1` (`getPlatformProxy` над ізольованою SQLite Wrangler D1)
+  - **Результат:** **PASSED** (`ok 1`, `243 ms`) — реально відхилено порушення `FOREIGN KEY` (`user_devices`, `push_subscriptions`, `attendance_records`), `UNIQUE` (`user_devices.token_hash`, `attendance_records` PK), `CHECK` (`attendance_records.status`, `notification_preferences.before_lesson_minutes`), `NOT NULL` (`users.created_at`); підтверджено атомарний rollback через `db.batch()`, збереження базових записів після невдалих операцій та `ON DELETE CASCADE`.
 
-## 5. Список перевірених API endpoint-ів
-Перевірено на живому локальному Worker (`wrangler dev --local`) через `workers/api/tests/localApiMatrix.test.mjs` (`20 endpoints × 6 сценаріїв`, включно з `200/201`, `400`, `401`, `403`, `404`, `405`, `429` і без виводу токенів у логах):
-- `GET /api/health`
-- `GET /api/push/vapid-public-key`
-- `GET /api/universities`
-- `GET /api/universities/lnu/faculties`
-- `GET /api/universities/lnu/groups`
-- `GET /api/schedule`
-- `POST /api/auth/register`
-- `GET /api/devices`, `POST /api/devices/link`, `POST /api/devices/rotate`, `DELETE /api/devices/:id`
-- `GET /api/profile`, `PUT /api/profile`
-- `GET /api/push/subscriptions`, `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions/:id`
-- `GET /api/notifications/preferences`, `PUT /api/notifications/preferences`
-- `GET /api/attendance`, `POST /api/attendance/sync`
+## 5. Перевірка 20 API endpoint-ів на живому локальному Worker
+- **Команда:** `node --test workers/api/tests/localApiMatrix.test.mjs`
+- **Тип:** `real local D1` + живий `wrangler dev --local`
+- **Результат:** **PASSED** (`1/1`, `14.72s`) — перевірено 20 endpoint-ів across 6 сценаріїв (`200/201`, `400`, `401`, `403`, `404`, `405` із `Allow`, `429 Retry-After=60`, IDOR-ізоляція, відсутність токенів у логах).
 
-## 6. Результати реального локального D1 тестування
-- SQLite-перевірка `sqlite_master` підтвердила наявність усіх 11 таблиць (`users`, `user_devices`, `universities`, `student_profiles`, `university_groups`, `schedule_entries`, `schedule_sync_logs`, `rate_limit_buckets`, `push_subscriptions`, `notification_preferences`, `notification_logs`, `attendance_records`) і 9 індексів.
-- Зовнішні ключі та `UNIQUE` обмеження працюють на реальному локальному SQLite D1 engine.
+## 6. Наскрізна перевірка Attendance Sync та Offline Queue (Frontend + Worker + D1)
+- **Команда:** `python tests/e2e/verify_attendance_sync.py`
+- **Тип:** `real local D1` + живий `wrangler dev --local` + реальний `vite preview` + Playwright (2 окремі браузерні контексти `DevA` і `DevB`)
+- **Результат:** **PASSED** (`ALL E2E OFFLINE ATTENDANCE SYNC CHECKS PASSED!`):
+  1. `DevA` створює `attended` ("Був") -> D1 `serverVersion=1`.
+  2. `DevB` завантажує застосунок -> бачить `attended`.
+  3. `DevB` змінює на `absent` ("Н-ка") -> D1 `serverVersion=2`.
+  4. `DevA` оновлюється -> бачить `absent`.
+  5. `DevA` переходить `offline` (`ctx_a.set_offline(True)`) -> змінює на `excused` ("Поважна") -> мутація у `uni_schedule_attendance_queue_v1`.
+  6. `DevA` перезавантажує PWA offline -> `excused` та черга збережені.
+  7. `DevA` повертається `online` -> черга синхронізується з D1 (`serverVersion=3`), `uni_schedule_attendance_queue_v1` очищується.
+  8. Повторна мутація -> `applied=0, skippedOlder=1`, 0 дублікатів, стан збережено.
+  9. Окремо на реальній D1 підтверджено: `unmarked` (`serverVersion=4` + синхронізація на `DevB`), `stale mutation` (`applied=0, skippedOlder=1`), `clock skew` (`2099-01-01` обрізано `< 2030-01-01`, `serverVersion=5`) та `baseVersion=5` -> `serverVersion=6`.
+- **Додаткові unit/mock тести Sync:**
+  - `tests/unit/attendanceSyncClient.test.ts` (**unit**, `2/2` passed) — offline coalescing, міграція `uni_schedule_attendance_v1`.
+  - `workers/api/tests/attendanceSync.test.ts` (**mock D1 + unit**, `2/2` passed) — LWW-конфлікти, IDOR та точність підсумків.
 
-## 7. Результати Attendance Sync на двох тестових пристроях
-- Перевірено на **ізольованій реальній локальній Wrangler D1** (`DevA` і `DevB` одного користувача):
-  - `DevA` створює `attended` (`serverVersion=1`) -> `DevB` оновлює до `absent` (`serverVersion=2`).
-  - Клієнт із годинником `2099-01-01` обрізається до `serverNow + 5 хв` (`serverVersion=3`), і `DevB` з `baseVersion=3` успішно оновлює запис до `unmarked` (`serverVersion=4`).
-- Також `workers/api/tests/attendanceSync.test.ts` (`2/2` passed) та `tests/unit/attendanceSyncClient.test.ts` (`2/2` passed) підтверджують offline-чергу, міграцію `uni_schedule_attendance_v1`, ідемпотентність та стабільність `lessonId`.
+## 7. Повна перевірка п'яти Cron-сценаріїв та Push на реальній локальній D1
+- **Команда:** `node --test workers/api/tests/localD1ConstraintsAndCron.test.mjs` (тест №2)
+- **Тип:** `real local D1` (`getPlatformProxy`) + реальний локальний HTTP Push receiver (`127.0.0.1`) + реальний WebCrypto VAPID JWT / `aes128gcm`
+- **Результат:** **PASSED** (`ok 2`, `1044 ms`):
+  1. **Morning digest (`morning`):** `2026-11-20T06:00:00Z` (`08:00 Europe/Kyiv`) -> `sent=1`, запит доставлено на `/push/active`, запис у `notification_logs` (`dedup_key=sub-active:morning:2026-11-20`); повтор о `06:02Z` -> `sent=0, deduplicated=1`.
+  2. **Before-class reminder (`before_lesson`):** `06:20Z` (`08:20 Europe/Kyiv`) -> `sent=1`, `dedup_key=sub-active:before_lesson:2026-11-20:l-fri-1@08:30`; повтор -> `sent=0, deduplicated=1`.
+  3. **Before-end reminder (`before_end`):** `07:40Z` (`09:40 Europe/Kyiv`) -> `sent=1`, `dedup_key=sub-active:before_end:2026-11-20:l-fri-1@09:50`; повтор -> `sent=0, deduplicated=1`.
+  4. **Friday digest (`friday`):** `16:00Z` (`18:00 Europe/Kyiv`) -> `sent=1`, `dedup_key=sub-active:friday:2026-11-20`; повтор -> `sent=0, deduplicated=1`.
+  5. **Evening summary (`evening`):** `18:00Z` (`20:00 Europe/Kyiv`) -> `sent=1`, `dedup_key=sub-active:evening:2026-11-20`; повтор -> `sent=0, deduplicated=1`.
+  - **Вимкнений користувач (`enabled=0`):** `0` записів у `notification_logs`, `0` Push-запитів.
+  - **Часові пояси та DST на реальній D1:** підтверджено `Europe/Kyiv` літній час (`2026-07-17T05:00:00Z` = `08:00` UTC+3) та `America/New_York` зима/літо (`2026-01-16T13:00:00Z` UTC-5, `2026-07-17T12:00:00Z` UTC-4).
+- **Додаткові mock/unit тести Push:** `workers/api/tests/push.test.ts` (**mock D1 + mock fetch + unit**, `4/4` passed) — retry `503`, видалення `410`.
 
-## 8. Результати Push-тестування
-- `workers/api/tests/push.test.ts` (`4/4` passed): перевірено ES256 VAPID JWT, ECDH P-256 + HKDF-SHA-256 + `aes128gcm` шифрування, обробку `201`/`503` (retry)/`410` (видалення простроченої підписки), мульти-пристрої та `dedup_key`.
-- Приватні ключі в логах чи звітах не виводилися.
-- **Непроведено:** реальна доставка Push на фізичний iPhone/Android (потребує HTTPS production Worker, реального пристрою і production VAPID-ключів).
+## 8. Інші unit, E2E та навантажувальні тести
+- `tests/unit/domain.test.ts` (**unit**, `22/22` passed).
+- `tests/unit/lnuParser.test.ts` (**unit**, `8/8` passed) — `cp1251`, парсинг ЛНУ, стабільний `lessonId`.
+- `workers/api/tests/api.test.ts` (**mock D1**, `8/8` passed) — кеш розкладу та fallback при `503`.
+- `workers/api/tests/loadSimulation.test.ts` (**mock D1 + mock fetch**, `1/1` passed): `10` (`115 ms`), `50` (`251 ms`), `100` (`379 ms`), `500` (`1826 ms`).
+- `python tests/e2e/verify_app.py` (**E2E**, 9 viewport `320×844` – `1920×900`, `ALL E2E CHECKS PASSED!`).
 
-## 9. Результати Cron-тестування
-- Локальний `wrangler dev --test-scheduled` успішно відпрацював на `GET /__scheduled?cron=*/5+*+*+*+*` зі статусом `200 OK`.
-- Unit-тести `scheduler.ts` підтвердили всі 5 сценаріїв (ранковий, перед парою, перед завершенням, вечірній, п'ятничний), часові пояси `Europe/Kyiv` (UTC+2 зима / UTC+3 літо) та `America/New_York`, дедуплікацію та відсутність запису невідмічених пар як пропущених.
+## 9. Непроведені перевірки (потребують staging / production середовища)
+- **Реальна доставка Web Push на фізичні iPhone (iOS PWA) / Android:** не проводилася локально (потрібен HTTPS Worker та реальні пристрої).
+- **Реальне навантажувальне тестування на Cloudflare Edge:** не проводилося (заборонено деплоїти віддалені ресурси; на Free Tier при `>50` підписок у пік діятиме ліміт subrequests/CPU).
 
-## 10. Результати LNU інтеграції
-- `tests/unit/lnuParser.test.ts` (`8/8` passed): перевірено `cp1251` form-encoding/decoding, парсинг факультетів, JSON-списку груп, паралельних пар, підгруп, вибіркових дисциплін, порожнього/битого HTML та збереження кешу в D1 при `503` від джерела (`api.test.ts` `8/8` passed).
-
-## 11. Результати frontend та E2E
-- `npm run build` (`tsc --noEmit && vite build`): `0` помилок (`9.11s`).
-- `tests/unit/domain.test.ts`: `22/22` passed.
-- Playwright E2E (`tests/e2e/verify_app.py`) по всіх 9 viewport (`320×844` — `1920×900`): **`ALL E2E CHECKS PASSED!`** з нульовими консольними помилками.
-
-## 12. Результати навантажувальної симуляції
-- `workers/api/tests/loadSimulation.test.ts` (`1/1` passed, **mock D1 + mock fetch**, не реальний Cloudflare edge):
-  - `10` юзерів: `115 ms`, `2` D1 reads, `20` D1 writes, `10` sent
-  - `50` юзерів: `251 ms`, `2` D1 reads, `100` D1 writes, `50` sent
-  - `100` юзерів: `379 ms`, `2` D1 reads, `200` D1 writes, `100` sent
-  - `500` юзерів: `1826 ms`, `2` D1 reads, `1000` D1 writes, `500` sent
-- **Примітка:** результати є симуляцією; на реальному Cloudflare Free Tier у пік 08:00 при >50 підписках ліміт `~50` subrequests/`10 ms` CPU вимагатиме переходу на Workers Paid або Queues.
-
-## 13. Знайдені та виправлені дефекти
-1. **HTTP 405 Method Not Allowed та валідація маршрутів Worker:** додано коректне повернення `405` для непідтримуваних HTTP-методів, `Retry-After` у `errorResponse`, уточнено валідацію параметрів у `profile.ts`, `push.ts`, `universities.ts`, `attendance.ts`.
-2. **TypeScript strictness у `workers/api`:** виправлено типізацію `crypto.subtle.exportKey` / `deriveBits` у `webPush.ts` та `lib: ["ES2022", "DOM"]` у `workers/api/tsconfig.json`.
-3. **Захист від коміту секретів і локальних БД:** оновлено `.gitignore`.
-4. **Таймаут та проксі у `lnuAdapter.ts`:** покращено обробку мережевих помилок і таймаутів.
-
-## 14. Невирішені проблеми
-- Системний WSL Node.js має версію `v18.19.1`; для `wrangler@4` необхідно використовувати Node `>= 20` (локально налаштовано в `~/.local/node`).
-
-## 15. Тести, які не вдалося виконати, із причинами
-- **Реальна доставка Push на фізичний iPhone (iOS PWA) / Android:** не проводилася через відсутність HTTPS production Worker та реального пристрою в тестовому середовищі (перевірено криптографію, API і mock Push Service).
-- **Реальне навантажувальне тестування на Cloudflare Edge:** не проводилося через заборону створення/деплою віддалених Cloudflare-ресурсів на цьому етапі.
-
-## 16. Точні команди для подальшого запуску
+## 10. Команди для повторного запуску локальної верифікації
 ```bash
-# 1. Локальна D1 + Worker (потрібен Node >= 20 у PATH)
 export PATH="$HOME/.local/node/bin:$PATH"
-cd /home/kostia/projects/rozklad/workers/api
-npx wrangler d1 migrations apply uni-schedule-db --local
-npx wrangler dev --local --test-scheduled
-
-# 2. Локальний Frontend
 cd /home/kostia/projects/rozklad
+(cd workers/api && npm run typecheck)
 npm run build
-python tests/e2e/verify_app.py
-
-# 3. API Matrix на реальній локальній D1
 node --test workers/api/tests/localApiMatrix.test.mjs
+node --test workers/api/tests/localD1ConstraintsAndCron.test.mjs
+python tests/e2e/verify_app.py
+python tests/e2e/verify_attendance_sync.py
 ```
