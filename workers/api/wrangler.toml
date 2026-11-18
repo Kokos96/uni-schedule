@@ -8,6 +8,9 @@ ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-sched
 SCHEDULE_CACHE_TTL_SECONDS = "21600"
 GROUPS_CACHE_TTL_SECONDS = "86400"
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "uni-schedule-db"

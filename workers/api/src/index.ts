@@ -7,11 +7,20 @@ import {
 } from './routes/authDevices';
 import { handleGetProfile, handleUpdateProfile } from './routes/profile';
 import {
+  handleDeletePushSubscription,
+  handleGetNotificationPreferences,
+  handleGetVapidPublicKey,
+  handleListPushSubscriptions,
+  handleUpdateNotificationPreferences,
+  handleUpsertPushSubscription,
+} from './routes/push';
+import {
   handleGetFaculties,
   handleGetGroups,
   handleGetSchedule,
   handleListUniversities,
 } from './routes/universities';
+import { runNotificationCron } from './push/scheduler';
 import {
   authenticateRequest,
   checkRateLimit,
@@ -78,7 +87,11 @@ export default {
         );
       }
 
-      // Public university catalog & shared schedule proxy endpoints
+      // Public VAPID key & university catalog endpoints
+      if (path === '/api/push/vapid-public-key' && request.method === 'GET') {
+        return handleGetVapidPublicKey(env, corsHeaders);
+      }
+
       if (path === '/api/universities' && request.method === 'GET') {
         return await handleListUniversities(env, corsHeaders);
       }
@@ -135,6 +148,24 @@ export default {
         return await handleUpdateProfile(request, auth, env, corsHeaders);
       }
 
+      if (path === '/api/push/subscriptions' && request.method === 'GET') {
+        return await handleListPushSubscriptions(auth, env, corsHeaders);
+      }
+      if (path === '/api/push/subscriptions' && request.method === 'POST') {
+        return await handleUpsertPushSubscription(request, auth, env, corsHeaders);
+      }
+      const deleteSubMatch = path.match(/^\/api\/push\/subscriptions\/([a-zA-Z0-9-]+)$/);
+      if (deleteSubMatch && request.method === 'DELETE') {
+        return await handleDeletePushSubscription(deleteSubMatch[1]!, auth, env, corsHeaders);
+      }
+
+      if (path === '/api/notifications/preferences' && request.method === 'GET') {
+        return await handleGetNotificationPreferences(auth, env, corsHeaders);
+      }
+      if (path === '/api/notifications/preferences' && request.method === 'PUT') {
+        return await handleUpdateNotificationPreferences(request, auth, env, corsHeaders);
+      }
+
       return errorResponse('NOT_FOUND', 'Маршрут не знайдено', 404, corsHeaders);
     } catch {
       // Never leak internal SQL or stack traces
@@ -145,5 +176,14 @@ export default {
         corsHeaders
       );
     }
+  },
+
+  async scheduled(
+    event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    const nowUtc = new Date(event.scheduledTime || Date.now());
+    ctx.waitUntil(runNotificationCron(env, nowUtc));
   },
 };

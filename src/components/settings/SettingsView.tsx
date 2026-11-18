@@ -19,6 +19,7 @@ import { ModalDrawer } from '../ui/ModalDrawer';
 import { useToast } from '../ui/Toast';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { BackupImportMeta, BackupSection } from './BackupSection';
+import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
 
 export interface SettingsViewProps {
@@ -114,6 +115,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <div className="space-y-6 lg:col-span-5">
+          <NotificationsSettingsSection />
+
           <BackupSection
             attendanceRecords={attendanceRecords}
             settings={resolved}
