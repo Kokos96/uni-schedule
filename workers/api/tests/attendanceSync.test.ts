@@ -45,13 +45,13 @@ class MockAttendanceD1 {
         } else if (norm.startsWith('SELECT id, user_id, revoked_at FROM user_devices WHERE token_hash = ?')) {
           const d = Array.from(db.user_devices.values()).find((x) => x.token_hash === bound[0]);
           if (d) results = [d];
-        } else if (norm.startsWith('SELECT lesson_id, lesson_date, status, updated_at, device_id FROM attendance_records')) {
+        } else if (norm.startsWith('SELECT lesson_id, lesson_date, status, updated_at, server_version, server_updated_at, device_id FROM attendance_records')) {
           const userId = bound[0] as string;
-          const hasSince = norm.includes('updated_at > ?');
+          const hasSince = norm.includes('server_updated_at > ?');
           const since = hasSince ? (bound[1] as string) : null;
           results = Array.from(db.attendance_records.values()).filter((r) => {
             if (r.user_id !== userId) return false;
-            if (since && (r.updated_at as string) <= since) return false;
+            if (since && (r.server_updated_at as string) <= since) return false;
             return true;
           });
         }
@@ -90,23 +90,42 @@ class MockAttendanceD1 {
           db.student_profiles.set(bound[0] as string, { user_id: bound[0] });
           changes = 1;
         } else if (norm.startsWith('INSERT INTO attendance_records')) {
-          const [user_id, lesson_id, lesson_date, status, updated_at, device_id] = bound as [
-            string,
-            string,
-            string,
-            string,
-            string,
-            string,
-          ];
+          const [
+            user_id,
+            lesson_id,
+            lesson_date,
+            status,
+            updated_at,
+            server_updated_at,
+            device_id,
+            baseVersion,
+          ] = bound as [string, string, string, string, string, string, string, number | null];
           const pk = `${user_id}::${lesson_id}::${lesson_date}`;
           const existing = db.attendance_records.get(pk);
-          if (!existing || updated_at > (existing.updated_at as string)) {
+          if (!existing) {
             db.attendance_records.set(pk, {
               user_id,
               lesson_id,
               lesson_date,
               status,
               updated_at,
+              server_version: 1,
+              server_updated_at,
+              device_id,
+            });
+            changes = 1;
+          } else if (
+            (baseVersion !== null && existing.server_version === baseVersion) ||
+            updated_at > (existing.updated_at as string)
+          ) {
+            db.attendance_records.set(pk, {
+              user_id,
+              lesson_id,
+              lesson_date,
+              status,
+              updated_at,
+              server_version: (existing.server_version as number) + 1,
+              server_updated_at,
               device_id,
             });
             changes = 1;
@@ -259,8 +278,61 @@ describe('workers/api Stage 5 Attendance Sync & Accurate Summaries', () => {
       }),
       env
     );
-    const unmarkBody = (await unmarkRes.json()) as { records: Array<{ status: string }> };
+    const unmarkBody = (await unmarkRes.json()) as { records: Array<{ status: string; serverVersion: number }> };
     assert.equal(unmarkBody.records[0]?.status, 'unmarked');
+    assert.equal(unmarkBody.records[0]?.serverVersion, 3);
+
+    // Clock-skew protection: device with broken clock in 2099 is clamped to serverNow + 5m
+    // and cannot permanently lock out a valid update with baseVersion
+    const futureRes = await worker.fetch(
+      new Request('https://api.test/api/attendance/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA1}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mutations: [
+            {
+              lessonId: 'lnu_fep33s_d3_p1',
+              lessonDate: '2026-11-18',
+              status: 'present',
+              updatedAt: '2099-01-01T00:00:00.000Z',
+            },
+          ],
+        }),
+      }),
+      env
+    );
+    const futureBody = (await futureRes.json()) as {
+      records: Array<{ updatedAt: string; serverVersion: number }>;
+    };
+    assert.ok(futureBody.records[0]!.updatedAt < '2030-01-01');
+    assert.equal(futureBody.records[0]?.serverVersion, 4);
+
+    // Valid device with matching baseVersion=4 can still update cleanly
+    const recoverRes = await worker.fetch(
+      new Request('https://api.test/api/attendance/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tokenA2}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mutations: [
+            {
+              lessonId: 'lnu_fep33s_d3_p1',
+              lessonDate: '2026-11-18',
+              status: 'absent',
+              updatedAt: '2026-11-18T11:05:00.000Z',
+              baseVersion: 4,
+            },
+          ],
+        }),
+      }),
+      env
+    );
+    const recoverBody = (await recoverRes.json()) as {
+      applied: number;
+      records: Array<{ status: string; serverVersion: number }>;
+    };
+    assert.equal(recoverBody.applied, 1);
+    assert.equal(recoverBody.records[0]?.status, 'absent');
+    assert.equal(recoverBody.records[0]?.serverVersion, 5);
   });
 
   it('computes accurate Evening & Friday summaries without counting unmarked as absent', () => {

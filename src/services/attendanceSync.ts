@@ -16,6 +16,7 @@ export interface RemoteAttendanceRecord {
   lessonDate: string;
   status: SyncAttendanceStatus;
   updatedAt: string;
+  serverVersion?: number;
 }
 
 export const ATTENDANCE_QUEUE_KEY = 'uni_schedule_attendance_queue_v1';
@@ -70,23 +71,31 @@ export function mergeAttendanceWithRemote(
   remoteRecords: readonly RemoteAttendanceRecord[],
   pendingQueue: readonly AttendanceMutation[]
 ): AttendanceRecord[] {
-  const map = new Map<string, { status: AttendanceStatus | null; updatedAt: string }>();
+  const map = new Map<
+    string,
+    { status: AttendanceStatus | null; updatedAt: string; serverVersion?: number }
+  >();
 
   for (const rec of localRecords) {
     const key = `${rec.lessonId}:${rec.date}`;
     map.set(key, {
       status: rec.status,
       updatedAt: rec.updatedAt ?? '1970-01-01T00:00:00.000Z',
+      serverVersion: rec.serverVersion,
     });
   }
 
   for (const remote of remoteRecords) {
     const key = `${remote.lessonId}:${remote.lessonDate}`;
     const current = map.get(key);
-    if (!current || remote.updatedAt >= current.updatedAt) {
+    const remoteHasNewerVersion =
+      typeof remote.serverVersion === 'number' &&
+      (current?.serverVersion === undefined || remote.serverVersion >= current.serverVersion);
+    if (!current || remoteHasNewerVersion || remote.updatedAt >= current.updatedAt) {
       map.set(key, {
         status: toLocalStatus(remote.status),
         updatedAt: remote.updatedAt,
+        serverVersion: remote.serverVersion,
       });
     }
   }
@@ -98,6 +107,7 @@ export function mergeAttendanceWithRemote(
       map.set(key, {
         status: toLocalStatus(pending.status),
         updatedAt: pending.updatedAt,
+        serverVersion: current?.serverVersion,
       });
     }
   }
@@ -113,6 +123,7 @@ export function mergeAttendanceWithRemote(
       date,
       status: value.status,
       updatedAt: value.updatedAt,
+      ...(value.serverVersion !== undefined ? { serverVersion: value.serverVersion } : {}),
     });
   }
 
