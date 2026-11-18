@@ -54,6 +54,7 @@ export interface AttendanceRecord {
   lessonId: string;
   date: string; // "YYYY-MM-DD" in local calendar time
   status: AttendanceStatus;
+  updatedAt?: string; // ISO timestamp for multi-device LWW sync
 }
 
 export interface Teacher {

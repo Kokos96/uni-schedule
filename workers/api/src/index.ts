@@ -1,3 +1,4 @@
+import { handleGetAttendance, handleSyncAttendance } from './routes/attendance';
 import {
   handleLinkDevice,
   handleListDevices,
@@ -164,6 +165,13 @@ export default {
       }
       if (path === '/api/notifications/preferences' && request.method === 'PUT') {
         return await handleUpdateNotificationPreferences(request, auth, env, corsHeaders);
+      }
+
+      if (path === '/api/attendance' && request.method === 'GET') {
+        return await handleGetAttendance(url, auth, env, corsHeaders);
+      }
+      if (path === '/api/attendance/sync' && request.method === 'POST') {
+        return await handleSyncAttendance(request, auth, env, corsHeaders);
       }
 
       return errorResponse('NOT_FOUND', 'Маршрут не знайдено', 404, corsHeaders);

@@ -124,11 +124,76 @@ interface CandidateNotification {
   payload: PushPayload;
 }
 
+export interface AttendanceSummaryCounts {
+  total: number;
+  attended: number;
+  absent: number;
+  excused: number;
+  unmarked: number;
+}
+
+export interface UserAttendanceEntry {
+  lesson_id: string;
+  lesson_date: string;
+  status: string;
+}
+
+export function computeSummaryCounts(
+  lessons: ReadonlyArray<{ lesson_id: string; lesson_date: string | null }>,
+  attendance: readonly UserAttendanceEntry[],
+  fallbackDateIso: string
+): AttendanceSummaryCounts {
+  const statusMap = new Map<string, string>();
+  for (const rec of attendance) {
+    statusMap.set(`${rec.lesson_id}:${rec.lesson_date}`, rec.status);
+  }
+
+  let attended = 0;
+  let absent = 0;
+  let excused = 0;
+  let unmarked = 0;
+
+  for (const lesson of lessons) {
+    const dateKey = lesson.lesson_date ?? fallbackDateIso;
+    const status = statusMap.get(`${lesson.lesson_id}:${dateKey}`);
+    if (status === 'attended' || status === 'present') {
+      attended += 1;
+    } else if (status === 'absent') {
+      absent += 1;
+    } else if (status === 'excused') {
+      excused += 1;
+    } else {
+      // Unmarked or 'unmarked' tombstone is NEVER counted as absent
+      unmarked += 1;
+    }
+  }
+
+  return {
+    total: lessons.length,
+    attended,
+    absent,
+    excused,
+    unmarked,
+  };
+}
+
+function formatSummaryLine(counts: AttendanceSummaryCounts): string {
+  if (counts.unmarked === counts.total) {
+    return `Відміток відвідуваності поки немає (не відмічено: ${counts.unmarked}).`;
+  }
+  const parts = [`Відвідано: ${counts.attended}`, `пропущено: ${counts.absent}`];
+  if (counts.excused > 0) parts.push(`поважна: ${counts.excused}`);
+  if (counts.unmarked > 0) parts.push(`не відмічено: ${counts.unmarked}`);
+  return parts.join(', ') + '.';
+}
+
 export function evaluateNotificationsForUser(
   row: ActiveSubscriptionRow,
   local: LocalDateTimeParts,
   todayLessons: readonly ScheduledLessonRow[],
-  weekLessonsCount: number
+  weekLessonsCount: number,
+  todaySummary?: AttendanceSummaryCounts,
+  weekSummary?: AttendanceSummaryCounts
 ): CandidateNotification[] {
   const candidates: CandidateNotification[] = [];
 
@@ -203,16 +268,19 @@ export function evaluateNotificationsForUser(
     }
   }
 
-  // 4. Evening summary (honest scheduled count; full attendance stats come in Stage 5)
+  // 4. Evening summary (accurate counts from synced attendance_records)
   if (row.evening_enabled === 1 && myTodayLessons.length > 0) {
     const targetMin = hhmmToMinutes(row.evening_time);
     if (targetMin !== null && isTimeInCronWindow(local.minutesOfDay, targetMin)) {
+      const counts =
+        todaySummary ??
+        computeSummaryCounts(myTodayLessons, [], local.isoDate);
       candidates.push({
         type: 'evening',
         dedupKey: `${row.sub_id}:evening:${local.isoDate}`,
         payload: {
           title: 'Вечірній підсумок дня',
-          body: `Навчальний день завершено! За розкладом сьогодні було ${myTodayLessons.length} пар(и). Не забудь відмітити відвідуваність у додатку.`,
+          body: `Навчальний день завершено! Сьогодні було ${counts.total} пар(и). ${formatSummaryLine(counts)}`,
           tag: `evening-${local.isoDate}`,
           url: '/',
         },
@@ -224,12 +292,19 @@ export function evaluateNotificationsForUser(
   if (row.friday_enabled === 1 && local.weekday === 5 && weekLessonsCount > 0) {
     const targetMin = hhmmToMinutes(row.friday_time);
     if (targetMin !== null && isTimeInCronWindow(local.minutesOfDay, targetMin)) {
+      const counts = weekSummary ?? {
+        total: weekLessonsCount,
+        attended: 0,
+        absent: 0,
+        excused: 0,
+        unmarked: weekLessonsCount,
+      };
       candidates.push({
         type: 'friday',
         dedupKey: `${row.sub_id}:friday:${local.isoDate}`,
         payload: {
           title: 'Тиждень завершено! 🎉',
-          body: `Цього тижня за розкладом було ${weekLessonsCount} пар(и). Попереду вихідні — гарного відпочинку!`,
+          body: `За тиждень було ${counts.total} пар(и). ${formatSummaryLine(counts)} Гарних вихідних!`,
           tag: `friday-${local.isoDate}`,
           url: '/',
         },
@@ -294,7 +369,6 @@ export async function runNotificationCron(
 
   // Cache schedule lookups per (groupKey, localIsoDate) within this Cron tick
   const dayScheduleCache = new Map<string, ScheduledLessonRow[]>();
-  const weekCountCache = new Map<string, number>();
 
   for (let i = 0; i < rows.length; i += MAX_SUBSCRIPTIONS_PER_TICK) {
     const batch = rows.slice(i, i + MAX_SUBSCRIPTIONS_PER_TICK);
@@ -318,33 +392,78 @@ export async function runNotificationCron(
         dayScheduleCache.set(dayCacheKey, todayLessons);
       }
 
-      let weekLessonsCount = 0;
+      let weekLessons: Array<{ lesson_id: string; lesson_date: string | null; subgroup: number | null }> = [];
       if (local.weekday === 5 && row.friday_enabled === 1) {
-        const weekKey = `${groupKey}:${local.isoDate}:${row.subgroup}`;
-        const cachedCount = weekCountCache.get(weekKey);
-        if (cachedCount !== undefined) {
-          weekLessonsCount = cachedCount;
-        } else {
-          const mondayIso = addDaysToIso(local.isoDate, -4);
-          const weekRes = await env.DB.prepare(
-            `SELECT lesson_id, subgroup
-             FROM schedule_entries
-             WHERE group_id = ? AND lesson_date BETWEEN ? AND ?`
-          )
-            .bind(groupKey, mondayIso, local.isoDate)
-            .all<{ lesson_id: string; subgroup: number | null }>();
-          weekLessonsCount = (weekRes.results ?? []).filter(
-            (l) => l.subgroup === null || l.subgroup === row.subgroup
-          ).length;
-          weekCountCache.set(weekKey, weekLessonsCount);
-        }
+        const mondayIso = addDaysToIso(local.isoDate, -4);
+        const weekRes = await env.DB.prepare(
+          `SELECT lesson_id, lesson_date, subgroup
+           FROM schedule_entries
+           WHERE group_id = ? AND lesson_date BETWEEN ? AND ?`
+        )
+          .bind(groupKey, mondayIso, local.isoDate)
+          .all<{ lesson_id: string; lesson_date: string | null; subgroup: number | null }>();
+        weekLessons = (weekRes.results ?? []).filter(
+          (l) => l.subgroup === null || l.subgroup === row.subgroup
+        );
+      }
+
+      const myTodayLessons = todayLessons.filter(
+        (l) => l.subgroup === null || l.subgroup === row.subgroup
+      );
+
+      let todaySummary: AttendanceSummaryCounts | undefined;
+      const eveningMin = hhmmToMinutes(row.evening_time);
+      if (
+        row.evening_enabled === 1 &&
+        myTodayLessons.length > 0 &&
+        eveningMin !== null &&
+        isTimeInCronWindow(local.minutesOfDay, eveningMin)
+      ) {
+        const attRes = await env.DB.prepare(
+          `SELECT lesson_id, lesson_date, status
+           FROM attendance_records
+           WHERE user_id = ? AND lesson_date = ?`
+        )
+          .bind(row.user_id, local.isoDate)
+          .all<UserAttendanceEntry>();
+        todaySummary = computeSummaryCounts(
+          myTodayLessons,
+          attRes.results ?? [],
+          local.isoDate
+        );
+      }
+
+      let weekSummary: AttendanceSummaryCounts | undefined;
+      const fridayMin = hhmmToMinutes(row.friday_time);
+      if (
+        row.friday_enabled === 1 &&
+        local.weekday === 5 &&
+        weekLessons.length > 0 &&
+        fridayMin !== null &&
+        isTimeInCronWindow(local.minutesOfDay, fridayMin)
+      ) {
+        const mondayIso = addDaysToIso(local.isoDate, -4);
+        const weekAttRes = await env.DB.prepare(
+          `SELECT lesson_id, lesson_date, status
+           FROM attendance_records
+           WHERE user_id = ? AND lesson_date BETWEEN ? AND ?`
+        )
+          .bind(row.user_id, mondayIso, local.isoDate)
+          .all<UserAttendanceEntry>();
+        weekSummary = computeSummaryCounts(
+          weekLessons,
+          weekAttRes.results ?? [],
+          local.isoDate
+        );
       }
 
       const candidates = evaluateNotificationsForUser(
         row,
         local,
         todayLessons,
-        weekLessonsCount
+        weekLessons.length,
+        todaySummary,
+        weekSummary
       );
 
       for (const candidate of candidates) {
