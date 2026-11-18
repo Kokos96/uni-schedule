@@ -1,12 +1,7 @@
 import React from 'react';
 import { BookOpen, Flask, PencilSimple, type Icon as PhosphorIcon } from '@phosphor-icons/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import type { LessonType } from '../../types';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../../utils/cn';
 
 export interface LessonTypeBadgeProps {
   type: LessonType;

@@ -1,8 +1,7 @@
 import React, { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowCounterClockwise, CaretLeft, CaretRight } from '@phosphor-icons/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { cn } from '../../utils/cn';
 import {
   MOTION_SPRINGS,
   resolveTransition,
@@ -18,10 +17,6 @@ import {
 } from '../../utils/date';
 import { MetaChip } from '../ui/Badge';
 import { GlassCard } from '../ui/GlassCard';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 export interface WeekStripProps {
   selectedDate: Date;

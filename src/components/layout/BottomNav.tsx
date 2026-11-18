@@ -8,17 +8,12 @@ import {
   Users,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import {
   MOTION_SPRINGS,
   resolveTransition,
   useAppReducedMotion,
 } from '../../lib/motion';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../../utils/cn';
 
 export type TabType = 'schedule' | 'deadlines' | 'stats' | 'directory' | 'settings';
 

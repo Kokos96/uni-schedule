@@ -12,15 +12,10 @@ import {
   Sun,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import type { ResolvedUserSettings, ThemeMode } from '../../types';
 import { MOTION_SPRINGS, resolveTransition, useAppReducedMotion } from '../../lib/motion';
+import { cn } from '../../utils/cn';
 import { StatusDot } from '../ui/Badge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 export type TabType = 'schedule' | 'deadlines' | 'stats' | 'directory' | 'settings';
 

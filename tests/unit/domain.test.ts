@@ -28,6 +28,7 @@ import {
   mergeBackups,
   parseAndValidateBackup,
 } from '../../src/utils/backup';
+import { getFriendlyLinkLabel, normalizeExternalUrl } from '../../src/utils/url';
 import type { AttendanceRecord, Lesson, UserSettings } from '../../src/types';
 import type { UniScheduleBackupData } from '../../src/types/backup';
 
@@ -514,5 +515,26 @@ describe('utils/backup', () => {
 
     const mergedKeepSettings = mergeBackups(sampleData, incoming, { mergeSettings: false });
     assert.equal(mergedKeepSettings.settings.department, 'sp');
+  });
+});
+
+describe('utils/url', () => {
+  it('normalizes valid http/https URLs and prepends https when scheme is omitted', () => {
+    assert.equal(normalizeExternalUrl('https://meet.google.com/abc-defg-hij'), 'https://meet.google.com/abc-defg-hij');
+    assert.equal(normalizeExternalUrl('  github.com/Kokos96/uni-schedule  '), 'https://github.com/Kokos96/uni-schedule');
+  });
+
+  it('rejects empty strings and unsafe non-HTTP(S) schemes', () => {
+    assert.equal(normalizeExternalUrl('   '), null);
+    assert.equal(normalizeExternalUrl('javascript:alert(1)'), null);
+    assert.equal(normalizeExternalUrl('data:text/html,<script>'), null);
+  });
+
+  it('maps known domains to friendly labels', () => {
+    assert.equal(getFriendlyLinkLabel('https://us04web.zoom.us/j/123'), 'Zoom');
+    assert.equal(getFriendlyLinkLabel('https://meet.google.com/abc'), 'Google Meet');
+    assert.equal(getFriendlyLinkLabel('https://t.me/channel'), 'Telegram');
+    assert.equal(getFriendlyLinkLabel('https://github.com/Kokos96/uni-schedule'), 'GitHub');
+    assert.equal(getFriendlyLinkLabel('https://www.example.com/notes'), 'example.com');
   });
 });

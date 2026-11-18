@@ -416,7 +416,7 @@ def test_stats_flow(browser: Browser, base_url: str, failures: list[str]) -> Non
 
         # Reload back to Schedule Week mode (avoids PageTransition SegmentedControl deadlock), mark second lesson absent
         page.reload(wait_until="networkidle")
-        page.locator("button", has_text="Професійний Python").first.click()
+        page.locator("main button", has_text="Професійний Python").first.click()
         cell_modal = page.locator('div[role="dialog"][aria-modal="true"]')
         cell_modal.get_by_role("button", name="Н-ка").click()
         page.keyboard.press("Escape")

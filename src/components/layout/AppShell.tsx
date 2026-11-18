@@ -12,7 +12,6 @@ export interface AppShellProps {
   liveLessonName?: string;
   liveStatusLabel?: string;
   pageTitle?: string;
-  contextKicker?: string;
   headerActions?: React.ReactNode;
   banner?: React.ReactNode;
   bottomNav?: React.ReactNode;
@@ -42,16 +41,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   liveLessonName,
   liveStatusLabel,
   pageTitle,
-  contextKicker,
   headerActions,
   banner,
   bottomNav,
   children,
 }) => {
   const resolvedTitle = pageTitle ?? DEFAULT_TAB_TITLES[currentTab];
-  const resolvedKicker =
-    contextKicker ??
-    `ФЕП-33с · ${settings.department.toUpperCase()} · Підгр. ${settings.subgroup}`;
   const themeMeta = THEME_META[settings.theme];
   const ThemeIcon = themeMeta.Icon;
 

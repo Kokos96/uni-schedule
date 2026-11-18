@@ -1,11 +1,6 @@
 import React, { useId, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../../utils/cn';
 
 export interface SegmentedOption<T extends string> {
   value: T;

@@ -9,8 +9,6 @@ import {
   X,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import type {
   AttendanceStatus,
   Lesson,
@@ -29,15 +27,12 @@ import {
   getTeacherById,
   type WeekGridData,
 } from '../../utils/schedule';
+import { cn } from '../../utils/cn';
 import { LessonTypeBadge, MetaChip, StatusDot, type StatusDotTone } from '../ui/Badge';
 import { FreeDayIllustration } from '../ui/EditorialOrnaments';
 import { EmptyState } from '../ui/EmptyState';
 import { GlassCard } from '../ui/GlassCard';
 import { ModalDrawer } from '../ui/ModalDrawer';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 export interface WeekGridProps {
   weekGrid: WeekGridData;

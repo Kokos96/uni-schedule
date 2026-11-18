@@ -7,9 +7,7 @@ import {
   CalendarDots,
   CaretLeft,
   CaretRight,
-  Clock,
   Columns,
-  SlidersHorizontal,
 } from '@phosphor-icons/react';
 import type { CurrentPairState } from '../../hooks/useCurrentPair';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
@@ -21,9 +19,7 @@ import {
 import type {
   AttendanceStatus,
   Classroom,
-  DepartmentType,
   DesktopScheduleMode,
-  ElectiveType,
   Lesson,
   ResolvedUserSettings,
   Teacher,
@@ -53,6 +49,7 @@ import { GlassCard } from '../ui/GlassCard';
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { LivePairHero } from './LivePairHero';
 import { PairCard } from './PairCard';
+import { ScheduleSidebarWidgets } from './ScheduleSidebarWidgets';
 
 export interface ScheduleViewProps {
   selectedDate: Date;
@@ -84,20 +81,6 @@ export interface ScheduleViewProps {
   renderWeekStrip: React.ReactNode;
   renderWeekGrid: React.ReactNode;
 }
-
-const DEPARTMENT_NAMES: Record<DepartmentType, string> = {
-  sp: 'СП · Системне проектування',
-  oit: 'ОІТ · Оптоелектроніка та ІТ',
-  rks: 'РКС · Радіоелектронні системи',
-  rkt: 'РКТ · Радіофізика та комп. тех.',
-};
-
-const ELECTIVE_NAMES: Record<ElectiveType, string> = {
-  freelance: 'Freelance: робота онлайн',
-  management: 'Інноваційний менеджмент',
-  space: 'Людина і космос',
-  both: 'Усі вибіркові',
-};
 
 function buildNoteCountMapForDate(
   notes: readonly LessonNote[],
@@ -465,106 +448,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               noteCountMap={todayNoteCountMap}
             />
 
-            {/* Quick Upcoming Deadlines Summary */}
-            <GlassCard variant="glass" padding="md" className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-fg" weight="regular" aria-hidden="true" />
-                  <h2 className="font-serif text-sm font-semibold text-ink">
-                    Найближчі дедлайни
-                  </h2>
-                </div>
-                {onNavigateToDeadlines && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToDeadlines}
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-amber-fg transition-colors hover:bg-amber-soft"
-                  >
-                    <span>Усі</span>
-                    <ArrowRight className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-
-              {upcomingDeadlines.length === 0 ? (
-                <p className="text-xs leading-relaxed text-ink-secondary">
-                  Активних дедлайнів немає. Додати завдання можна у вкладці «Дедлайни» або в нотатках до пари.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {upcomingDeadlines.map((item) => {
-                    const isOverdue = item.dueDate < todayIso;
-                    return (
-                      <li
-                        key={item.id}
-                        className="flex items-start justify-between gap-2 rounded-xl border border-line/70 bg-surface/75 px-3 py-2"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-medium text-ink">
-                            {item.title}
-                          </p>
-                          {item.subjectName && (
-                            <p className="truncate text-[11px] text-ink-secondary">
-                              {item.subjectName}
-                            </p>
-                          )}
-                        </div>
-                        <MetaChip
-                          variant={
-                            isOverdue
-                              ? 'terracotta'
-                              : item.priority === 'high'
-                                ? 'amber'
-                                : 'neutral'
-                          }
-                          mono
-                          className="shrink-0"
-                        >
-                          {formatShortDateUa(item.dueDate)}
-                        </MetaChip>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </GlassCard>
-
-            {/* Quick Department / Subgroup Summary */}
-            <GlassCard variant="matte" padding="md" className="space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal
-                    className="h-4 w-4 text-ink-secondary"
-                    weight="regular"
-                    aria-hidden="true"
-                  />
-                  <h2 className="font-serif text-sm font-semibold text-ink">
-                    Активний профіль
-                  </h2>
-                </div>
-                {onNavigateToSettings && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToSettings}
-                    className="rounded-lg px-2 py-1 text-xs font-medium text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink"
-                  >
-                    Змінити
-                  </button>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                <MetaChip variant="beige">
-                  {DEPARTMENT_NAMES[settings.department]}
-                </MetaChip>
-                <MetaChip variant="neutral">
-                  Підгрупа {settings.subgroup}
-                </MetaChip>
-                <MetaChip variant="amber">
-                  {ELECTIVE_NAMES[settings.electiveCourse]}
-                </MetaChip>
-              </div>
-            </GlassCard>
+            <ScheduleSidebarWidgets
+              upcomingDeadlines={upcomingDeadlines}
+              todayIso={todayIso}
+              settings={settings}
+              onNavigateToDeadlines={onNavigateToDeadlines}
+              onNavigateToSettings={onNavigateToSettings}
+            />
           </aside>
         </div>
       ) : (
