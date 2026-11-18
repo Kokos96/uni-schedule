@@ -1,0 +1,8 @@
+# Local Wrangler secrets template (never commit real .dev.vars)
+# Copy to workers/api/.dev.vars for local `wrangler dev` testing
+
+# Optional HMAC pepper mixed with SHA-256 syncToken hashing (recommended in production)
+TOKEN_PEPPER=replace-with-local-random-hex-pepper
+
+# Comma-separated CORS allowlist overriding wrangler.toml [vars] if needed
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:4173

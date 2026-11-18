@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from '../../../services/apiClient';
 import { addDays, formatIsoDate } from '../../../utils/date';
 import type {
   Course,
@@ -75,25 +76,56 @@ export class LnuAdapter implements UniversityAdapter {
   };
 
   private readonly endpointUrl: string;
+  private readonly apiBaseUrlOverride?: string | null;
   private cachedGroups: Group[] | null = null;
   private cachedFaculties: Faculty[] | null = null;
 
-  public constructor(endpointUrl: string = LNU_TIMETABLE_URL) {
+  public constructor(
+    endpointUrl: string = LNU_TIMETABLE_URL,
+    apiBaseUrlOverride?: string | null
+  ) {
     this.endpointUrl = endpointUrl;
+    this.apiBaseUrlOverride = apiBaseUrlOverride;
   }
 
-  private get isDirectBrowserToLnu(): boolean {
-    return (
-      typeof window !== 'undefined' &&
-      this.endpointUrl.startsWith('https://dekanat.lnu.edu.ua')
-    );
+  private get proxyBaseUrl(): string | null {
+    if (this.apiBaseUrlOverride !== undefined) {
+      return this.apiBaseUrlOverride;
+    }
+    if (typeof window !== 'undefined') {
+      return getApiBaseUrl();
+    }
+    return null;
+  }
+
+  private get isBrowserWithoutProxy(): boolean {
+    return typeof window !== 'undefined' && !this.proxyBaseUrl;
   }
 
   public async getFaculties(): Promise<Faculty[]> {
     if (this.cachedFaculties) return this.cachedFaculties;
-    if (this.isDirectBrowserToLnu) {
+
+    const proxy = this.proxyBaseUrl;
+    if (proxy) {
+      try {
+        const res = await fetch(`${proxy}/api/universities/lnu/faculties`);
+        if (res.ok) {
+          const data = (await res.json()) as { faculties?: Faculty[] };
+          if (Array.isArray(data.faculties) && data.faculties.length > 0) {
+            this.cachedFaculties = data.faculties;
+            return data.faculties;
+          }
+        }
+      } catch {
+        // Fall back to verified faculty list
+      }
       return LNU_DEFAULT_FACULTIES;
     }
+
+    if (this.isBrowserWithoutProxy) {
+      return LNU_DEFAULT_FACULTIES;
+    }
+
     try {
       const res = await fetch(this.endpointUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -117,18 +149,25 @@ export class LnuAdapter implements UniversityAdapter {
     facultyId?: string;
     course?: number;
   }): Promise<Group[]> {
+    const proxy = this.proxyBaseUrl;
+    if (proxy) {
+      const qs = new URLSearchParams();
+      if (filter?.course) qs.set('course', String(filter.course));
+      const querySuffix = qs.toString() ? `?${qs.toString()}` : '';
+      const res = await fetch(`${proxy}/api/universities/lnu/groups${querySuffix}`);
+      if (!res.ok) {
+        throw new Error(`Сервер API повернув помилку HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { groups?: Group[] };
+      return Array.isArray(data.groups) ? data.groups : [];
+    }
+
+    if (this.isBrowserWithoutProxy) {
+      return [];
+    }
+
     if (!this.cachedGroups) {
-      if (this.isDirectBrowserToLnu) {
-        return [];
-      }
-      let res: Response;
-      try {
-        res = await fetch(`${this.endpointUrl}?n=701&lev=142`);
-      } catch {
-        throw new Error(
-          'Не вдалося завантажити список груп ЛНУ (можливе обмеження CORS у браузері до запуску серверного проксі на Етапі 3).'
-        );
-      }
+      const res = await fetch(`${this.endpointUrl}?n=701&lev=142`);
       if (!res.ok) {
         throw new Error(`Сервер ЛНУ повернув помилку HTTP ${res.status}`);
       }
@@ -149,6 +188,29 @@ export class LnuAdapter implements UniversityAdapter {
   public async fetchSchedule(
     selection: StudentSelection
   ): Promise<NormalizedSchedule> {
+    const proxy = this.proxyBaseUrl;
+    if (proxy) {
+      const qs = new URLSearchParams({
+        universityId: 'lnu',
+        group: selection.groupName,
+      });
+      if (selection.facultyId) qs.set('facultyId', selection.facultyId);
+      if (selection.course) qs.set('course', String(selection.course));
+
+      const res = await fetch(`${proxy}/api/schedule?${qs.toString()}`);
+      if (!res.ok) {
+        throw new Error(`Сервер API повернув помилку HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { schedule: NormalizedSchedule };
+      return data.schedule;
+    }
+
+    if (this.isBrowserWithoutProxy) {
+      throw new Error(
+        'Не налаштовано VITE_API_BASE_URL (серверний проксі Cloudflare Worker). Прямі запити з браузера до dekanat.lnu.edu.ua не виконуються через CORS.'
+      );
+    }
+
     const today = new Date();
     const sdate = formatDdMmYyyy(addDays(today, -3));
     const edate = formatDdMmYyyy(addDays(today, 14));
@@ -162,20 +224,13 @@ export class LnuAdapter implements UniversityAdapter {
       edate,
     });
 
-    let res: Response;
-    try {
-      res = await fetch(`${this.endpointUrl}?n=700`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body,
-      });
-    } catch {
-      throw new Error(
-        'Не вдалося підключитися до dekanat.lnu.edu.ua напряму з браузера (CORS або відсутній інтернет). Серверний адаптер буде підключено на Етапі 3.'
-      );
-    }
+    const res = await fetch(`${this.endpointUrl}?n=700`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
 
     if (!res.ok) {
       throw new Error(`Сервер ЛНУ повернув помилку HTTP ${res.status}`);
