@@ -18,6 +18,7 @@ import {
 } from './lnuParser';
 
 const LNU_TIMETABLE_URL = 'https://dekanat.lnu.edu.ua/cgi-bin/timetable.cgi';
+const DEFAULT_MEMORY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const LNU_DEFAULT_FACULTIES: Faculty[] = [
   { id: '1005', name: "Факультет електроніки та комп'ютерних технологій" },
@@ -77,8 +78,8 @@ export class LnuAdapter implements UniversityAdapter {
 
   private readonly endpointUrl: string;
   private readonly apiBaseUrlOverride?: string | null;
-  private cachedGroups: Group[] | null = null;
-  private cachedFaculties: Faculty[] | null = null;
+  private cachedGroups: { items: Group[]; fetchedAt: number } | null = null;
+  private cachedFaculties: { items: Faculty[]; fetchedAt: number } | null = null;
 
   public constructor(
     endpointUrl: string = LNU_TIMETABLE_URL,
@@ -102,8 +103,18 @@ export class LnuAdapter implements UniversityAdapter {
     return typeof window !== 'undefined' && !this.proxyBaseUrl;
   }
 
-  public async getFaculties(): Promise<Faculty[]> {
-    if (this.cachedFaculties) return this.cachedFaculties;
+  public async getFaculties(options?: {
+    ttlMs?: number;
+    forceRefresh?: boolean;
+  }): Promise<Faculty[]> {
+    const ttlMs = options?.ttlMs ?? DEFAULT_MEMORY_CACHE_TTL_MS;
+    if (
+      !options?.forceRefresh &&
+      this.cachedFaculties &&
+      Date.now() - this.cachedFaculties.fetchedAt < ttlMs
+    ) {
+      return this.cachedFaculties.items;
+    }
 
     const proxy = this.proxyBaseUrl;
     if (proxy) {
@@ -112,7 +123,7 @@ export class LnuAdapter implements UniversityAdapter {
         if (res.ok) {
           const data = (await res.json()) as { faculties?: Faculty[] };
           if (Array.isArray(data.faculties) && data.faculties.length > 0) {
-            this.cachedFaculties = data.faculties;
+            this.cachedFaculties = { items: data.faculties, fetchedAt: Date.now() };
             return data.faculties;
           }
         }
@@ -132,7 +143,7 @@ export class LnuAdapter implements UniversityAdapter {
       const html = decodeCp1251(await res.arrayBuffer());
       const parsed = parseLnuFacultiesHtml(html);
       if (parsed.length > 0) {
-        this.cachedFaculties = parsed;
+        this.cachedFaculties = { items: parsed, fetchedAt: Date.now() };
         return parsed;
       }
     } catch {
@@ -145,10 +156,16 @@ export class LnuAdapter implements UniversityAdapter {
     return LNU_COURSES;
   }
 
-  public async getGroups(filter?: {
-    facultyId?: string;
-    course?: number;
-  }): Promise<Group[]> {
+  public async getGroups(
+    filter?: {
+      facultyId?: string;
+      course?: number;
+    },
+    options?: {
+      ttlMs?: number;
+      forceRefresh?: boolean;
+    }
+  ): Promise<Group[]> {
     const proxy = this.proxyBaseUrl;
     if (proxy) {
       const qs = new URLSearchParams();
@@ -166,17 +183,27 @@ export class LnuAdapter implements UniversityAdapter {
       return [];
     }
 
-    if (!this.cachedGroups) {
+    const ttlMs = options?.ttlMs ?? DEFAULT_MEMORY_CACHE_TTL_MS;
+    const isMemoryCacheFresh =
+      !options?.forceRefresh &&
+      this.cachedGroups !== null &&
+      Date.now() - this.cachedGroups.fetchedAt < ttlMs;
+
+    if (!isMemoryCacheFresh) {
       const res = await fetch(`${this.endpointUrl}?n=701&lev=142`);
       if (!res.ok) {
         throw new Error(`Сервер ЛНУ повернув помилку HTTP ${res.status}`);
       }
       const text = decodeCp1251(await res.arrayBuffer());
-      this.cachedGroups = parseLnuGroupsJson(text);
+      this.cachedGroups = {
+        items: parseLnuGroupsJson(text),
+        fetchedAt: Date.now(),
+      };
     }
 
-    if (!filter?.course) return this.cachedGroups;
-    return this.cachedGroups.filter(
+    const groups = this.cachedGroups!.items;
+    if (!filter?.course) return groups;
+    return groups.filter(
       (g) => g.course === undefined || g.course === filter.course
     );
   }

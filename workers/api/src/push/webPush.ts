@@ -167,12 +167,12 @@ export async function encryptWebPushPayload(
   )) as CryptoKeyPair;
 
   const asPublicBytes = new Uint8Array(
-    await crypto.subtle.exportKey('raw', asKeyPair.publicKey)
+    (await crypto.subtle.exportKey('raw', asKeyPair.publicKey)) as ArrayBuffer
   );
 
   const ecdhSecret = new Uint8Array(
     await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: uaPublicKey },
+      { name: 'ECDH', public: uaPublicKey } as unknown as Parameters<typeof crypto.subtle.deriveBits>[0],
       asKeyPair.privateKey,
       256
     )

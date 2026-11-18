@@ -107,55 +107,109 @@ export async function handleGetGroups(
   env: Env,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  if (uniId === 'other') {
-    return jsonResponse({ groups: [] }, 200, corsHeaders);
-  }
-  if (uniId !== 'lnu') {
+  if (uniId !== 'lnu' && uniId !== 'other') {
     return errorResponse('NOT_FOUND', 'Університет не знайдено', 404, corsHeaders);
   }
 
   const courseParam = url.searchParams.get('course');
+  if (courseParam !== null && courseParam !== '' && !/^[1-6]$/.test(courseParam)) {
+    return errorResponse('VALIDATION_ERROR', 'Курс має бути від 1 до 6', 400, corsHeaders);
+  }
+
+  if (uniId === 'other') {
+    return jsonResponse({ groups: [] }, 200, corsHeaders);
+  }
+
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
-  const courseFilter =
-    courseParam && /^[1-6]$/.test(courseParam) ? Number(courseParam) : undefined;
+  const courseFilter = courseParam ? Number(courseParam) : undefined;
 
   const groupsTtl = parsePositiveInt(env.GROUPS_CACHE_TTL_SECONDS, 86400);
 
-  // Check if we already have recently synced groups in D1
-  const metaRow = await env.DB.prepare(
-    `SELECT MAX(created_at) as newest_at, COUNT(*) as total
-     FROM university_groups
-     WHERE university_id = ?`
-  )
-    .bind('lnu')
-    .first<{ newest_at: string | null; total: number }>();
+  // Track directory sync freshness in schedule_sync_logs separately from per-group schedule caching
+  const directoryLogKey = 'lnu:__directory__';
+  const [countRow, dirSyncRow] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(*) as total FROM university_groups WHERE university_id = ?`
+    )
+      .bind('lnu')
+      .first<{ total: number }>(),
+    env.DB.prepare(
+      `SELECT synced_at, entries_count
+       FROM schedule_sync_logs
+       WHERE group_id = ? AND status = 'success'
+       ORDER BY synced_at DESC
+       LIMIT 1`
+    )
+      .bind(directoryLogKey)
+      .first<{ synced_at: string | null; entries_count: number }>(),
+  ]);
 
+  const existingTotal = countRow?.total ?? 0;
   const hasFreshDirectory =
-    metaRow &&
-    metaRow.total > 5 &&
-    isFreshTimestamp(metaRow.newest_at, groupsTtl);
+    existingTotal > 0 &&
+    Boolean(dirSyncRow && dirSyncRow.entries_count > 0) &&
+    isFreshTimestamp(dirSyncRow?.synced_at ?? null, groupsTtl);
 
   if (!hasFreshDirectory) {
+    const now = new Date().toISOString();
     try {
-      const upstreamGroups = await lnuAdapter.getGroups();
-      const now = new Date().toISOString();
-      const statements = upstreamGroups.slice(0, 1500).map((g) =>
-        env.DB.prepare(
-          `INSERT INTO university_groups (
-             id, university_id, faculty_id, course, group_code, group_name, created_at
-           ) VALUES (?, 'lnu', NULL, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             course = COALESCE(excluded.course, university_groups.course),
-             group_name = excluded.group_name`
-        ).bind(`lnu:${g.name}`, g.course ?? null, g.name, g.name, now)
-      );
+      const upstreamGroups = await lnuAdapter.getGroups(undefined, {
+        ttlMs: groupsTtl * 1000,
+        forceRefresh: true,
+      });
 
-      // Batch in chunks of 100 statements for D1 limits
-      for (let i = 0; i < statements.length; i += 100) {
-        await env.DB.batch(statements.slice(i, i + 100));
+      if (upstreamGroups.length === 0) {
+        await env.DB.prepare(
+          `INSERT INTO schedule_sync_logs (id, group_id, status, entries_count, error_message, synced_at)
+           VALUES (?, ?, 'skipped', 0, ?, ?)`
+        )
+          .bind(crypto.randomUUID(), directoryLogKey, 'Порожній список груп від ЛНУ', now)
+          .run();
+
+        if (existingTotal === 0) {
+          return errorResponse(
+            'UPSTREAM_UNAVAILABLE',
+            'Не вдалося завантажити перелік груп із сервера ЛНУ',
+            502,
+            corsHeaders
+          );
+        }
+      } else {
+        const capped = upstreamGroups.slice(0, 1500);
+        const statements = capped.map((g) =>
+          env.DB.prepare(
+            `INSERT INTO university_groups (
+               id, university_id, faculty_id, course, group_code, group_name, created_at
+             ) VALUES (?, 'lnu', NULL, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               course = COALESCE(excluded.course, university_groups.course),
+               group_name = excluded.group_name`
+          ).bind(`lnu:${g.name}`, g.course ?? null, g.name, g.name, now)
+        );
+
+        // Batch in chunks of 100 statements for D1 limits
+        for (let i = 0; i < statements.length; i += 100) {
+          await env.DB.batch(statements.slice(i, i + 100));
+        }
+
+        await env.DB.prepare(
+          `INSERT INTO schedule_sync_logs (id, group_id, status, entries_count, error_message, synced_at)
+           VALUES (?, ?, 'success', ?, NULL, ?)`
+        )
+          .bind(crypto.randomUUID(), directoryLogKey, capped.length, now)
+          .run();
       }
-    } catch {
-      if (!metaRow || metaRow.total === 0) {
+    } catch (err) {
+      const errMsg =
+        err instanceof Error ? err.message.slice(0, 240) : 'Upstream groups sync failed';
+      await env.DB.prepare(
+        `INSERT INTO schedule_sync_logs (id, group_id, status, entries_count, error_message, synced_at)
+         VALUES (?, ?, 'error', 0, ?, ?)`
+      )
+        .bind(crypto.randomUUID(), directoryLogKey, errMsg, now)
+        .run();
+
+      if (existingTotal === 0) {
         return errorResponse(
           'UPSTREAM_UNAVAILABLE',
           'Не вдалося завантажити перелік груп із сервера ЛНУ',

@@ -79,7 +79,7 @@ export async function handleGetAttendance(
 
   if (since) {
     sql += ` AND server_updated_at > ?`;
-    binds.push(since);
+    binds.push(new Date(Date.parse(since)).toISOString());
   }
   if (from) {
     sql += ` AND lesson_date >= ?`;
@@ -211,8 +211,10 @@ export async function handleSyncAttendance(
   }
 
   const serverTime = new Date().toISOString();
+  const normalizedLastSyncAt =
+    typeof lastSyncAt === 'string' ? new Date(Date.parse(lastSyncAt)).toISOString() : null;
   const pullSql =
-    typeof lastSyncAt === 'string'
+    normalizedLastSyncAt !== null
       ? `SELECT lesson_id, lesson_date, status, updated_at, server_version, server_updated_at, device_id
          FROM attendance_records
          WHERE user_id = ? AND server_updated_at > ?
@@ -223,8 +225,8 @@ export async function handleSyncAttendance(
          ORDER BY lesson_date ASC, lesson_id ASC`;
 
   const pullRes =
-    typeof lastSyncAt === 'string'
-      ? await env.DB.prepare(pullSql).bind(auth.userId, lastSyncAt).all<AttendanceDbRow>()
+    normalizedLastSyncAt !== null
+      ? await env.DB.prepare(pullSql).bind(auth.userId, normalizedLastSyncAt).all<AttendanceDbRow>()
       : await env.DB.prepare(pullSql).bind(auth.userId).all<AttendanceDbRow>();
 
   return jsonResponse(

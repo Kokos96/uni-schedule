@@ -100,9 +100,10 @@ export function errorResponse(
   code: string,
   message: string,
   status: number,
-  corsHeaders: Record<string, string> = {}
+  corsHeaders: Record<string, string> = {},
+  extraHeaders: Record<string, string> = {}
 ): Response {
-  return jsonResponse({ error: { code, message } }, status, corsHeaders);
+  return jsonResponse({ error: { code, message } }, status, corsHeaders, extraHeaders);
 }
 
 export async function parseJsonBody<T = Record<string, unknown>>(

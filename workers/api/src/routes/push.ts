@@ -117,7 +117,7 @@ export async function handleUpsertPushSubscription(
 ): Promise<Response> {
   const parsed = await parseJsonBody<{
     endpoint?: unknown;
-    keys?: { p256dh?: unknown; auth?: unknown };
+    keys?: unknown;
   }>(request);
   if (!parsed.ok) {
     return errorResponse('BAD_REQUEST', parsed.message, 400, corsHeaders);
@@ -125,14 +125,22 @@ export async function handleUpsertPushSubscription(
 
   const endpoint =
     typeof parsed.data.endpoint === 'string' ? parsed.data.endpoint.trim() : '';
-  const p256dh =
-    typeof parsed.data.keys?.p256dh === 'string'
-      ? parsed.data.keys.p256dh.trim()
-      : '';
-  const authKey =
-    typeof parsed.data.keys?.auth === 'string'
-      ? parsed.data.keys.auth.trim()
-      : '';
+  if (!endpoint || endpoint.length > 2048) {
+    return errorResponse('VALIDATION_ERROR', 'Некоректний push endpoint', 400, corsHeaders);
+  }
+
+  const rawKeys = parsed.data.keys;
+  if (typeof rawKeys !== 'object' || rawKeys === null || Array.isArray(rawKeys)) {
+    return errorResponse(
+      'VALIDATION_ERROR',
+      'Некоректні ключі підписки (p256dh / auth)',
+      400,
+      corsHeaders
+    );
+  }
+  const keysObj = rawKeys as Record<string, unknown>;
+  const p256dh = typeof keysObj.p256dh === 'string' ? keysObj.p256dh.trim() : '';
+  const authKey = typeof keysObj.auth === 'string' ? keysObj.auth.trim() : '';
 
   let parsedEndpoint: URL;
   try {
@@ -163,29 +171,26 @@ export async function handleUpsertPushSubscription(
   const now = new Date().toISOString();
   const ua = request.headers.get('User-Agent')?.slice(0, 180) ?? null;
 
-  await env.DB.prepare(
-    `INSERT INTO push_subscriptions (
-       id, user_id, device_id, endpoint, p256dh, auth, user_agent, created_at, fail_count
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-     ON CONFLICT(endpoint) DO UPDATE SET
-       user_id = excluded.user_id,
-       device_id = excluded.device_id,
-       p256dh = excluded.p256dh,
-       auth = excluded.auth,
-       user_agent = excluded.user_agent,
-       fail_count = 0`
-  )
-    .bind(subId, auth.userId, auth.deviceId, endpoint, p256dh, authKey, ua, now)
-    .run();
-
-  // Ensure default notification_preferences row exists and enable notifications
-  await env.DB.prepare(
-    `INSERT INTO notification_preferences (user_id, enabled, updated_at)
-     VALUES (?, 1, ?)
-     ON CONFLICT(user_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at`
-  )
-    .bind(auth.userId, now)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO push_subscriptions (
+         id, user_id, device_id, endpoint, p256dh, auth, user_agent, created_at, fail_count
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(endpoint) DO UPDATE SET
+         user_id = excluded.user_id,
+         device_id = excluded.device_id,
+         p256dh = excluded.p256dh,
+         auth = excluded.auth,
+         user_agent = excluded.user_agent,
+         fail_count = 0`
+    ).bind(subId, auth.userId, auth.deviceId, endpoint, p256dh, authKey, ua, now),
+    // Ensure default notification_preferences row exists and enable notifications
+    env.DB.prepare(
+      `INSERT INTO notification_preferences (user_id, enabled, updated_at)
+       VALUES (?, 1, ?)
+       ON CONFLICT(user_id) DO UPDATE SET enabled = 1, updated_at = excluded.updated_at`
+    ).bind(auth.userId, now),
+  ]);
 
   return jsonResponse(
     {
@@ -258,54 +263,118 @@ export async function handleUpdateNotificationPreferences(
     return errorResponse('BAD_REQUEST', parsed.message, 400, corsHeaders);
   }
 
+  const existingRow = await env.DB.prepare(
+    `SELECT user_id, enabled, morning_enabled, morning_time,
+            before_lesson_enabled, before_lesson_minutes,
+            before_end_enabled, before_end_minutes,
+            evening_enabled, evening_time,
+            friday_enabled, friday_time, updated_at
+     FROM notification_preferences
+     WHERE user_id = ?`
+  )
+    .bind(auth.userId)
+    .first<PreferenceRow>();
+
+  const base = existingRow ? mapPreferenceRow(existingRow) : DEFAULT_PREFERENCES;
   const b = parsed.data;
-  const enabled = typeof b.enabled === 'boolean' ? b.enabled : DEFAULT_PREFERENCES.enabled;
-  const morningEnabled =
-    typeof b.morningEnabled === 'boolean'
-      ? b.morningEnabled
-      : DEFAULT_PREFERENCES.morningEnabled;
-  const morningTime =
-    typeof b.morningTime === 'string' && HHMM_RE.test(b.morningTime)
-      ? b.morningTime
-      : DEFAULT_PREFERENCES.morningTime;
 
-  const beforeLessonEnabled =
-    typeof b.beforeLessonEnabled === 'boolean'
-      ? b.beforeLessonEnabled
-      : DEFAULT_PREFERENCES.beforeLessonEnabled;
-  const beforeLessonMinutes =
-    typeof b.beforeLessonMinutes === 'number' &&
-    VALID_BEFORE_LESSON_MINUTES.has(b.beforeLessonMinutes)
-      ? b.beforeLessonMinutes
-      : DEFAULT_PREFERENCES.beforeLessonMinutes;
+  const parseBool = (
+    val: unknown,
+    fallback: boolean,
+    field: string
+  ): { ok: true; value: boolean } | { ok: false; field: string } => {
+    if (val === undefined) return { ok: true, value: fallback };
+    if (typeof val !== 'boolean') return { ok: false, field };
+    return { ok: true, value: val };
+  };
 
-  const beforeEndEnabled =
-    typeof b.beforeEndEnabled === 'boolean'
-      ? b.beforeEndEnabled
-      : DEFAULT_PREFERENCES.beforeEndEnabled;
-  const beforeEndMinutes =
-    typeof b.beforeEndMinutes === 'number' &&
-    VALID_BEFORE_END_MINUTES.has(b.beforeEndMinutes)
-      ? b.beforeEndMinutes
-      : DEFAULT_PREFERENCES.beforeEndMinutes;
+  const parseTime = (
+    val: unknown,
+    fallback: string,
+    field: string
+  ): { ok: true; value: string } | { ok: false; field: string } => {
+    if (val === undefined) return { ok: true, value: fallback };
+    if (typeof val !== 'string' || !HHMM_RE.test(val)) return { ok: false, field };
+    return { ok: true, value: val };
+  };
 
-  const eveningEnabled =
-    typeof b.eveningEnabled === 'boolean'
-      ? b.eveningEnabled
-      : DEFAULT_PREFERENCES.eveningEnabled;
-  const eveningTime =
-    typeof b.eveningTime === 'string' && HHMM_RE.test(b.eveningTime)
-      ? b.eveningTime
-      : DEFAULT_PREFERENCES.eveningTime;
+  const parseAllowedInt = (
+    val: unknown,
+    allowed: Set<number>,
+    fallback: number,
+    field: string
+  ): { ok: true; value: number } | { ok: false; field: string } => {
+    if (val === undefined) return { ok: true, value: fallback };
+    if (typeof val !== 'number' || !Number.isInteger(val) || !allowed.has(val)) {
+      return { ok: false, field };
+    }
+    return { ok: true, value: val };
+  };
 
-  const fridayEnabled =
-    typeof b.fridayEnabled === 'boolean'
-      ? b.fridayEnabled
-      : DEFAULT_PREFERENCES.fridayEnabled;
-  const fridayTime =
-    typeof b.fridayTime === 'string' && HHMM_RE.test(b.fridayTime)
-      ? b.fridayTime
-      : DEFAULT_PREFERENCES.fridayTime;
+  const rEnabled = parseBool(b.enabled, base.enabled, 'enabled');
+  const rMorningEnabled = parseBool(b.morningEnabled, base.morningEnabled, 'morningEnabled');
+  const rMorningTime = parseTime(b.morningTime, base.morningTime, 'morningTime');
+  const rBeforeLessonEnabled = parseBool(
+    b.beforeLessonEnabled,
+    base.beforeLessonEnabled,
+    'beforeLessonEnabled'
+  );
+  const rBeforeLessonMin = parseAllowedInt(
+    b.beforeLessonMinutes,
+    VALID_BEFORE_LESSON_MINUTES,
+    base.beforeLessonMinutes,
+    'beforeLessonMinutes'
+  );
+  const rBeforeEndEnabled = parseBool(
+    b.beforeEndEnabled,
+    base.beforeEndEnabled,
+    'beforeEndEnabled'
+  );
+  const rBeforeEndMin = parseAllowedInt(
+    b.beforeEndMinutes,
+    VALID_BEFORE_END_MINUTES,
+    base.beforeEndMinutes,
+    'beforeEndMinutes'
+  );
+  const rEveningEnabled = parseBool(b.eveningEnabled, base.eveningEnabled, 'eveningEnabled');
+  const rEveningTime = parseTime(b.eveningTime, base.eveningTime, 'eveningTime');
+  const rFridayEnabled = parseBool(b.fridayEnabled, base.fridayEnabled, 'fridayEnabled');
+  const rFridayTime = parseTime(b.fridayTime, base.fridayTime, 'fridayTime');
+
+  const results = [
+    rEnabled,
+    rMorningEnabled,
+    rMorningTime,
+    rBeforeLessonEnabled,
+    rBeforeLessonMin,
+    rBeforeEndEnabled,
+    rBeforeEndMin,
+    rEveningEnabled,
+    rEveningTime,
+    rFridayEnabled,
+    rFridayTime,
+  ];
+  const invalid = results.find((r) => !r.ok);
+  if (invalid && !invalid.ok) {
+    return errorResponse(
+      'VALIDATION_ERROR',
+      `Некоректне значення поля ${invalid.field}`,
+      400,
+      corsHeaders
+    );
+  }
+
+  const enabled = (rEnabled as { ok: true; value: boolean }).value;
+  const morningEnabled = (rMorningEnabled as { ok: true; value: boolean }).value;
+  const morningTime = (rMorningTime as { ok: true; value: string }).value;
+  const beforeLessonEnabled = (rBeforeLessonEnabled as { ok: true; value: boolean }).value;
+  const beforeLessonMinutes = (rBeforeLessonMin as { ok: true; value: number }).value;
+  const beforeEndEnabled = (rBeforeEndEnabled as { ok: true; value: boolean }).value;
+  const beforeEndMinutes = (rBeforeEndMin as { ok: true; value: number }).value;
+  const eveningEnabled = (rEveningEnabled as { ok: true; value: boolean }).value;
+  const eveningTime = (rEveningTime as { ok: true; value: string }).value;
+  const fridayEnabled = (rFridayEnabled as { ok: true; value: boolean }).value;
+  const fridayTime = (rFridayTime as { ok: true; value: string }).value;
 
   const now = new Date().toISOString();
   await env.DB.prepare(

@@ -17,7 +17,7 @@ async function makeVapid() {
     ['sign', 'verify']
   )) as CryptoKeyPair;
   const jwk = (await crypto.subtle.exportKey('jwk', kp.privateKey)) as { d: string };
-  const pub = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const pub = new Uint8Array((await crypto.subtle.exportKey('raw', kp.publicKey)) as ArrayBuffer);
   const pad = jwk.d + '='.repeat((4 - (jwk.d.length % 4)) % 4);
   const privBytes = Uint8Array.from(atob(pad.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
   return {
@@ -91,7 +91,9 @@ describe('workers/api Stage 6 Load Simulation (10, 50, 100, 500 users)', () => {
   it('measures D1 operations and Cron execution time across 10, 50, 100, and 500 subscribers', async () => {
     const vapid = await makeVapid();
     const kp = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as CryptoKeyPair;
-    const p256dh = bytesToBase64Url(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey)));
+    const p256dh = bytesToBase64Url(
+      new Uint8Array((await crypto.subtle.exportKey('raw', kp.publicKey)) as ArrayBuffer)
+    );
     const auth = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(16)));
 
     const origFetch = globalThis.fetch;

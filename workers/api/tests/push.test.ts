@@ -33,7 +33,7 @@ async function generateTestVapidKeys() {
     y: string;
     d: string;
   };
-  const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const pubRaw = new Uint8Array((await crypto.subtle.exportKey('raw', kp.publicKey)) as ArrayBuffer);
   const b64uToBytes = (s: string) => {
     const pad = s + '='.repeat((4 - (s.length % 4)) % 4);
     const bin = atob(pad.replace(/-/g, '+').replace(/_/g, '/'));
@@ -52,7 +52,7 @@ async function generateSubscriberKeys() {
     true,
     ['deriveBits']
   )) as CryptoKeyPair;
-  const pubRaw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const pubRaw = new Uint8Array((await crypto.subtle.exportKey('raw', kp.publicKey)) as ArrayBuffer);
   const auth = new Uint8Array(16);
   crypto.getRandomValues(auth);
   return {

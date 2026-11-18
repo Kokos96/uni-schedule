@@ -88,93 +88,198 @@ export default {
         );
       }
 
-      // Public VAPID key & university catalog endpoints
-      if (path === '/api/push/vapid-public-key' && request.method === 'GET') {
-        return handleGetVapidPublicKey(env, corsHeaders);
+      type RouteContext = {
+        request: Request;
+        url: URL;
+        env: Env;
+        corsHeaders: Record<string, string>;
+        params: string[];
+        auth?: Awaited<ReturnType<typeof authenticateRequest>>;
+      };
+
+      interface RouteDef {
+        pattern: string | RegExp;
+        methods: ReadonlyArray<'GET' | 'POST' | 'PUT' | 'DELETE'>;
+        authRequired: boolean;
+        handler: (ctx: RouteContext) => Promise<Response> | Response;
       }
 
-      if (path === '/api/universities' && request.method === 'GET') {
-        return await handleListUniversities(env, corsHeaders);
+      const routes: RouteDef[] = [
+        {
+          pattern: '/api/health',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ corsHeaders: ch }) =>
+            jsonResponse({ ok: true, service: 'uni-schedule-api', stage: 3 }, 200, ch),
+        },
+        {
+          pattern: '/api/push/vapid-public-key',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ env: e, corsHeaders: ch }) => handleGetVapidPublicKey(e, ch),
+        },
+        {
+          pattern: '/api/universities',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ env: e, corsHeaders: ch }) => handleListUniversities(e, ch),
+        },
+        {
+          pattern: /^\/api\/universities\/([a-z0-9_-]+)\/faculties$/i,
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ params, corsHeaders: ch }) => handleGetFaculties(params[0]!, ch),
+        },
+        {
+          pattern: /^\/api\/universities\/([a-z0-9_-]+)\/groups$/i,
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ params, url: u, env: e, corsHeaders: ch }) =>
+            handleGetGroups(params[0]!, u, e, ch),
+        },
+        {
+          pattern: '/api/schedule',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ url: u, env: e, corsHeaders: ch }) => handleGetSchedule(u, e, ch),
+        },
+        {
+          pattern: '/api/auth/register',
+          methods: ['POST'],
+          authRequired: false,
+          handler: ({ request: req, env: e, corsHeaders: ch }) =>
+            handleRegisterUser(req, e, ch),
+        },
+        {
+          pattern: '/api/devices',
+          methods: ['GET'],
+          authRequired: true,
+          handler: ({ auth, env: e, corsHeaders: ch }) => handleListDevices(auth!, e, ch),
+        },
+        // Static /api/devices/link & /api/devices/rotate MUST precede /api/devices/:deviceId
+        {
+          pattern: '/api/devices/link',
+          methods: ['POST'],
+          authRequired: true,
+          handler: ({ request: req, auth, env: e, corsHeaders: ch }) =>
+            handleLinkDevice(req, auth!, e, ch),
+        },
+        {
+          pattern: '/api/devices/rotate',
+          methods: ['POST'],
+          authRequired: true,
+          handler: ({ auth, env: e, corsHeaders: ch }) => handleRotateToken(auth!, e, ch),
+        },
+        {
+          pattern: /^\/api\/devices\/([a-zA-Z0-9-]+)$/,
+          methods: ['DELETE'],
+          authRequired: true,
+          handler: ({ params, auth, env: e, corsHeaders: ch }) =>
+            handleRevokeDevice(params[0]!, auth!, e, ch),
+        },
+        {
+          pattern: '/api/profile',
+          methods: ['GET', 'PUT'],
+          authRequired: true,
+          handler: ({ request: req, auth, env: e, corsHeaders: ch }) =>
+            req.method === 'GET'
+              ? handleGetProfile(auth!, e, ch)
+              : handleUpdateProfile(req, auth!, e, ch),
+        },
+        {
+          pattern: '/api/push/subscriptions',
+          methods: ['GET', 'POST'],
+          authRequired: true,
+          handler: ({ request: req, auth, env: e, corsHeaders: ch }) =>
+            req.method === 'GET'
+              ? handleListPushSubscriptions(auth!, e, ch)
+              : handleUpsertPushSubscription(req, auth!, e, ch),
+        },
+        {
+          pattern: /^\/api\/push\/subscriptions\/([a-zA-Z0-9-]+)$/,
+          methods: ['DELETE'],
+          authRequired: true,
+          handler: ({ params, auth, env: e, corsHeaders: ch }) =>
+            handleDeletePushSubscription(params[0]!, auth!, e, ch),
+        },
+        {
+          pattern: '/api/notifications/preferences',
+          methods: ['GET', 'PUT'],
+          authRequired: true,
+          handler: ({ request: req, auth, env: e, corsHeaders: ch }) =>
+            req.method === 'GET'
+              ? handleGetNotificationPreferences(auth!, e, ch)
+              : handleUpdateNotificationPreferences(req, auth!, e, ch),
+        },
+        {
+          pattern: '/api/attendance',
+          methods: ['GET'],
+          authRequired: true,
+          handler: ({ url: u, auth, env: e, corsHeaders: ch }) =>
+            handleGetAttendance(u, auth!, e, ch),
+        },
+        {
+          pattern: '/api/attendance/sync',
+          methods: ['POST'],
+          authRequired: true,
+          handler: ({ request: req, auth, env: e, corsHeaders: ch }) =>
+            handleSyncAttendance(req, auth!, e, ch),
+        },
+      ];
+
+      let matchedRoute: RouteDef | null = null;
+      let matchedParams: string[] = [];
+      for (const route of routes) {
+        if (typeof route.pattern === 'string') {
+          if (path === route.pattern) {
+            matchedRoute = route;
+            break;
+          }
+        } else {
+          const m = path.match(route.pattern);
+          if (m) {
+            matchedRoute = route;
+            matchedParams = m.slice(1);
+            break;
+          }
+        }
       }
 
-      const facultiesMatch = path.match(/^\/api\/universities\/([a-z0-9_-]+)\/faculties$/i);
-      if (facultiesMatch && request.method === 'GET') {
-        return await handleGetFaculties(facultiesMatch[1]!, corsHeaders);
+      if (!matchedRoute) {
+        return errorResponse('NOT_FOUND', 'Маршрут не знайдено', 404, corsHeaders);
       }
 
-      const groupsMatch = path.match(/^\/api\/universities\/([a-z0-9_-]+)\/groups$/i);
-      if (groupsMatch && request.method === 'GET') {
-        return await handleGetGroups(groupsMatch[1]!, url, env, corsHeaders);
-      }
-
-      if (path === '/api/schedule' && request.method === 'GET') {
-        return await handleGetSchedule(url, env, corsHeaders);
-      }
-
-      // Registration creates anonymous user + device + hashed syncToken
-      if (path === '/api/auth/register' && request.method === 'POST') {
-        return await handleRegisterUser(request, env, corsHeaders);
-      }
-
-      // Authenticated routes
-      const auth = await authenticateRequest(request, env);
-      if (!auth) {
+      if (!matchedRoute.methods.includes(request.method as 'GET' | 'POST' | 'PUT' | 'DELETE')) {
         return errorResponse(
-          'UNAUTHORIZED',
-          'Потрібен дійсний syncToken у заголовку Authorization: Bearer',
-          401,
-          corsHeaders
+          'METHOD_NOT_ALLOWED',
+          `Метод ${request.method} не підтримується для ${path}`,
+          405,
+          corsHeaders,
+          { Allow: matchedRoute.methods.join(', ') }
         );
       }
 
-      if (path === '/api/devices' && request.method === 'GET') {
-        return await handleListDevices(auth, env, corsHeaders);
-      }
-      if (path === '/api/devices/link' && request.method === 'POST') {
-        return await handleLinkDevice(request, auth, env, corsHeaders);
-      }
-      if (path === '/api/devices/rotate' && request.method === 'POST') {
-        return await handleRotateToken(auth, env, corsHeaders);
-      }
-
-      const deleteDeviceMatch = path.match(/^\/api\/devices\/([a-zA-Z0-9-]+)$/);
-      if (deleteDeviceMatch && request.method === 'DELETE') {
-        return await handleRevokeDevice(deleteDeviceMatch[1]!, auth, env, corsHeaders);
+      let auth: Awaited<ReturnType<typeof authenticateRequest>> = null;
+      if (matchedRoute.authRequired) {
+        auth = await authenticateRequest(request, env);
+        if (!auth) {
+          return errorResponse(
+            'UNAUTHORIZED',
+            'Потрібен дійсний syncToken у заголовку Authorization: Bearer',
+            401,
+            corsHeaders
+          );
+        }
       }
 
-      if (path === '/api/profile' && request.method === 'GET') {
-        return await handleGetProfile(auth, env, corsHeaders);
-      }
-      if (path === '/api/profile' && request.method === 'PUT') {
-        return await handleUpdateProfile(request, auth, env, corsHeaders);
-      }
-
-      if (path === '/api/push/subscriptions' && request.method === 'GET') {
-        return await handleListPushSubscriptions(auth, env, corsHeaders);
-      }
-      if (path === '/api/push/subscriptions' && request.method === 'POST') {
-        return await handleUpsertPushSubscription(request, auth, env, corsHeaders);
-      }
-      const deleteSubMatch = path.match(/^\/api\/push\/subscriptions\/([a-zA-Z0-9-]+)$/);
-      if (deleteSubMatch && request.method === 'DELETE') {
-        return await handleDeletePushSubscription(deleteSubMatch[1]!, auth, env, corsHeaders);
-      }
-
-      if (path === '/api/notifications/preferences' && request.method === 'GET') {
-        return await handleGetNotificationPreferences(auth, env, corsHeaders);
-      }
-      if (path === '/api/notifications/preferences' && request.method === 'PUT') {
-        return await handleUpdateNotificationPreferences(request, auth, env, corsHeaders);
-      }
-
-      if (path === '/api/attendance' && request.method === 'GET') {
-        return await handleGetAttendance(url, auth, env, corsHeaders);
-      }
-      if (path === '/api/attendance/sync' && request.method === 'POST') {
-        return await handleSyncAttendance(request, auth, env, corsHeaders);
-      }
-
-      return errorResponse('NOT_FOUND', 'Маршрут не знайдено', 404, corsHeaders);
+      return await matchedRoute.handler({
+        request,
+        url,
+        env,
+        corsHeaders,
+        params: matchedParams,
+        auth,
+      });
     } catch {
       // Never leak internal SQL or stack traces
       return errorResponse(

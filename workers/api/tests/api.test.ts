@@ -70,6 +70,8 @@ class MockD1Database {
   public university_groups = new Map<string, Record<string, unknown>>();
   public schedule_entries = new Map<string, Record<string, unknown>>();
   public schedule_sync_logs: Array<Record<string, unknown>> = [];
+  public push_subscriptions = new Map<string, Record<string, unknown>>();
+  public notification_preferences = new Map<string, Record<string, unknown>>();
   public rate_limit_buckets = new Map<string, { count: number; reset_at: number }>();
 
   public prepare(sql: string): D1PreparedStatement {
@@ -109,6 +111,22 @@ class MockD1Database {
           if (uni) results = [{ id: uni.id }];
         } else if (normalized.startsWith('SELECT id, name, short_name, city, support_status, source_url FROM universities')) {
           results = Array.from(db.universities.values());
+        } else if (normalized.startsWith('SELECT COUNT(*) as total FROM university_groups')) {
+          const uniId = bound[0] as string;
+          const total = Array.from(db.university_groups.values()).filter((g) => g.university_id === uniId).length;
+          results = [{ total }];
+        } else if (normalized.startsWith('SELECT synced_at, entries_count FROM schedule_sync_logs')) {
+          const groupId = bound[0] as string;
+          const matches = db.schedule_sync_logs
+            .filter((l) => l.group_id === groupId && l.status === 'success')
+            .sort((a, b) => String(b.synced_at).localeCompare(String(a.synced_at)));
+          if (matches[0]) {
+            results = [{ synced_at: matches[0].synced_at, entries_count: matches[0].entries_count }];
+          }
+        } else if (normalized.startsWith('SELECT user_id, enabled, morning_enabled')) {
+          const userId = bound[0] as string;
+          const pref = db.notification_preferences.get(userId);
+          if (pref) results = [pref];
         } else if (normalized.startsWith('SELECT MAX(created_at) as newest_at, COUNT(*) as total FROM university_groups')) {
           const uniId = bound[0] as string;
           const rows = Array.from(db.university_groups.values()).filter((g) => g.university_id === uniId);
@@ -273,8 +291,102 @@ class MockD1Database {
           });
           changes = 1;
         } else if (normalized.startsWith('INSERT INTO schedule_sync_logs')) {
-          const [id, group_id, status, entries_count, error_message, synced_at] = bound;
-          db.schedule_sync_logs.push({ id, group_id, status, entries_count, error_message, synced_at });
+          if (normalized.includes("'success'")) {
+            const [id, group_id, entries_count, synced_at] = bound;
+            db.schedule_sync_logs.push({
+              id,
+              group_id,
+              status: 'success',
+              entries_count,
+              error_message: null,
+              synced_at,
+            });
+          } else if (normalized.includes("'skipped'")) {
+            const [id, group_id, error_message, synced_at] = bound;
+            db.schedule_sync_logs.push({
+              id,
+              group_id,
+              status: 'skipped',
+              entries_count: 0,
+              error_message,
+              synced_at,
+            });
+          } else if (normalized.includes("'error'")) {
+            const [id, group_id, error_message, synced_at] = bound;
+            db.schedule_sync_logs.push({
+              id,
+              group_id,
+              status: 'error',
+              entries_count: 0,
+              error_message,
+              synced_at,
+            });
+          } else {
+            const [id, group_id, status, entries_count, error_message, synced_at] = bound;
+            db.schedule_sync_logs.push({ id, group_id, status, entries_count, error_message, synced_at });
+          }
+          changes = 1;
+        } else if (normalized.startsWith('INSERT INTO push_subscriptions')) {
+          const [id, user_id, device_id, endpoint, p256dh, auth, user_agent, created_at] = bound;
+          db.push_subscriptions.set(endpoint as string, {
+            id,
+            user_id,
+            device_id,
+            endpoint,
+            p256dh,
+            auth,
+            user_agent,
+            created_at,
+          });
+          changes = 1;
+        } else if (normalized.startsWith('INSERT INTO notification_preferences')) {
+          if (bound.length === 2) {
+            const [user_id, updated_at] = bound;
+            const prev = db.notification_preferences.get(user_id as string) ?? {
+              morning_enabled: 1,
+              morning_time: '08:00',
+              before_lesson_enabled: 1,
+              before_lesson_minutes: 10,
+              before_end_enabled: 0,
+              before_end_minutes: 10,
+              evening_enabled: 1,
+              evening_time: '20:00',
+              friday_enabled: 1,
+              friday_time: '18:00',
+            };
+            db.notification_preferences.set(user_id as string, { ...prev, user_id, enabled: 1, updated_at });
+          } else {
+            const [
+              user_id,
+              enabled,
+              morning_enabled,
+              morning_time,
+              before_lesson_enabled,
+              before_lesson_minutes,
+              before_end_enabled,
+              before_end_minutes,
+              evening_enabled,
+              evening_time,
+              friday_enabled,
+              friday_time,
+              updated_at,
+            ] = bound;
+            db.notification_preferences.set(user_id as string, {
+              user_id,
+              enabled,
+              morning_enabled,
+              morning_time,
+              before_lesson_enabled,
+              before_lesson_minutes,
+              before_end_enabled,
+              before_end_minutes,
+              evening_enabled,
+              evening_time,
+              friday_enabled,
+              friday_time,
+              updated_at,
+            });
+          }
           changes = 1;
         }
 
@@ -353,6 +465,7 @@ describe('workers/api Stage 3 endpoints', () => {
     // Raw syncToken MUST NOT be stored in D1
     const storedDeviceA = db.user_devices.get(bodyA.deviceId);
     assert.ok(storedDeviceA);
+    if (!storedDeviceA) throw new Error('Expected storedDeviceA');
     assert.notEqual(storedDeviceA.token_hash, bodyA.syncToken);
     assert.equal(storedDeviceA.token_hash.length, 64); // SHA-256 hex
 
@@ -525,5 +638,247 @@ describe('workers/api Stage 3 endpoints', () => {
       lastStatus = res.status;
     }
     assert.equal(lastStatus, 429);
+  });
+
+  it('returns 405 METHOD_NOT_ALLOWED with Allow header before auth, and 404 for unknown routes', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+
+    const reg = await worker.fetch(
+      new Request('https://api.test/api/auth/register', { method: 'POST', body: '{}' }),
+      env
+    );
+    const { syncToken } = (await reg.json()) as { syncToken: string };
+
+    const checks: Array<{ method: string; path: string; allow: string; auth?: boolean }> = [
+      { method: 'POST', path: '/api/health', allow: 'GET' },
+      { method: 'GET', path: '/api/auth/register', allow: 'POST' },
+      { method: 'POST', path: '/api/universities', allow: 'GET' },
+      { method: 'DELETE', path: '/api/profile', allow: 'GET, PUT' },
+      { method: 'DELETE', path: '/api/profile', allow: 'GET, PUT', auth: true },
+      { method: 'GET', path: '/api/devices/link', allow: 'POST' },
+      { method: 'DELETE', path: '/api/devices/link', allow: 'POST', auth: true },
+      { method: 'DELETE', path: '/api/devices/rotate', allow: 'POST', auth: true },
+      { method: 'PUT', path: '/api/devices/dev-123', allow: 'DELETE' },
+      { method: 'POST', path: '/api/push/subscriptions/sub-123', allow: 'DELETE' },
+      { method: 'DELETE', path: '/api/notifications/preferences', allow: 'GET, PUT' },
+      { method: 'GET', path: '/api/attendance/sync', allow: 'POST' },
+    ];
+
+    for (const c of checks) {
+      const res = await worker.fetch(
+        new Request(`https://api.test${c.path}`, {
+          method: c.method,
+          headers: c.auth ? { Authorization: `Bearer ${syncToken}` } : {},
+        }),
+        env
+      );
+      assert.equal(res.status, 405, `Expected 405 for ${c.method} ${c.path}`);
+      assert.equal(res.headers.get('Allow'), c.allow);
+      const body = (await res.json()) as { error: { code: string } };
+      assert.equal(body.error.code, 'METHOD_NOT_ALLOWED');
+    }
+
+    const unknownRes = await worker.fetch(new Request('https://api.test/api/does-not-exist'), env);
+    assert.equal(unknownRes.status, 404);
+
+    const unauthRes = await worker.fetch(new Request('https://api.test/api/profile'), env);
+    assert.equal(unauthRes.status, 401);
+  });
+
+  it('strictly rejects invalid profile and push/preferences payloads with 400 and preserves partial preferences', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+
+    const reg = await worker.fetch(
+      new Request('https://api.test/api/auth/register', { method: 'POST', body: '{}' }),
+      env
+    );
+    const { syncToken } = (await reg.json()) as { syncToken: string };
+    const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` };
+
+    const badProfiles: unknown[] = [
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', subgroup: 3 },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', subgroup: '2' },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', subgroup: null },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', electiveCourse: 'invalid' },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', timezone: '' },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', timezone: 123 },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', facultyId: 123 },
+      { universityId: 'lnu', groupId: 'ПМІ-31', groupName: 'ПМІ-31', facultyName: '   ' },
+    ];
+
+    for (const payload of badProfiles) {
+      const res = await worker.fetch(
+        new Request('https://api.test/api/profile', {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify(payload),
+        }),
+        env
+      );
+      assert.equal(res.status, 400, `Expected 400 for profile payload ${JSON.stringify(payload)}`);
+    }
+
+    // Push subscription rejects endpoint > 2048 and non-object keys
+    const longEndpoint = `https://push.test/${'a'.repeat(2040)}`;
+    const badLongSub = await worker.fetch(
+      new Request('https://api.test/api/push/subscriptions', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ endpoint: longEndpoint, keys: { p256dh: 'abc', auth: 'def' } }),
+      }),
+      env
+    );
+    assert.equal(badLongSub.status, 400);
+
+    const badArrayKeysSub = await worker.fetch(
+      new Request('https://api.test/api/push/subscriptions', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ endpoint: 'https://push.test/ok', keys: ['bad'] }),
+      }),
+      env
+    );
+    assert.equal(badArrayKeysSub.status, 400);
+
+    // Notification preferences strict 400 validation
+    const badPrefs: unknown[] = [
+      { enabled: 'yes' },
+      { morningTime: '25:99' },
+      { morningTime: '8:00' },
+      { beforeLessonMinutes: 45 },
+      { beforeEndMinutes: 30 },
+      { eveningTime: 'invalid' },
+      { fridayEnabled: 1 },
+    ];
+    for (const payload of badPrefs) {
+      const res = await worker.fetch(
+        new Request('https://api.test/api/notifications/preferences', {
+          method: 'PUT',
+          headers: authHeaders,
+          body: JSON.stringify(payload),
+        }),
+        env
+      );
+      assert.equal(res.status, 400, `Expected 400 for preferences payload ${JSON.stringify(payload)}`);
+    }
+
+    // Full save followed by partial PUT preserves prior fields
+    const saveFull = await worker.fetch(
+      new Request('https://api.test/api/notifications/preferences', {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({
+          enabled: true,
+          morningEnabled: false,
+          morningTime: '07:15',
+          beforeLessonMinutes: 30,
+          fridayTime: '17:45',
+        }),
+      }),
+      env
+    );
+    assert.equal(saveFull.status, 200);
+
+    const partialPut = await worker.fetch(
+      new Request('https://api.test/api/notifications/preferences', {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ morningTime: '07:30' }),
+      }),
+      env
+    );
+    assert.equal(partialPut.status, 200);
+    const partialData = (await partialPut.json()) as {
+      preferences: {
+        enabled: boolean;
+        morningEnabled: boolean;
+        morningTime: string;
+        beforeLessonMinutes: number;
+        fridayTime: string;
+      };
+    };
+    assert.equal(partialData.preferences.enabled, true);
+    assert.equal(partialData.preferences.morningEnabled, false);
+    assert.equal(partialData.preferences.morningTime, '07:30');
+    assert.equal(partialData.preferences.beforeLessonMinutes, 30);
+    assert.equal(partialData.preferences.fridayTime, '17:45');
+  });
+
+  it('tracks groups directory freshness via lnu:__directory__ and expires adapter memory cache', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+    env.GROUPS_CACHE_TTL_SECONDS = '1';
+
+    // Pre-populate 6 groups directly via university_groups (simulating 6 /api/schedule calls)
+    for (let i = 1; i <= 6; i += 1) {
+      db.university_groups.set(`lnu:SCHED-${i}`, {
+        id: `lnu:SCHED-${i}`,
+        university_id: 'lnu',
+        course: 1,
+        group_code: `SCHED-${i}`,
+        group_name: `SCHED-${i}`,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    const origFetch = globalThis.fetch;
+    let groupCalls = 0;
+    let dynamicGroupName = 'PMI-41';
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const urlStr = typeof input === 'string' ? input : input.toString();
+      if (urlStr.includes('n=701&lev=142')) {
+        groupCalls += 1;
+        const payload = JSON.stringify({
+          query: '',
+          suggestions: ['ABL-11', 'FEP-11', 'FEP-21', 'FEP-33', dynamicGroupName],
+        });
+        return new Response(Buffer.from(payload, 'utf-8'));
+      }
+      return new Response('Not found', { status: 404 });
+    }) as typeof fetch;
+
+    try {
+      // Invalid ?course=9 returns 400
+      const badCourseRes = await worker.fetch(
+        new Request('https://api.test/api/universities/lnu/groups?course=9'),
+        env
+      );
+      assert.equal(badCourseRes.status, 400);
+
+      // Even with 6 pre-populated groups, directory sync still runs because lnu:__directory__ has no log
+      const res1 = await worker.fetch(
+        new Request('https://api.test/api/universities/lnu/groups'),
+        env
+      );
+      assert.equal(res1.status, 200);
+      assert.equal(groupCalls, 1);
+
+      // Immediate 2nd request with 5 fixture groups uses D1 cache (0 extra upstream calls)
+      const res2 = await worker.fetch(
+        new Request('https://api.test/api/universities/lnu/groups'),
+        env
+      );
+      assert.equal(res2.status, 200);
+      assert.equal(groupCalls, 1);
+
+      // Simulate TTL expiry (> 1s)
+      const dirLog = db.schedule_sync_logs.find((l) => l.group_id === 'lnu:__directory__');
+      assert.ok(dirLog);
+      dirLog!.synced_at = new Date(Date.now() - 5000).toISOString();
+      dynamicGroupName = 'PMI-42';
+
+      const res3 = await worker.fetch(
+        new Request('https://api.test/api/universities/lnu/groups'),
+        env
+      );
+      assert.equal(res3.status, 200);
+      assert.equal(groupCalls, 2);
+      const data3 = (await res3.json()) as { groups: Array<{ name: string }> };
+      assert.ok(data3.groups.some((g) => g.name === 'PMI-42'));
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });

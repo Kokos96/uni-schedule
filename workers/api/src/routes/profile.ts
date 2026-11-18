@@ -99,14 +99,29 @@ export async function handleUpdateProfile(
     return errorResponse('VALIDATION_ERROR', 'Невідомий університет', 400, corsHeaders);
   }
 
-  const facultyId =
-    typeof body.facultyId === 'string' && body.facultyId.trim()
-      ? body.facultyId.trim().slice(0, 32)
-      : null;
-  const facultyName =
-    typeof body.facultyName === 'string' && body.facultyName.trim()
-      ? body.facultyName.trim().slice(0, 160)
-      : null;
+  let facultyId: string | null = null;
+  if (body.facultyId !== undefined && body.facultyId !== null) {
+    if (typeof body.facultyId !== 'string') {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний facultyId', 400, corsHeaders);
+    }
+    const trimmed = body.facultyId.trim();
+    if (!trimmed || trimmed.length > 32) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний facultyId', 400, corsHeaders);
+    }
+    facultyId = trimmed;
+  }
+
+  let facultyName: string | null = null;
+  if (body.facultyName !== undefined && body.facultyName !== null) {
+    if (typeof body.facultyName !== 'string') {
+      return errorResponse('VALIDATION_ERROR', 'Некоректна назва факультету', 400, corsHeaders);
+    }
+    const trimmed = body.facultyName.trim();
+    if (!trimmed || trimmed.length > 160) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректна назва факультету', 400, corsHeaders);
+    }
+    facultyName = trimmed;
+  }
 
   let course: number | null = null;
   if (body.course !== undefined && body.course !== null) {
@@ -121,18 +136,40 @@ export async function handleUpdateProfile(
     course = body.course;
   }
 
-  const subgroup = body.subgroup === 2 ? 2 : 1;
-  const electiveCourse =
-    typeof body.electiveCourse === 'string' && VALID_ELECTIVES.has(body.electiveCourse)
-      ? body.electiveCourse
-      : 'freelance';
+  let subgroup: 1 | 2 = 1;
+  if (body.subgroup !== undefined) {
+    if (body.subgroup !== 1 && body.subgroup !== 2) {
+      return errorResponse('VALIDATION_ERROR', 'Підгрупа має бути 1 або 2', 400, corsHeaders);
+    }
+    subgroup = body.subgroup;
+  }
 
-  const timezone =
-    typeof body.timezone === 'string' && body.timezone.trim()
-      ? body.timezone.trim().slice(0, 64)
-      : 'Europe/Kyiv';
-  if (!isValidTimeZone(timezone)) {
-    return errorResponse('VALIDATION_ERROR', 'Некоректний часовий пояс (IANA)', 400, corsHeaders);
+  let electiveCourse = 'freelance';
+  if (body.electiveCourse !== undefined) {
+    if (
+      typeof body.electiveCourse !== 'string' ||
+      !VALID_ELECTIVES.has(body.electiveCourse)
+    ) {
+      return errorResponse(
+        'VALIDATION_ERROR',
+        'Некоректна вибіркова дисципліна',
+        400,
+        corsHeaders
+      );
+    }
+    electiveCourse = body.electiveCourse;
+  }
+
+  let timezone = 'Europe/Kyiv';
+  if (body.timezone !== undefined) {
+    if (typeof body.timezone !== 'string') {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний часовий пояс (IANA)', 400, corsHeaders);
+    }
+    const trimmedTz = body.timezone.trim();
+    if (!trimmedTz || trimmedTz.length > 64 || !isValidTimeZone(trimmedTz)) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний часовий пояс (IANA)', 400, corsHeaders);
+    }
+    timezone = trimmedTz;
   }
 
   const now = new Date().toISOString();

@@ -5,3 +5,15 @@ dist-ssr
 .env
 .env.*
 .DS_Store
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pem
+*.key
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+.wrangler/
+workers/api/.wrangler/
