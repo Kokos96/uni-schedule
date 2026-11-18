@@ -1,3 +1,5 @@
+import type { StudentSelection } from '../integrations/universities/types';
+
 export type WeekType = 'numerator' | 'denominator' | 'both';
 export type WeekParity = Exclude<WeekType, 'both'>;
 export type LessonType = 'Лекція' | 'Практична' | 'Лабораторна';
@@ -19,9 +21,12 @@ export interface UserSettings {
   showWeekends?: boolean;
   semesterStartDate?: string;
   desktopScheduleMode?: DesktopScheduleMode;
+  universityProfile?: StudentSelection;
 }
 
-export type ResolvedUserSettings = Required<UserSettings>;
+export type ResolvedUserSettings = Required<Omit<UserSettings, 'universityProfile'>> & {
+  universityProfile?: StudentSelection;
+};
 
 export interface Lesson {
   id: string;

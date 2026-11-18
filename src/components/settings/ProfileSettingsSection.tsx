@@ -1,10 +1,13 @@
 import React, { useRef } from 'react';
 import { BookOpen, Buildings, Users } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS, ELECTIVE_OPTIONS } from '../../constants/profile';
+import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { StudentSelection } from '../../integrations/universities/types';
 import type { ResolvedUserSettings, UserSettings } from '../../types';
 import { StatusDot } from '../ui/Badge';
 import { GlassCard } from '../ui/GlassCard';
 import { SegmentedControl, type SegmentedOption } from '../ui/SegmentedControl';
+import { UniversitySelectorCard } from './UniversitySelectorCard';
 
 type SubgroupString = '1' | '2';
 
@@ -47,17 +50,37 @@ function handleRadioGroupKeyDown<T extends string>(
 export interface ProfileSettingsSectionProps {
   resolved: ResolvedUserSettings;
   onUpdate: (newSettings: Partial<UserSettings>) => void;
+  syncStatus?: ScheduleSyncStatus;
+  lastSyncedAt?: string | null;
+  syncError?: string | null;
+  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  onResetBuiltinSchedule?: () => void;
 }
 
 export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   resolved,
   onUpdate,
+  syncStatus,
+  lastSyncedAt,
+  syncError,
+  onSyncGroupSchedule,
+  onResetBuiltinSchedule,
 }) => {
   const deptRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const electiveRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   return (
     <>
+      <UniversitySelectorCard
+        resolved={resolved}
+        onUpdate={onUpdate}
+        syncStatus={syncStatus}
+        lastSyncedAt={lastSyncedAt}
+        syncError={syncError}
+        onSyncGroupSchedule={onSyncGroupSchedule}
+        onResetBuiltinSchedule={onResetBuiltinSchedule}
+      />
+
       <GlassCard variant="glass" padding="lg">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
           <Buildings weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />

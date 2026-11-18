@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { DEFAULT_SEMESTER_START_DATE, isValidIsoDate } from '../utils/date';
 import { readStorage, StorageErrorCode, writeStorage } from '../utils/storage';
+import type { StudentSelection } from '../integrations/universities/types';
 
 const SETTINGS_KEY = 'uni_schedule_settings_v2';
 
@@ -77,6 +78,31 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
       ? (candidate.desktopScheduleMode as DesktopScheduleMode)
       : DEFAULT_SETTINGS.desktopScheduleMode;
 
+  let universityProfile: StudentSelection | undefined;
+  const rawUni = candidate.universityProfile;
+  if (
+    rawUni &&
+    typeof rawUni === 'object' &&
+    typeof rawUni.universityId === 'string' &&
+    rawUni.universityId.trim().length > 0 &&
+    typeof rawUni.groupId === 'string' &&
+    typeof rawUni.groupName === 'string'
+  ) {
+    universityProfile = {
+      universityId: rawUni.universityId.trim(),
+      groupId: rawUni.groupId.trim(),
+      groupName: rawUni.groupName.trim(),
+      ...(typeof rawUni.facultyId === 'string' ? { facultyId: rawUni.facultyId } : {}),
+      ...(typeof rawUni.facultyName === 'string' ? { facultyName: rawUni.facultyName } : {}),
+      ...(typeof rawUni.course === 'number' && Number.isFinite(rawUni.course)
+        ? { course: rawUni.course }
+        : {}),
+      ...(rawUni.subgroup === 1 || rawUni.subgroup === 2
+        ? { subgroup: rawUni.subgroup }
+        : {}),
+    };
+  }
+
   return {
     subgroup,
     department,
@@ -86,6 +112,7 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
     showWeekends,
     semesterStartDate,
     desktopScheduleMode,
+    ...(universityProfile ? { universityProfile } : {}),
   };
 }
 

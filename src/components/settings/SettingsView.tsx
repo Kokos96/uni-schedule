@@ -6,6 +6,8 @@ import {
   Laptop,
 } from '@phosphor-icons/react';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
+import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { StudentSelection } from '../../integrations/universities/types';
 import type { AttendanceRecord, UserSettings } from '../../types';
 import type { UniScheduleBackupData } from '../../types/backup';
 import type { DeadlineItem, LessonNote } from '../../types/notes';
@@ -29,6 +31,11 @@ export interface SettingsViewProps {
   onImportReplace?: (data: UniScheduleBackupData, meta?: BackupImportMeta) => void;
   onImportMerge?: (data: UniScheduleBackupData, meta?: BackupImportMeta) => void;
   onClearAll?: () => void;
+  syncStatus?: ScheduleSyncStatus;
+  lastSyncedAt?: string | null;
+  syncError?: string | null;
+  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  onResetBuiltinSchedule?: () => void;
 }
 
 const NOOP = () => {};
@@ -43,6 +50,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onImportReplace = NOOP,
   onImportMerge = NOOP,
   onClearAll = NOOP,
+  syncStatus,
+  lastSyncedAt,
+  syncError,
+  onSyncGroupSchedule,
+  onResetBuiltinSchedule,
 }) => {
   const { toast } = useToast();
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -85,7 +97,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* 2-Column Desktop / 1-Column Mobile Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-7">
-          <ProfileSettingsSection resolved={resolved} onUpdate={onUpdate} />
+          <ProfileSettingsSection
+            resolved={resolved}
+            onUpdate={onUpdate}
+            syncStatus={syncStatus}
+            lastSyncedAt={lastSyncedAt}
+            syncError={syncError}
+            onSyncGroupSchedule={onSyncGroupSchedule}
+            onResetBuiltinSchedule={onResetBuiltinSchedule}
+          />
           <AppearanceSettingsSection
             resolved={resolved}
             currentParity={currentParity}
