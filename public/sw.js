@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const SHELL_CACHE = `rozklad-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `rozklad-assets-${CACHE_VERSION}`;
 const ACTIVE_CACHES = new Set([SHELL_CACHE, ASSET_CACHE]);
@@ -203,4 +203,81 @@ self.addEventListener('fetch', (event) => {
 
   // Network-first with cache fallback for any remaining same-origin GET requests
   event.respondWith(networkFirstWithCache(request, ASSET_CACHE));
+});
+
+// Web Push Notifications (Stage 4)
+self.addEventListener('push', (event) => {
+  let payload = {
+    title: 'Uni Schedule',
+    body: 'Нове сповіщення про розклад',
+    tag: 'uni-schedule-notification',
+    url: '/',
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      if (parsed && typeof parsed === 'object') {
+        payload = {
+          title: typeof parsed.title === 'string' && parsed.title ? parsed.title : payload.title,
+          body: typeof parsed.body === 'string' && parsed.body ? parsed.body : payload.body,
+          tag: typeof parsed.tag === 'string' && parsed.tag ? parsed.tag : payload.tag,
+          url: typeof parsed.url === 'string' && parsed.url ? parsed.url : payload.url,
+          actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 2) : undefined,
+        };
+      }
+    } catch {
+      const text = event.data.text();
+      if (text) payload.body = text;
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/favicon-32x32.png?v=4',
+      tag: payload.tag,
+      ...(payload.actions ? { actions: payload.actions } : {}),
+      data: { url: payload.url },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const rawUrl =
+    (event.notification.data && typeof event.notification.data.url === 'string'
+      ? event.notification.data.url
+      : '/') || '/';
+  let targetUrl = '/';
+  try {
+    const resolved = new URL(rawUrl, self.location.origin);
+    if (resolved.origin === self.location.origin) {
+      targetUrl = resolved.pathname + resolved.search + resolved.hash;
+    }
+  } catch {
+    targetUrl = '/';
+  }
+
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+      for (const client of allClients) {
+        if ('focus' in client) {
+          await client.focus();
+          if ('navigate' in client && targetUrl !== '/') {
+            await client.navigate(targetUrl);
+          }
+          return;
+        }
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl);
+      }
+    })()
+  );
 });

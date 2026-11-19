@@ -1,0 +1,38 @@
+name = "uni-schedule-api"
+main = "src/index.ts"
+compatibility_date = "2025-05-01"
+workers_dev = true
+
+[vars]
+REQUIRE_TOKEN_PEPPER = "true"
+ALLOWED_ORIGINS = "https://uni-schedule-opal.vercel.app"
+SCHEDULE_CACHE_TTL_SECONDS = "21600"
+GROUPS_CACHE_TTL_SECONDS = "86400"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "uni-schedule-db"
+database_id = "6f4410a0-5082-452a-9a5b-9e58b9cbfe3e"
+migrations_dir = "migrations"
+
+[env.staging]
+name = "uni-schedule-staging"
+workers_dev = true
+
+[env.staging.vars]
+REQUIRE_TOKEN_PEPPER = "true"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-schedule-git-feat-final-hardening.vercel.app,https://uni-schedule-lw02zf1wk-kokos96.vercel.app,https://uni-schedule-7akhw5030-kokos96.vercel.app"
+SCHEDULE_CACHE_TTL_SECONDS = "21600"
+GROUPS_CACHE_TTL_SECONDS = "86400"
+
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "uni-schedule-staging-db"
+database_id = "be373ae1-65ad-4243-96bf-5a7d9cf07aa2"
+migrations_dir = "migrations"

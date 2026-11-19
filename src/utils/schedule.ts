@@ -20,7 +20,7 @@ export { getWeekParity };
 
 export type LessonFilterProfile = Pick<
   UserSettings,
-  'subgroup' | 'department' | 'electiveCourse'
+  'subgroup' | 'department' | 'electiveCourse' | 'selectedElectives' | 'selectedTrack'
 >;
 
 export interface TimeSlot {
@@ -137,9 +137,23 @@ export function filterLessons(
       if (lesson.departments && !lesson.departments.includes(settings.department)) {
         return false;
       }
-      if (lesson.isElective && settings.electiveCourse !== 'both') {
-        if (lesson.electiveKey && lesson.electiveKey !== settings.electiveCourse) {
-          return false;
+      if (
+        lesson.trackNumber !== undefined &&
+        settings.selectedTrack !== undefined &&
+        lesson.trackNumber !== settings.selectedTrack
+      ) {
+        return false;
+      }
+      if (lesson.isElective) {
+        if (lesson.electiveKey?.startsWith('el_')) {
+          const selected = settings.selectedElectives ?? [];
+          if (!selected.includes(lesson.electiveKey)) {
+            return false;
+          }
+        } else if (settings.electiveCourse !== 'both') {
+          if (lesson.electiveKey && lesson.electiveKey !== settings.electiveCourse) {
+            return false;
+          }
         }
       }
       if (weekParity && lesson.weekType !== 'both' && lesson.weekType !== weekParity) {
@@ -175,15 +189,18 @@ export function buildWeekGrid(
   schedule: readonly ScheduleDay[],
   settings: LessonFilterProfile,
   weekDates: readonly Date[],
-  weekParity?: WeekParity
+  weekParity?: WeekParity,
+  datedLessonsByIso?: Readonly<Record<string, readonly Lesson[]>>
 ): WeekGridData {
   const activeOrdersSet = new Set<number>();
 
   const days: WeekGridDayColumn[] = weekDates.map((date) => {
+    const isoDate = formatIsoDate(date);
     const dayNumber = getScheduleDayNumber(date);
     const dayData = schedule.find((entry) => entry.dayNumber === dayNumber);
     const dayName = dayData?.dayName ?? UK_DAY_NAMES[dayNumber] ?? '';
-    const filtered = filterLessons(dayData?.lessons ?? [], settings, weekParity);
+    const sourceLessons = datedLessonsByIso?.[isoDate] ?? dayData?.lessons ?? [];
+    const filtered = filterLessons(sourceLessons, settings, weekParity);
 
     const lessonsByOrder: Record<number, Lesson[]> = {};
     for (const lesson of filtered) {
@@ -197,7 +214,7 @@ export function buildWeekGrid(
       dayNumber,
       dayName,
       date,
-      isoDate: formatIsoDate(date),
+      isoDate,
       lessons: filtered,
       lessonsByOrder,
     };

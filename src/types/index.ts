@@ -1,3 +1,5 @@
+import type { StudentSelection } from '../integrations/universities/types';
+
 export type WeekType = 'numerator' | 'denominator' | 'both';
 export type WeekParity = Exclude<WeekType, 'both'>;
 export type LessonType = 'Лекція' | 'Практична' | 'Лабораторна';
@@ -19,9 +21,20 @@ export interface UserSettings {
   showWeekends?: boolean;
   semesterStartDate?: string;
   desktopScheduleMode?: DesktopScheduleMode;
+  universityProfile?: StudentSelection;
+  /** Selected live DVVS elective keys (e.g. `el_...`) for synced schedules */
+  selectedElectives?: string[];
+  /** Selected numbered specialization/department track (e.g. 1 or 2) */
+  selectedTrack?: number;
 }
 
-export type ResolvedUserSettings = Required<UserSettings>;
+export type ResolvedUserSettings = Required<
+  Omit<UserSettings, 'universityProfile' | 'selectedElectives' | 'selectedTrack'>
+> & {
+  universityProfile?: StudentSelection;
+  selectedElectives?: string[];
+  selectedTrack?: number;
+};
 
 export interface Lesson {
   id: string;
@@ -35,7 +48,9 @@ export interface Lesson {
   weekType: WeekType;
   subgroup?: 1 | 2;
   isElective?: boolean;
-  electiveKey?: 'freelance' | 'management' | 'space';
+  electiveKey?: string;
+  trackNumber?: number;
+  groupLabel?: string;
   departments?: DepartmentType[]; // Які кафедри відвідують пару
 }
 
@@ -49,6 +64,8 @@ export interface AttendanceRecord {
   lessonId: string;
   date: string; // "YYYY-MM-DD" in local calendar time
   status: AttendanceStatus;
+  updatedAt?: string; // ISO timestamp for multi-device LWW sync
+  serverVersion?: number;
 }
 
 export interface Teacher {

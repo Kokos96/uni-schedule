@@ -25,6 +25,7 @@ import { useCurrentPair } from './hooks/useCurrentPair';
 import { useDeadlines } from './hooks/useDeadlines';
 import { useNotes } from './hooks/useNotes';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useScheduleSource } from './hooks/useScheduleSource';
 import { useSettings } from './hooks/useSettings';
 import { useTheme } from './hooks/useTheme';
 import { useTodayDate } from './hooks/useTodayDate';
@@ -33,23 +34,11 @@ import type { UniScheduleBackupData } from './types/backup';
 import {
   addDays,
   formatIsoDate,
-  getScheduleDayNumber,
   getWeekDates,
   getWeekParity,
   parseIsoDate,
 } from './utils/date';
-import {
-  buildWeekGrid,
-  classroomsData,
-  classroomsMap,
-  filterLessons,
-  getClassroomById,
-  getDayLessons,
-  getTeacherById,
-  scheduleData,
-  teachersData,
-  teachersMap,
-} from './utils/schedule';
+import { buildWeekGrid } from './utils/schedule';
 import type { StorageErrorCode } from './utils/storage';
 
 const LessonNotesDrawer = lazy(() =>
@@ -116,6 +105,8 @@ const AppContent: React.FC = () => {
     storageError: settingsStorageError,
   } = useSettings();
   useTheme(settings.theme);
+
+  const scheduleSource = useScheduleSource(settings);
 
   const {
     records,
@@ -190,32 +181,36 @@ const AppContent: React.FC = () => {
 
   // Real-time today's classes for LivePairHero & Sidebar live status regardless of selectedDate
   const todayLessons = useMemo(() => {
-    const todayDayNumber = getScheduleDayNumber(todayDate);
     const todayParity = getWeekParity(todayDate, settings.semesterStartDate);
-    return filterLessons(
-      getDayLessons(todayDayNumber, scheduleData),
-      settings,
-      todayParity
-    );
-  }, [todayDate, settings]);
+    return scheduleSource.getLessonsForDate(todayDate, todayParity);
+  }, [todayDate, settings.semesterStartDate, scheduleSource]);
 
   // Slow (30s) live status for Sidebar & PairCard list; LivePairHero runs its own 1s countdown
   const currentPair = useCurrentPair(todayLessons, true, {
     liveCountdown: false,
   });
 
-  const selectedDayLessons = useMemo(() => {
-    const selectedDayNumber = getScheduleDayNumber(selectedDate);
-    return filterLessons(
-      getDayLessons(selectedDayNumber, scheduleData),
-      settings,
-      weekParity
-    );
-  }, [selectedDate, settings, weekParity]);
+  const selectedDayLessons = useMemo(
+    () => scheduleSource.getLessonsForDate(selectedDate, weekParity),
+    [selectedDate, weekParity, scheduleSource]
+  );
 
   const weekGrid = useMemo(
-    () => buildWeekGrid(scheduleData, settings, weekDates, weekParity),
-    [settings, weekDates, weekParity]
+    () =>
+      buildWeekGrid(
+        scheduleSource.schedule,
+        settings,
+        weekDates,
+        weekParity,
+        scheduleSource.datedLessonsByIso ?? undefined
+      ),
+    [
+      scheduleSource.schedule,
+      scheduleSource.datedLessonsByIso,
+      settings,
+      weekDates,
+      weekParity,
+    ]
   );
 
   const { liveLessonName, liveStatusLabel } = useMemo(() => {
@@ -287,14 +282,10 @@ const AppContent: React.FC = () => {
 
   const hasLessonsOnDate = useCallback(
     (date: Date): boolean => {
-      const dayNum = getScheduleDayNumber(date);
       const parity = getWeekParity(date, settings.semesterStartDate);
-      return (
-        filterLessons(getDayLessons(dayNum, scheduleData), settings, parity)
-          .length > 0
-      );
+      return scheduleSource.getLessonsForDate(date, parity).length > 0;
     },
-    [settings]
+    [settings.semesterStartDate, scheduleSource]
   );
 
   const handleOpenNotes = useCallback((lesson: Lesson, dateIso: string) => {
@@ -428,8 +419,8 @@ const AppContent: React.FC = () => {
               currentPair={currentPair}
               settings={settings}
               onUpdateSettings={updateSettings}
-              teachersMap={teachersMap}
-              classroomsMap={classroomsMap}
+              teachersMap={scheduleSource.teachersMap}
+              classroomsMap={scheduleSource.classroomsMap}
               getAttendanceStatus={getStatus}
               onToggleAttendance={toggleAttendance}
               notes={notes}
@@ -462,6 +453,7 @@ const AppContent: React.FC = () => {
               <StatsView
                 records={records}
                 settings={settings}
+                scheduleMap={scheduleSource.scheduleMap}
                 onUpdateSettings={updateSettings}
               />
             </Suspense>
@@ -470,11 +462,11 @@ const AppContent: React.FC = () => {
           {activeTab === 'directory' && (
             <Suspense fallback={<ViewSkeleton />}>
               <DirectoryView
-                teachers={teachersData}
-                classrooms={classroomsData}
-                schedule={scheduleData}
-                teachersMap={teachersMap}
-                classroomsMap={classroomsMap}
+                teachers={scheduleSource.teachers}
+                classrooms={scheduleSource.classrooms}
+                schedule={scheduleSource.schedule}
+                teachersMap={scheduleSource.teachersMap}
+                classroomsMap={scheduleSource.classroomsMap}
               />
             </Suspense>
           )}
@@ -491,6 +483,14 @@ const AppContent: React.FC = () => {
                 onImportReplace={handleImportReplace}
                 onImportMerge={handleImportMerge}
                 onClearAll={handleClearAll}
+                syncStatus={scheduleSource.syncStatus}
+                lastSyncedAt={scheduleSource.lastSyncedAt}
+                syncError={scheduleSource.syncError}
+                onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
+                onResetBuiltinSchedule={scheduleSource.clearCachedSchedule}
+                isUsingCustomGroup={scheduleSource.isUsingCustomGroup}
+                availableElectives={scheduleSource.availableElectives}
+                availableTracks={scheduleSource.availableTracks}
               />
             </Suspense>
           )}
@@ -510,12 +510,12 @@ const AppContent: React.FC = () => {
             onCreateDeadline={addDeadline}
             teacher={
               notesDrawerTarget
-                ? getTeacherById(notesDrawerTarget.lesson.teacherId)
+                ? scheduleSource.teachersMap.get(notesDrawerTarget.lesson.teacherId)
                 : undefined
             }
             classroom={
               notesDrawerTarget
-                ? getClassroomById(notesDrawerTarget.lesson.classroomId)
+                ? scheduleSource.classroomsMap.get(notesDrawerTarget.lesson.classroomId)
                 : undefined
             }
           />

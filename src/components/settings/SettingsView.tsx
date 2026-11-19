@@ -6,6 +6,8 @@ import {
   Laptop,
 } from '@phosphor-icons/react';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
+import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { StudentSelection } from '../../integrations/universities/types';
 import type { AttendanceRecord, UserSettings } from '../../types';
 import type { UniScheduleBackupData } from '../../types/backup';
 import type { DeadlineItem, LessonNote } from '../../types/notes';
@@ -17,6 +19,7 @@ import { ModalDrawer } from '../ui/ModalDrawer';
 import { useToast } from '../ui/Toast';
 import { AppearanceSettingsSection } from './AppearanceSettingsSection';
 import { BackupImportMeta, BackupSection } from './BackupSection';
+import { NotificationsSettingsSection } from './NotificationsSettingsSection';
 import { ProfileSettingsSection } from './ProfileSettingsSection';
 
 export interface SettingsViewProps {
@@ -29,6 +32,14 @@ export interface SettingsViewProps {
   onImportReplace?: (data: UniScheduleBackupData, meta?: BackupImportMeta) => void;
   onImportMerge?: (data: UniScheduleBackupData, meta?: BackupImportMeta) => void;
   onClearAll?: () => void;
+  syncStatus?: ScheduleSyncStatus;
+  lastSyncedAt?: string | null;
+  syncError?: string | null;
+  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  onResetBuiltinSchedule?: () => void;
+  isUsingCustomGroup?: boolean;
+  availableElectives?: Array<{ key: string; subject: string }>;
+  availableTracks?: Array<{ number: number; subjects: string[] }>;
 }
 
 const NOOP = () => {};
@@ -43,6 +54,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onImportReplace = NOOP,
   onImportMerge = NOOP,
   onClearAll = NOOP,
+  syncStatus,
+  lastSyncedAt,
+  syncError,
+  onSyncGroupSchedule,
+  onResetBuiltinSchedule,
+  isUsingCustomGroup = false,
+  availableElectives = [],
+  availableTracks = [],
 }) => {
   const { toast } = useToast();
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -78,14 +97,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <MetaChip variant="amber" mono>
-          ФЕП-33с · {resolved.department.toUpperCase()} · Підгр. {resolved.subgroup}
+          {resolved.universityProfile?.groupName || 'ФЕП-33с'} ·{' '}
+          {isUsingCustomGroup
+            ? resolved.selectedTrack
+              ? `Потік ${resolved.selectedTrack}`
+              : 'Онлайн'
+            : resolved.department.toUpperCase()}{' '}
+          · Підгр. {resolved.subgroup}
         </MetaChip>
       </div>
 
       {/* 2-Column Desktop / 1-Column Mobile Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-7">
-          <ProfileSettingsSection resolved={resolved} onUpdate={onUpdate} />
+          <ProfileSettingsSection
+            resolved={resolved}
+            onUpdate={onUpdate}
+            syncStatus={syncStatus}
+            lastSyncedAt={lastSyncedAt}
+            syncError={syncError}
+            onSyncGroupSchedule={onSyncGroupSchedule}
+            onResetBuiltinSchedule={onResetBuiltinSchedule}
+            isUsingCustomGroup={isUsingCustomGroup}
+            availableElectives={availableElectives}
+            availableTracks={availableTracks}
+          />
           <AppearanceSettingsSection
             resolved={resolved}
             currentParity={currentParity}
@@ -94,6 +130,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <div className="space-y-6 lg:col-span-5">
+          <NotificationsSettingsSection />
+
           <BackupSection
             attendanceRecords={attendanceRecords}
             settings={resolved}

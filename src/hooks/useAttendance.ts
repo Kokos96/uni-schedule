@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  enqueueAttendanceMutation,
+  syncAttendanceWithServer,
+  toSyncStatus,
+} from '../services/attendanceSync';
 import { AttendanceRecord, AttendanceStatus } from '../types';
 import { deduplicateAttendanceRecords } from '../utils/backup';
 import { isValidIsoDate } from '../utils/date';
@@ -26,6 +31,13 @@ function sanitizeRecords(raw: unknown): AttendanceRecord[] {
         lessonId: candidate.lessonId.trim(),
         date: candidate.date,
         status: candidate.status as AttendanceStatus,
+        ...(typeof candidate.updatedAt === 'string'
+          ? { updatedAt: candidate.updatedAt }
+          : {}),
+        ...(typeof candidate.serverVersion === 'number' &&
+        Number.isFinite(candidate.serverVersion)
+          ? { serverVersion: candidate.serverVersion }
+          : {}),
       });
     }
   }
@@ -49,11 +61,32 @@ export const useAttendance = (): UseAttendanceResult => {
     return sanitizeRecords(raw);
   });
   const [storageError, setStorageError] = useState<StorageErrorCode | null>(null);
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
 
   useEffect(() => {
     const result = writeStorage(STORAGE_KEY, records);
     setStorageError(result.ok ? null : (result.error ?? 'unknown'));
   }, [records]);
+
+  const triggerSync = useCallback(() => {
+    void syncAttendanceWithServer(recordsRef.current)
+      .then((res) => {
+        if (res.synced) {
+          setRecords(res.records);
+        }
+      })
+      .catch(() => {
+        // Offline / server unavailable: pending queue preserves changes safely
+      });
+  }, []);
+
+  useEffect(() => {
+    triggerSync();
+    const handleOnline = () => triggerSync();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [triggerSync]);
 
   const toggleAttendance = useCallback(
     (lessonId: string, date: string, status: AttendanceStatus) => {
@@ -64,6 +97,13 @@ export const useAttendance = (): UseAttendanceResult => {
           // Ignore vibration restrictions on unsupported browsers
         }
       }
+
+      const nowIso = new Date().toISOString();
+      const existingBefore = recordsRef.current.find(
+        (r) => r.lessonId === lessonId && r.date === date
+      );
+      const nextMutationStatus: AttendanceStatus | null =
+        existingBefore?.status === status ? null : status;
 
       setRecords((prev) => {
         const existingIndex = prev.findIndex(
@@ -76,18 +116,28 @@ export const useAttendance = (): UseAttendanceResult => {
             return prev.filter((_, idx) => idx !== existingIndex);
           }
           const updated = [...prev];
-          updated[existingIndex] = { ...existing, status };
+          updated[existingIndex] = { ...existing, status, updatedAt: nowIso };
           return updated;
         }
 
-        return [...prev, { lessonId, date, status }];
+        return [...prev, { lessonId, date, status, updatedAt: nowIso }];
       });
+
+      enqueueAttendanceMutation({
+        lessonId,
+        lessonDate: date,
+        status: toSyncStatus(nextMutationStatus),
+        updatedAt: nowIso,
+      });
+      triggerSync();
     },
-    []
+    [triggerSync]
   );
 
   const setAttendance = useCallback(
     (lessonId: string, date: string, status: AttendanceStatus | null) => {
+      const nowIso = new Date().toISOString();
+
       setRecords((prev) => {
         const existingIndex = prev.findIndex(
           (r) => r.lessonId === lessonId && r.date === date
@@ -103,14 +153,22 @@ export const useAttendance = (): UseAttendanceResult => {
         if (existing) {
           if (existing.status === status) return prev;
           const updated = [...prev];
-          updated[existingIndex] = { ...existing, status };
+          updated[existingIndex] = { ...existing, status, updatedAt: nowIso };
           return updated;
         }
 
-        return [...prev, { lessonId, date, status }];
+        return [...prev, { lessonId, date, status, updatedAt: nowIso }];
       });
+
+      enqueueAttendanceMutation({
+        lessonId,
+        lessonDate: date,
+        status: toSyncStatus(status),
+        updatedAt: nowIso,
+      });
+      triggerSync();
     },
-    []
+    [triggerSync]
   );
 
   const getStatus = useCallback(
@@ -126,8 +184,10 @@ export const useAttendance = (): UseAttendanceResult => {
   }, []);
 
   const mergeRecords = useCallback((incomingRecords: readonly AttendanceRecord[]) => {
-    const cleanIncoming = sanitizeRecords(incomingRecords);
-    setRecords((prev) => deduplicateAttendanceRecords([...prev, ...cleanIncoming]));
+    setRecords((prev) => {
+      const cleanIncoming = sanitizeRecords(incomingRecords);
+      return deduplicateAttendanceRecords([...prev, ...cleanIncoming]);
+    });
   }, []);
 
   const clearRecords = useCallback(() => {
