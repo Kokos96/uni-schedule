@@ -4,7 +4,8 @@ compatibility_date = "2025-05-01"
 workers_dev = true
 
 [vars]
-ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-schedule.vercel.app"
+REQUIRE_TOKEN_PEPPER = "true"
+ALLOWED_ORIGINS = "https://uni-schedule-opal.vercel.app"
 SCHEDULE_CACHE_TTL_SECONDS = "21600"
 GROUPS_CACHE_TTL_SECONDS = "86400"
 
@@ -14,7 +15,7 @@ crons = ["*/5 * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "uni-schedule-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "6f4410a0-5082-452a-9a5b-9e58b9cbfe3e"
 migrations_dir = "migrations"
 
 [env.staging]
