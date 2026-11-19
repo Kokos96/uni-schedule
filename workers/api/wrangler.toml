@@ -22,7 +22,8 @@ name = "uni-schedule-staging"
 workers_dev = true
 
 [env.staging.vars]
-ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-schedule-git-feat-final-hardening.vercel.app"
+REQUIRE_TOKEN_PEPPER = "true"
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-schedule-git-feat-final-hardening.vercel.app,https://uni-schedule-lw02zf1wk-kokos96.vercel.app,https://uni-schedule-7akhw5030-kokos96.vercel.app"
 SCHEDULE_CACHE_TTL_SECONDS = "21600"
 GROUPS_CACHE_TTL_SECONDS = "86400"
 
@@ -32,5 +33,5 @@ crons = ["*/5 * * * *"]
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "uni-schedule-staging-db"
-database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+database_id = "be373ae1-65ad-4243-96bf-5a7d9cf07aa2"
 migrations_dir = "migrations"

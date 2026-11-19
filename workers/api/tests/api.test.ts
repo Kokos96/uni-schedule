@@ -137,7 +137,7 @@ class MockD1Database {
           results = [{ newest_at: newest, total: rows.length }];
         } else if (normalized.startsWith('SELECT group_code, group_name, course FROM university_groups')) {
           results = Array.from(db.university_groups.values()).filter((g) => g.university_id === 'lnu');
-        } else if (normalized.startsWith('SELECT id, last_synced_at, content_hash FROM university_groups WHERE id = ?')) {
+        } else if (normalized.startsWith('SELECT id, faculty_id, last_synced_at, content_hash FROM university_groups WHERE id = ?')) {
           const id = bound[0] as string;
           const g = db.university_groups.get(id);
           if (g) results = [g];
@@ -880,5 +880,77 @@ describe('workers/api Stage 3 endpoints', () => {
     } finally {
       globalThis.fetch = origFetch;
     }
+  });
+
+  it('Phase E: rejects unsafe push endpoints, invalid p256dh/auth lengths, and missing required TOKEN_PEPPER', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+
+    const reg = await worker.fetch(
+      new Request('https://api.test/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceName: 'PhaseE Phone' }),
+      }),
+      env
+    );
+    assert.equal(reg.status, 201);
+    const { syncToken } = (await reg.json()) as { syncToken: string };
+
+    // 1. SSRF / non-HTTPS push endpoint rejected
+    const ssrfRes = await worker.fetch(
+      new Request('https://api.test/api/push/subscriptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          subscription: {
+            endpoint: 'http://127.0.0.1:8080/push',
+            keys: {
+              p256dh: Buffer.alloc(65, 4).toString('base64url'),
+              auth: Buffer.alloc(16, 2).toString('base64url'),
+            },
+          },
+        }),
+      }),
+      env
+    );
+    assert.equal(ssrfRes.status, 400);
+
+    // 2. Invalid p256dh byte length rejected
+    const badKeyRes = await worker.fetch(
+      new Request('https://api.test/api/push/subscriptions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          subscription: {
+            endpoint: 'https://fcm.googleapis.com/fcm/send/phase-e-valid',
+            keys: {
+              p256dh: Buffer.alloc(32, 4).toString('base64url'),
+              auth: Buffer.alloc(16, 2).toString('base64url'),
+            },
+          },
+        }),
+      }),
+      env
+    );
+    assert.equal(badKeyRes.status, 400);
+
+    // 3. Missing TOKEN_PEPPER when REQUIRE_TOKEN_PEPPER='true' throws/500s cleanly
+    const strictEnv = { ...env, REQUIRE_TOKEN_PEPPER: 'true', TOKEN_PEPPER: undefined } as unknown as Env;
+    const strictRes = await worker.fetch(
+      new Request('https://api.test/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceName: 'FailClosed' }),
+      }),
+      strictEnv
+    );
+    assert.equal(strictRes.status, 500);
   });
 });

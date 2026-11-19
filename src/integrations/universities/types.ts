@@ -62,8 +62,12 @@ export interface ScheduleLesson {
   building?: string;
   address?: string;
   group?: string;
+  groupLabel?: string;
   subgroup?: 1 | 2;
   isElective?: boolean;
+  electiveKey?: string;
+  trackNumber?: number;
+  weekType?: 'numerator' | 'denominator' | 'both';
   status?: ScheduleLessonStatus;
   universityId: string;
   sourceId?: string;
@@ -73,6 +77,7 @@ export interface ScheduleLesson {
 export interface NormalizedSchedule {
   universityId: string;
   universityName: string;
+  facultyId?: string;
   groupId: string;
   groupName: string;
   fetchedAt: string;

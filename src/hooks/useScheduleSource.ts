@@ -41,6 +41,8 @@ export interface ScheduleSourceState {
   teachersMap: Map<string, Teacher>;
   classroomsMap: Map<string, Classroom>;
   datedLessonsByIso: Record<string, Lesson[]> | null;
+  availableElectives: Array<{ key: string; subject: string }>;
+  availableTracks: Array<{ number: number; subjects: string[] }>;
   isUsingCustomGroup: boolean;
   syncStatus: ScheduleSyncStatus;
   lastSyncedAt: string | null;
@@ -64,7 +66,8 @@ export function useScheduleSource(
     if (adapter?.meta.supportStatus === 'manual_only') return 'manual';
     return cachedSchedule &&
       cachedSchedule.universityId === profile.universityId &&
-      cachedSchedule.groupId === profile.groupId
+      cachedSchedule.groupId === profile.groupId &&
+      (!profile.facultyId || !cachedSchedule.facultyId || cachedSchedule.facultyId === profile.facultyId)
       ? 'synced'
       : 'idle';
   });
@@ -76,6 +79,7 @@ export function useScheduleSource(
       cachedSchedule &&
       cachedSchedule.universityId === profile.universityId &&
       cachedSchedule.groupId === profile.groupId &&
+      (!profile.facultyId || !cachedSchedule.facultyId || cachedSchedule.facultyId === profile.facultyId) &&
       cachedSchedule.lessons.length > 0
   );
 
@@ -103,23 +107,44 @@ export function useScheduleSource(
     [bundle]
   );
 
+  const availableElectives = useMemo(() => {
+    if (!hasMatchingCache || !cachedSchedule) return [];
+    const byKey = new Map<string, string>();
+    for (const lesson of cachedSchedule.lessons) {
+      if (lesson.isElective && lesson.electiveKey && !byKey.has(lesson.electiveKey)) {
+        byKey.set(lesson.electiveKey, lesson.subject);
+      }
+    }
+    return Array.from(byKey.entries())
+      .map(([key, subject]) => ({ key, subject }))
+      .sort((a, b) => a.subject.localeCompare(b.subject, 'uk'));
+  }, [hasMatchingCache, cachedSchedule]);
+
+  const availableTracks = useMemo(() => {
+    if (!hasMatchingCache || !cachedSchedule) return [];
+    const byNum = new Map<number, string[]>();
+    for (const lesson of cachedSchedule.lessons) {
+      if (lesson.trackNumber !== undefined) {
+        const list = byNum.get(lesson.trackNumber) ?? [];
+        if (!list.includes(lesson.subject)) list.push(lesson.subject);
+        byNum.set(lesson.trackNumber, list);
+      }
+    }
+    return Array.from(byNum.entries())
+      .map(([number, subjects]) => ({ number, subjects }))
+      .sort((a, b) => a.number - b.number);
+  }, [hasMatchingCache, cachedSchedule]);
+
   const getLessonsForDate = useCallback(
     (date: Date, parity: WeekParity): Lesson[] => {
       if (bundle) {
         const iso = formatIsoDate(date);
         const dated = bundle.datedLessonsByIso[iso];
         if (dated) {
-          return dated.filter((lesson) => {
-            if (lesson.subgroup && lesson.subgroup !== settings.subgroup) {
-              return false;
-            }
-            return true;
-          });
+          return filterLessons(dated, settings, parity);
         }
         const dayNum = getScheduleDayNumber(date);
-        return getDayLessons(dayNum, bundle.schedule).filter(
-          (lesson) => !lesson.subgroup || lesson.subgroup === settings.subgroup
-        );
+        return filterLessons(getDayLessons(dayNum, bundle.schedule), settings, parity);
       }
 
       const dayNum = getScheduleDayNumber(date);
@@ -148,6 +173,9 @@ export function useScheduleSource(
 
       try {
         const normalized = await adapter.fetchSchedule(selection);
+        if (selection.facultyId && !normalized.facultyId) {
+          normalized.facultyId = selection.facultyId;
+        }
         if (normalized.lessons.length === 0) {
           setSyncStatus('error');
           setSyncError(
@@ -189,6 +217,8 @@ export function useScheduleSource(
     teachersMap,
     classroomsMap,
     datedLessonsByIso: bundle ? bundle.datedLessonsByIso : null,
+    availableElectives,
+    availableTracks,
     isUsingCustomGroup: Boolean(bundle),
     syncStatus,
     lastSyncedAt: hasMatchingCache ? (cachedSchedule?.fetchedAt ?? null) : null,

@@ -223,6 +223,7 @@ self.addEventListener('push', (event) => {
           body: typeof parsed.body === 'string' && parsed.body ? parsed.body : payload.body,
           tag: typeof parsed.tag === 'string' && parsed.tag ? parsed.tag : payload.tag,
           url: typeof parsed.url === 'string' && parsed.url ? parsed.url : payload.url,
+          actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 2) : undefined,
         };
       }
     } catch {
@@ -237,6 +238,7 @@ self.addEventListener('push', (event) => {
       icon: '/icons/icon-192.png',
       badge: '/icons/favicon-32x32.png?v=4',
       tag: payload.tag,
+      ...(payload.actions ? { actions: payload.actions } : {}),
       data: { url: payload.url },
     })
   );
@@ -244,10 +246,19 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl =
+  const rawUrl =
     (event.notification.data && typeof event.notification.data.url === 'string'
       ? event.notification.data.url
       : '/') || '/';
+  let targetUrl = '/';
+  try {
+    const resolved = new URL(rawUrl, self.location.origin);
+    if (resolved.origin === self.location.origin) {
+      targetUrl = resolved.pathname + resolved.search + resolved.hash;
+    }
+  } catch {
+    targetUrl = '/';
+  }
 
   event.waitUntil(
     (async () => {

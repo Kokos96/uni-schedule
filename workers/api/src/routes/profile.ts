@@ -24,6 +24,22 @@ interface ProfileRow {
   elective_course: string;
   timezone: string;
   updated_at: string;
+  department?: string | null;
+  selected_electives?: string | null;
+  selected_track?: number | null;
+}
+
+function parseSelectedElectivesJson(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+    }
+  } catch {
+    // Ignore malformed legacy value
+  }
+  return [];
 }
 
 export async function handleGetProfile(
@@ -33,7 +49,8 @@ export async function handleGetProfile(
 ): Promise<Response> {
   const row = await env.DB.prepare(
     `SELECT user_id, university_id, faculty_id, faculty_name, course,
-            group_id, group_name, subgroup, elective_course, timezone, updated_at
+            group_id, group_name, subgroup, elective_course, timezone, updated_at,
+            department, selected_electives, selected_track
      FROM student_profiles
      WHERE user_id = ?`
   )
@@ -56,6 +73,11 @@ export async function handleGetProfile(
         groupName: row.group_name,
         subgroup: row.subgroup === 2 ? 2 : 1,
         electiveCourse: row.elective_course,
+        ...(row.department ? { department: row.department } : {}),
+        selectedElectives: parseSelectedElectivesJson(row.selected_electives),
+        ...(row.selected_track !== null && row.selected_track !== undefined
+          ? { selectedTrack: row.selected_track }
+          : {}),
         timezone: row.timezone,
         updatedAt: row.updated_at,
       },
@@ -172,12 +194,49 @@ export async function handleUpdateProfile(
     timezone = trimmedTz;
   }
 
+  let department: string | null = null;
+  if (body.department !== undefined && body.department !== null) {
+    if (typeof body.department !== 'string' || body.department.trim().length > 32) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректна кафедра', 400, corsHeaders);
+    }
+    department = body.department.trim() || null;
+  }
+
+  let selectedElectives: string[] = [];
+  if (body.selectedElectives !== undefined && body.selectedElectives !== null) {
+    if (!Array.isArray(body.selectedElectives) || body.selectedElectives.length > 50) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний список ДВВС', 400, corsHeaders);
+    }
+    for (const item of body.selectedElectives) {
+      if (typeof item !== 'string' || !item.trim() || item.length > 64) {
+        return errorResponse('VALIDATION_ERROR', 'Некоректний ідентифікатор ДВВС', 400, corsHeaders);
+      }
+      selectedElectives.push(item.trim());
+    }
+    selectedElectives = Array.from(new Set(selectedElectives));
+  }
+
+  let selectedTrack: number | null = null;
+  if (body.selectedTrack !== undefined && body.selectedTrack !== null) {
+    if (
+      typeof body.selectedTrack !== 'number' ||
+      !Number.isInteger(body.selectedTrack) ||
+      body.selectedTrack < 1 ||
+      body.selectedTrack > 20
+    ) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний номер потоку/профілю', 400, corsHeaders);
+    }
+    selectedTrack = body.selectedTrack;
+  }
+
   const now = new Date().toISOString();
+  const selectedElectivesJson = JSON.stringify(selectedElectives);
   await env.DB.prepare(
     `INSERT INTO student_profiles (
        user_id, university_id, faculty_id, faculty_name, course,
-       group_id, group_name, subgroup, elective_course, timezone, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       group_id, group_name, subgroup, elective_course, timezone, updated_at,
+       department, selected_electives, selected_track
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        university_id = excluded.university_id,
        faculty_id = excluded.faculty_id,
@@ -188,7 +247,10 @@ export async function handleUpdateProfile(
        subgroup = excluded.subgroup,
        elective_course = excluded.elective_course,
        timezone = excluded.timezone,
-       updated_at = excluded.updated_at`
+       updated_at = excluded.updated_at,
+       department = excluded.department,
+       selected_electives = excluded.selected_electives,
+       selected_track = excluded.selected_track`
   )
     .bind(
       auth.userId,
@@ -201,7 +263,10 @@ export async function handleUpdateProfile(
       subgroup,
       electiveCourse,
       timezone,
-      now
+      now,
+      department,
+      selectedElectivesJson,
+      selectedTrack
     )
     .run();
 
@@ -217,6 +282,9 @@ export async function handleUpdateProfile(
         groupName,
         subgroup,
         electiveCourse,
+        ...(department ? { department } : {}),
+        selectedElectives,
+        ...(selectedTrack !== null ? { selectedTrack } : {}),
         timezone,
         updatedAt: now,
       },

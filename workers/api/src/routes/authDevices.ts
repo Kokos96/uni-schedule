@@ -4,6 +4,7 @@ import {
   jsonResponse,
   errorResponse,
   parseJsonBody,
+  resolveTokenPepper,
 } from '../security';
 import type { AuthContext, Env } from '../types';
 
@@ -27,7 +28,7 @@ export async function handleRegisterUser(
   const deviceId = crypto.randomUUID();
   const deviceName = sanitizeDeviceName(parsed.data.deviceName);
   const syncToken = generateSyncToken();
-  const tokenHash = await hashSyncToken(syncToken, env.TOKEN_PEPPER ?? '');
+  const tokenHash = await hashSyncToken(syncToken, resolveTokenPepper(env));
   const now = new Date().toISOString();
 
   await env.DB.batch([
@@ -104,7 +105,7 @@ export async function handleLinkDevice(
   const deviceId = crypto.randomUUID();
   const deviceName = sanitizeDeviceName(parsed.data.deviceName);
   const syncToken = generateSyncToken();
-  const tokenHash = await hashSyncToken(syncToken, env.TOKEN_PEPPER ?? '');
+  const tokenHash = await hashSyncToken(syncToken, resolveTokenPepper(env));
   const now = new Date().toISOString();
 
   await env.DB.prepare(

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CaretLeft, CaretRight, Funnel } from '@phosphor-icons/react';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
-import type { AttendanceRecord, UserSettings } from '../../types';
+import type { AttendanceRecord, Lesson, UserSettings } from '../../types';
 import {
   computeAttendanceSummary,
   computeMonthDelta,
@@ -21,6 +21,7 @@ import { SubjectAttendanceList } from './SubjectAttendanceList';
 export interface StatsViewProps {
   records: AttendanceRecord[];
   settings?: UserSettings;
+  scheduleMap?: Map<string, Lesson>;
   onUpdateSettings?: (newSettings: Partial<UserSettings>) => void;
 }
 
@@ -34,8 +35,10 @@ const FILTER_OPTIONS: Array<SegmentedOption<FilterMode>> = [
 export const StatsView: React.FC<StatsViewProps> = ({
   records,
   settings,
+  scheduleMap,
   onUpdateSettings,
 }) => {
+  const activeScheduleMap = scheduleMap ?? lessonsMap;
   const [filterMode, setFilterMode] = useState<FilterMode>('month');
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [onlyMyLessons, setOnlyMyLessons] = useState<boolean>(true);
@@ -74,11 +77,17 @@ export const StatsView: React.FC<StatsViewProps> = ({
   const scopedRecords = useMemo(
     () =>
       onlyMyLessons
-        ? filterRecordsBySettings(records, {
-            department: resolvedSettings.department,
-            subgroup: resolvedSettings.subgroup,
-            electiveCourse: resolvedSettings.electiveCourse,
-          })
+        ? filterRecordsBySettings(
+            records,
+            {
+              department: resolvedSettings.department,
+              subgroup: resolvedSettings.subgroup,
+              electiveCourse: resolvedSettings.electiveCourse,
+              selectedElectives: resolvedSettings.selectedElectives,
+              selectedTrack: resolvedSettings.selectedTrack,
+            },
+            activeScheduleMap
+          )
         : records,
     [
       records,
@@ -86,6 +95,9 @@ export const StatsView: React.FC<StatsViewProps> = ({
       resolvedSettings.department,
       resolvedSettings.subgroup,
       resolvedSettings.electiveCourse,
+      resolvedSettings.selectedElectives,
+      resolvedSettings.selectedTrack,
+      activeScheduleMap,
     ]
   );
 
@@ -103,8 +115,8 @@ export const StatsView: React.FC<StatsViewProps> = ({
     [scopedRecords, selectedDate]
   );
   const subjectStats = useMemo(
-    () => computeSubjectStats(periodRecords, lessonsMap, goalPercent),
-    [periodRecords, goalPercent]
+    () => computeSubjectStats(periodRecords, activeScheduleMap, goalPercent),
+    [periodRecords, activeScheduleMap, goalPercent]
   );
 
   const hiddenByFilterCount = records.length - scopedRecords.length;

@@ -34,6 +34,10 @@ function sanitizeRecords(raw: unknown): AttendanceRecord[] {
         ...(typeof candidate.updatedAt === 'string'
           ? { updatedAt: candidate.updatedAt }
           : {}),
+        ...(typeof candidate.serverVersion === 'number' &&
+        Number.isFinite(candidate.serverVersion)
+          ? { serverVersion: candidate.serverVersion }
+          : {}),
       });
     }
   }
@@ -95,7 +99,11 @@ export const useAttendance = (): UseAttendanceResult => {
       }
 
       const nowIso = new Date().toISOString();
-      let nextMutationStatus: AttendanceStatus | null = status;
+      const existingBefore = recordsRef.current.find(
+        (r) => r.lessonId === lessonId && r.date === date
+      );
+      const nextMutationStatus: AttendanceStatus | null =
+        existingBefore?.status === status ? null : status;
 
       setRecords((prev) => {
         const existingIndex = prev.findIndex(
@@ -105,7 +113,6 @@ export const useAttendance = (): UseAttendanceResult => {
 
         if (existing) {
           if (existing.status === status) {
-            nextMutationStatus = null;
             return prev.filter((_, idx) => idx !== existingIndex);
           }
           const updated = [...prev];

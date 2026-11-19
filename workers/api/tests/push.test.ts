@@ -218,10 +218,11 @@ class MockPushD1 {
               evening_time: '20:00',
               friday_enabled: 1,
               friday_time: '18:00',
+              schedule_change_enabled: 1,
             };
             db.notification_preferences.set(user_id as string, { ...prev, user_id, enabled: 1, updated_at });
           } else {
-            const [user_id, enabled, morning_enabled, morning_time, before_lesson_enabled, before_lesson_minutes, before_end_enabled, before_end_minutes, evening_enabled, evening_time, friday_enabled, friday_time, updated_at] = bound;
+            const [user_id, enabled, morning_enabled, morning_time, before_lesson_enabled, before_lesson_minutes, before_end_enabled, before_end_minutes, evening_enabled, evening_time, friday_enabled, friday_time, schedule_change_enabled, updated_at] = bound;
             db.notification_preferences.set(user_id as string, {
               user_id,
               enabled,
@@ -235,6 +236,7 @@ class MockPushD1 {
               evening_time,
               friday_enabled,
               friday_time,
+              schedule_change_enabled,
               updated_at,
             });
           }
@@ -378,7 +380,7 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
 
     const beforeLesson = evaluateNotificationsForUser(baseRow, { isoDate: '2026-11-20', weekday: 5, minutesOfDay: 500 }, lessons, 4);
     assert.equal(beforeLesson[0]?.type, 'before_lesson');
-    assert.match(beforeLesson[0]?.payload.title ?? '', /За 10 хв/);
+    assert.match(beforeLesson[0]?.payload.body ?? '', /Через 10 хв/);
 
     const beforeEnd = evaluateNotificationsForUser(baseRow, { isoDate: '2026-11-20', weekday: 5, minutesOfDay: 580 }, lessons, 4);
     assert.equal(beforeEnd[0]?.type, 'before_end');

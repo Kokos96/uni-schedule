@@ -260,6 +260,9 @@ interface ScheduleEntryRow {
   building: string | null;
   subgroup: number | null;
   is_elective: number;
+  elective_key?: string | null;
+  week_type?: string | null;
+  group_label?: string | null;
   status: string;
   updated_at: string;
 }
@@ -274,7 +277,7 @@ async function readCachedGroupSchedule(
     .prepare(
       `SELECT lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time,
               subject, lesson_type, teacher, room, building, subgroup, is_elective,
-              status, updated_at
+              status, updated_at, elective_key, week_type, group_label
        FROM schedule_entries
        WHERE group_id = ?
        ORDER BY lesson_date ASC, pair_number ASC`
@@ -291,24 +294,32 @@ async function readCachedGroupSchedule(
     groupId: groupName,
     groupName,
     fetchedAt,
-    lessons: rows.map((r) => ({
-      id: r.lesson_id,
-      ...(r.lesson_date ? { date: r.lesson_date } : {}),
-      dayOfWeek: r.day_of_week,
-      number: r.pair_number,
-      startTime: r.start_time,
-      endTime: r.end_time,
-      subject: r.subject,
-      lessonType: r.lesson_type,
-      ...(r.teacher ? { teacher: r.teacher } : {}),
-      ...(r.room ? { room: r.room } : {}),
-      ...(r.building ? { building: r.building } : {}),
-      ...(r.subgroup === 1 || r.subgroup === 2 ? { subgroup: r.subgroup } : {}),
-      ...(r.is_elective === 1 ? { isElective: true } : {}),
-      status: (r.status as ScheduleLesson['status']) ?? 'active',
-      universityId: 'lnu',
-      updatedAt: r.updated_at,
-    })),
+    lessons: rows.map((r) => {
+      const trackMatch = r.subject.match(/^(\d+)\.\s+\S/);
+      const trackNumber = trackMatch?.[1] ? Number.parseInt(trackMatch[1], 10) : undefined;
+      return {
+        id: r.lesson_id,
+        ...(r.lesson_date ? { date: r.lesson_date } : {}),
+        dayOfWeek: r.day_of_week,
+        number: r.pair_number,
+        startTime: r.start_time,
+        endTime: r.end_time,
+        subject: r.subject,
+        lessonType: r.lesson_type,
+        ...(r.teacher ? { teacher: r.teacher } : {}),
+        ...(r.room ? { room: r.room } : {}),
+        ...(r.building ? { building: r.building } : {}),
+        ...(r.subgroup === 1 || r.subgroup === 2 ? { subgroup: r.subgroup } : {}),
+        ...(r.is_elective === 1 ? { isElective: true } : {}),
+        ...(r.elective_key ? { electiveKey: r.elective_key } : {}),
+        ...(r.week_type ? { weekType: r.week_type as ScheduleLesson['weekType'] } : {}),
+        ...(r.group_label ? { groupLabel: r.group_label } : {}),
+        ...(trackNumber !== undefined && trackNumber >= 1 && trackNumber <= 20 ? { trackNumber } : {}),
+        status: (r.status as ScheduleLesson['status']) ?? 'active',
+        universityId: 'lnu',
+        updatedAt: r.updated_at,
+      };
+    }),
     warnings: [],
   };
 }
@@ -319,7 +330,7 @@ export async function handleGetSchedule(
   corsHeaders: Record<string, string>
 ): Promise<Response> {
   const universityId = (url.searchParams.get('universityId') ?? 'lnu').trim();
-  const groupName = (url.searchParams.get('group') ?? '').trim();
+  const groupName = (url.searchParams.get('group') ?? url.searchParams.get('groupId') ?? '').trim();
   const facultyId = (url.searchParams.get('facultyId') ?? '0').trim();
   const courseParam = url.searchParams.get('course');
   const force = url.searchParams.get('force') === '1';
@@ -345,13 +356,24 @@ export async function handleGetSchedule(
   const cacheTtl = parsePositiveInt(env.SCHEDULE_CACHE_TTL_SECONDS, 21600);
 
   const groupRow = await env.DB.prepare(
-    `SELECT id, last_synced_at, content_hash FROM university_groups WHERE id = ?`
+    `SELECT id, faculty_id, last_synced_at, content_hash FROM university_groups WHERE id = ?`
   )
     .bind(groupKey)
-    .first<{ id: string; last_synced_at: string | null; content_hash: string | null }>();
+    .first<{
+      id: string;
+      faculty_id?: string | null;
+      last_synced_at: string | null;
+      content_hash: string | null;
+    }>();
 
-  // Serve shared group cache if fresh and not force-refreshed
-  if (!force && groupRow && isFreshTimestamp(groupRow.last_synced_at, cacheTtl)) {
+  const requestedFaculty = facultyId && facultyId !== '0' ? facultyId : null;
+  const facultyMatches =
+    !requestedFaculty ||
+    !groupRow?.faculty_id ||
+    groupRow.faculty_id === requestedFaculty;
+
+  // Serve shared group cache if fresh, faculty-compatible, and not force-refreshed
+  if (!force && groupRow && facultyMatches && isFreshTimestamp(groupRow.last_synced_at, cacheTtl)) {
     const cached = await readCachedGroupSchedule(
       env.DB,
       groupKey,
@@ -454,8 +476,9 @@ export async function handleGetSchedule(
             `INSERT INTO schedule_entries (
                id, group_id, lesson_id, lesson_date, day_of_week, pair_number,
                start_time, end_time, subject, lesson_type, teacher, room,
-               building, subgroup, is_elective, status, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               building, subgroup, is_elective, status, updated_at,
+               elective_key, week_type, group_label
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(
             crypto.randomUUID(),
             groupKey,
@@ -473,7 +496,10 @@ export async function handleGetSchedule(
             lesson.subgroup ?? null,
             lesson.isElective ? 1 : 0,
             lesson.status ?? 'active',
-            now
+            now,
+            lesson.electiveKey ?? null,
+            lesson.weekType ?? null,
+            lesson.groupLabel ?? null
           )
         );
       }

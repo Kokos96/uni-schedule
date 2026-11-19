@@ -153,19 +153,23 @@ export function toAppScheduleBundle(
       type: normalizeLessonType(item.lessonType),
       teacherId,
       classroomId,
-      weekType: 'both',
+      weekType: item.weekType ?? 'both',
       ...(item.subgroup ? { subgroup: item.subgroup } : {}),
       ...(item.isElective ? { isElective: true } : {}),
+      ...(item.electiveKey ? { electiveKey: item.electiveKey } : {}),
+      ...(item.trackNumber !== undefined ? { trackNumber: item.trackNumber } : {}),
+      ...(item.groupLabel ? { groupLabel: item.groupLabel } : {}),
     };
 
     const dayBucket = daysMap.get(item.dayOfWeek);
-    if (dayBucket && !dayBucket.has(lessonId)) {
-      dayBucket.set(lessonId, appLesson);
+    const bucketKey = `${lessonId}:${appLesson.type}`;
+    if (dayBucket && !dayBucket.has(bucketKey)) {
+      dayBucket.set(bucketKey, appLesson);
     }
 
     if (item.date && parseIsoDate(item.date)) {
       const list = datedLessonsByIso[item.date] ?? [];
-      if (!list.some((existing) => existing.id === lessonId)) {
+      if (!list.some((existing) => existing.id === lessonId && existing.type === appLesson.type)) {
         list.push(appLesson);
         list.sort((a, b) => a.order - b.order || a.startTime.localeCompare(b.startTime));
         datedLessonsByIso[item.date] = list;

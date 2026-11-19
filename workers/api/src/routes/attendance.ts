@@ -140,8 +140,7 @@ export async function handleSyncAttendance(
 
   const serverNowMs = Date.now();
   const serverNowIso = new Date(serverNowMs).toISOString();
-  let applied = 0;
-  let skippedOlder = 0;
+  const statements: D1PreparedStatement[] = [];
 
   for (const item of mutations) {
     if (typeof item !== 'object' || item === null) {
@@ -177,20 +176,20 @@ export async function handleSyncAttendance(
     const clampedUpdatedAt = clampClientTimestamp(rawUpdatedAt, serverNowMs);
 
     // Server-versioned LWW strictly scoped to auth.userId (IDOR-safe & clock-skew hardened)
-    const res = await env.DB.prepare(
-      `INSERT INTO attendance_records (
-         user_id, lesson_id, lesson_date, status, updated_at, server_version, server_updated_at, device_id
-       ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-       ON CONFLICT(user_id, lesson_id, lesson_date) DO UPDATE SET
-         status = excluded.status,
-         updated_at = excluded.updated_at,
-         server_version = attendance_records.server_version + 1,
-         server_updated_at = excluded.server_updated_at,
-         device_id = excluded.device_id
-       WHERE (? IS NOT NULL AND attendance_records.server_version = ?)
-          OR excluded.updated_at > attendance_records.updated_at`
-    )
-      .bind(
+    statements.push(
+      env.DB.prepare(
+        `INSERT INTO attendance_records (
+           user_id, lesson_id, lesson_date, status, updated_at, server_version, server_updated_at, device_id
+         ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+         ON CONFLICT(user_id, lesson_id, lesson_date) DO UPDATE SET
+           status = excluded.status,
+           updated_at = excluded.updated_at,
+           server_version = attendance_records.server_version + 1,
+           server_updated_at = excluded.server_updated_at,
+           device_id = excluded.device_id
+         WHERE (? IS NOT NULL AND attendance_records.server_version = ?)
+            OR excluded.updated_at > attendance_records.updated_at`
+      ).bind(
         auth.userId,
         lessonId,
         lessonDate,
@@ -201,12 +200,19 @@ export async function handleSyncAttendance(
         baseVersion,
         baseVersion
       )
-      .run();
+    );
+  }
 
-    if (res.meta.changes && res.meta.changes > 0) {
-      applied += 1;
-    } else {
-      skippedOlder += 1;
+  let applied = 0;
+  let skippedOlder = 0;
+  for (let i = 0; i < statements.length; i += 100) {
+    const batchResults = await env.DB.batch(statements.slice(i, i + 100));
+    for (const res of batchResults) {
+      if (res.meta.changes && res.meta.changes > 0) {
+        applied += 1;
+      } else {
+        skippedOlder += 1;
+      }
     }
   }
 

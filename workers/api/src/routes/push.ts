@@ -1,9 +1,24 @@
+import { base64UrlToBytes } from '../push/webPush';
 import { errorResponse, jsonResponse, parseJsonBody } from '../security';
 import type { AuthContext, Env } from '../types';
 
 const VALID_BEFORE_LESSON_MINUTES = new Set([5, 10, 15, 30]);
 const VALID_BEFORE_END_MINUTES = new Set([5, 10, 15]);
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function isSafePushEndpointUrl(parsed: URL): boolean {
+  if (parsed.protocol !== 'https:') return false;
+  if (parsed.username || parsed.password || parsed.port) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.localhost')) {
+    return false;
+  }
+  // Reject IPv4 and IPv6 literals
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(':')) {
+    return false;
+  }
+  return host.includes('.');
+}
 
 interface PreferenceRow {
   user_id: string;
@@ -18,6 +33,7 @@ interface PreferenceRow {
   evening_time: string;
   friday_enabled: number;
   friday_time: string;
+  schedule_change_enabled?: number;
   updated_at: string;
 }
 
@@ -33,6 +49,7 @@ const DEFAULT_PREFERENCES = {
   eveningTime: '20:00',
   fridayEnabled: true,
   fridayTime: '18:00',
+  scheduleChangeEnabled: true,
 };
 
 function mapPreferenceRow(row: PreferenceRow) {
@@ -48,6 +65,7 @@ function mapPreferenceRow(row: PreferenceRow) {
     eveningTime: row.evening_time,
     fridayEnabled: row.friday_enabled === 1,
     fridayTime: row.friday_time,
+    scheduleChangeEnabled: row.schedule_change_enabled !== 0,
     updatedAt: row.updated_at,
   };
 }
@@ -149,20 +167,46 @@ export async function handleUpsertPushSubscription(
     return errorResponse('VALIDATION_ERROR', 'Некоректний push endpoint', 400, corsHeaders);
   }
 
-  if (parsedEndpoint.protocol !== 'https:') {
+  if (!isSafePushEndpointUrl(parsedEndpoint)) {
     return errorResponse(
       'VALIDATION_ERROR',
-      'Push endpoint повинен використовувати HTTPS',
+      'Push endpoint повинен використовувати публічний HTTPS домен',
       400,
       corsHeaders
     );
   }
 
-  if (!p256dh || p256dh.length > 256 || !authKey || authKey.length > 128) {
+  let keysValid = false;
+  if (p256dh && p256dh.length <= 256 && authKey && authKey.length <= 128) {
+    try {
+      const p256dhBytes = base64UrlToBytes(p256dh);
+      const authBytes = base64UrlToBytes(authKey);
+      keysValid = p256dhBytes.length === 65 && authBytes.length === 16;
+    } catch {
+      keysValid = false;
+    }
+  }
+
+  if (!keysValid) {
     return errorResponse(
       'VALIDATION_ERROR',
       'Некоректні ключі підписки (p256dh / auth)',
       400,
+      corsHeaders
+    );
+  }
+
+  const existingOwner = await env.DB.prepare(
+    `SELECT user_id FROM push_subscriptions WHERE endpoint = ? LIMIT 1`
+  )
+    .bind(endpoint)
+    .first<{ user_id: string }>();
+
+  if (existingOwner && existingOwner.user_id !== auth.userId) {
+    return errorResponse(
+      'CONFLICT',
+      'Цей push endpoint вже зареєстрований іншим користувачем',
+      409,
       corsHeaders
     );
   }
@@ -236,7 +280,7 @@ export async function handleGetNotificationPreferences(
             before_lesson_enabled, before_lesson_minutes,
             before_end_enabled, before_end_minutes,
             evening_enabled, evening_time,
-            friday_enabled, friday_time, updated_at
+            friday_enabled, friday_time, schedule_change_enabled, updated_at
      FROM notification_preferences
      WHERE user_id = ?`
   )
@@ -268,7 +312,7 @@ export async function handleUpdateNotificationPreferences(
             before_lesson_enabled, before_lesson_minutes,
             before_end_enabled, before_end_minutes,
             evening_enabled, evening_time,
-            friday_enabled, friday_time, updated_at
+            friday_enabled, friday_time, schedule_change_enabled, updated_at
      FROM notification_preferences
      WHERE user_id = ?`
   )
@@ -340,6 +384,11 @@ export async function handleUpdateNotificationPreferences(
   const rEveningTime = parseTime(b.eveningTime, base.eveningTime, 'eveningTime');
   const rFridayEnabled = parseBool(b.fridayEnabled, base.fridayEnabled, 'fridayEnabled');
   const rFridayTime = parseTime(b.fridayTime, base.fridayTime, 'fridayTime');
+  const rScheduleChangeEnabled = parseBool(
+    b.scheduleChangeEnabled,
+    base.scheduleChangeEnabled,
+    'scheduleChangeEnabled'
+  );
 
   const results = [
     rEnabled,
@@ -353,6 +402,7 @@ export async function handleUpdateNotificationPreferences(
     rEveningTime,
     rFridayEnabled,
     rFridayTime,
+    rScheduleChangeEnabled,
   ];
   const invalid = results.find((r) => !r.ok);
   if (invalid && !invalid.ok) {
@@ -375,6 +425,7 @@ export async function handleUpdateNotificationPreferences(
   const eveningTime = (rEveningTime as { ok: true; value: string }).value;
   const fridayEnabled = (rFridayEnabled as { ok: true; value: boolean }).value;
   const fridayTime = (rFridayTime as { ok: true; value: string }).value;
+  const scheduleChangeEnabled = (rScheduleChangeEnabled as { ok: true; value: boolean }).value;
 
   const now = new Date().toISOString();
   await env.DB.prepare(
@@ -383,8 +434,8 @@ export async function handleUpdateNotificationPreferences(
        before_lesson_enabled, before_lesson_minutes,
        before_end_enabled, before_end_minutes,
        evening_enabled, evening_time,
-       friday_enabled, friday_time, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       friday_enabled, friday_time, schedule_change_enabled, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        enabled = excluded.enabled,
        morning_enabled = excluded.morning_enabled,
@@ -397,6 +448,7 @@ export async function handleUpdateNotificationPreferences(
        evening_time = excluded.evening_time,
        friday_enabled = excluded.friday_enabled,
        friday_time = excluded.friday_time,
+       schedule_change_enabled = excluded.schedule_change_enabled,
        updated_at = excluded.updated_at`
   )
     .bind(
@@ -412,6 +464,7 @@ export async function handleUpdateNotificationPreferences(
       eveningTime,
       fridayEnabled ? 1 : 0,
       fridayTime,
+      scheduleChangeEnabled ? 1 : 0,
       now
     )
     .run();
@@ -430,6 +483,7 @@ export async function handleUpdateNotificationPreferences(
         eveningTime,
         fridayEnabled,
         fridayTime,
+        scheduleChangeEnabled,
         updatedAt: now,
       },
     },

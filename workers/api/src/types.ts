@@ -2,6 +2,7 @@ export interface Env {
   DB: D1Database;
   ALLOWED_ORIGINS?: string;
   TOKEN_PEPPER?: string;
+  REQUIRE_TOKEN_PEPPER?: string;
   SCHEDULE_CACHE_TTL_SECONDS?: string;
   GROUPS_CACHE_TTL_SECONDS?: string;
   VAPID_PUBLIC_KEY?: string;

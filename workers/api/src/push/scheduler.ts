@@ -101,6 +101,8 @@ export interface ActiveSubscriptionRow {
   evening_time: string;
   friday_enabled: number;
   friday_time: string;
+  selected_electives?: string | null;
+  selected_track?: number | null;
 }
 
 export interface ScheduledLessonRow {
@@ -116,6 +118,56 @@ export interface ScheduledLessonRow {
   room: string | null;
   building: string | null;
   subgroup: number | null;
+  is_elective?: number;
+  elective_key?: string | null;
+}
+
+function parseSelectedElectivesList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+    }
+  } catch {
+    // Ignore malformed JSON
+  }
+  return [];
+}
+
+function matchesStudentLessonProfile(
+  lesson: {
+    subgroup: number | null;
+    subject: string;
+    is_elective?: number;
+    elective_key?: string | null;
+  },
+  row: Pick<ActiveSubscriptionRow, 'subgroup' | 'selected_electives' | 'selected_track'>
+): boolean {
+  if (lesson.subgroup !== null && lesson.subgroup !== row.subgroup) {
+    return false;
+  }
+  if (row.selected_track !== null && row.selected_track !== undefined) {
+    const trackMatch = lesson.subject.match(/^(\d+)\.\s+\S/);
+    if (trackMatch?.[1] && Number.parseInt(trackMatch[1], 10) !== row.selected_track) {
+      return false;
+    }
+  }
+  if (lesson.is_elective === 1 && lesson.elective_key) {
+    const selected = parseSelectedElectivesList(row.selected_electives);
+    if (!selected.includes(lesson.elective_key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function pluralizePairs(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'пара';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'пари';
+  return 'пар';
 }
 
 interface CandidateNotification {
@@ -197,9 +249,9 @@ export function evaluateNotificationsForUser(
 ): CandidateNotification[] {
   const candidates: CandidateNotification[] = [];
 
-  // Filter lessons by student's subgroup
+  // Filter lessons by student's subgroup, track, and selected DVVS electives
   const myTodayLessons = todayLessons
-    .filter((l) => l.subgroup === null || l.subgroup === row.subgroup)
+    .filter((l) => matchesStudentLessonProfile(l, row))
     .sort((a, b) => a.pair_number - b.pair_number || a.start_time.localeCompare(b.start_time));
 
   // 1. Morning digest
@@ -208,17 +260,20 @@ export function evaluateNotificationsForUser(
     if (targetMin !== null && isTimeInCronWindow(local.minutesOfDay, targetMin)) {
       const first = myTodayLessons[0];
       const body = first
-        ? `Сьогодні у тебе ${myTodayLessons.length} пар(и). Перша о ${first.start_time} — ${first.subject}${first.room ? `, ауд. ${first.room}` : ''}.`
-        : 'Сьогодні занять немає. Можеш спокійно відпочити!';
+        ? `Сьогодні у тебе ${myTodayLessons.length} ${pluralizePairs(myTodayLessons.length)}\nПерша пара о ${first.start_time} — ${first.subject}. Відкрий розклад для деталей.`
+        : 'Сьогодні пар немає\nМожеш спокійно відпочити!';
 
       candidates.push({
         type: 'morning',
         dedupKey: `${row.sub_id}:morning:${local.isoDate}`,
         payload: {
-          title: 'Доброго ранку! ☀️',
+          title: 'Uni Schedule',
           body,
           tag: `morning-${local.isoDate}`,
-          url: '/',
+          url: `/?date=${local.isoDate}`,
+          ttlSeconds: 21600,
+          urgency: 'normal',
+          actions: [{ action: 'open-schedule', title: 'Відкрити розклад' }],
         },
       });
     }
@@ -232,20 +287,18 @@ export function evaluateNotificationsForUser(
     if (row.before_lesson_enabled === 1 && startMin !== null) {
       const remindAt = startMin - row.before_lesson_minutes;
       if (isTimeInCronWindow(local.minutesOfDay, remindAt)) {
-        const metaParts = [
-          lesson.lesson_type,
-          lesson.room ? `ауд. ${lesson.room}` : null,
-          lesson.teacher ? `викладач: ${lesson.teacher}` : null,
-        ].filter(Boolean);
-
+        const roomText = lesson.room ? ` · Аудиторія ${lesson.room}` : '';
         candidates.push({
           type: 'before_lesson',
           dedupKey: `${row.sub_id}:before_lesson:${local.isoDate}:${lesson.lesson_id}@${lesson.start_time}`,
           payload: {
-            title: `За ${row.before_lesson_minutes} хв: ${lesson.subject}`,
-            body: `Початок о ${lesson.start_time}${metaParts.length ? ` · ${metaParts.join(' · ')}` : ''}`,
+            title: 'Uni Schedule',
+            body: `Через ${row.before_lesson_minutes} хв — ${lesson.subject}\n${lesson.start_time}–${lesson.end_time}${roomText}`,
             tag: `before-${lesson.lesson_id}-${local.isoDate}`,
-            url: '/',
+            url: `/?date=${local.isoDate}&lesson=${encodeURIComponent(lesson.lesson_id)}`,
+            ttlSeconds: 900,
+            urgency: 'high',
+            actions: [{ action: 'open-schedule', title: 'Деталі пари' }],
           },
         });
       }
@@ -258,10 +311,13 @@ export function evaluateNotificationsForUser(
           type: 'before_end',
           dedupKey: `${row.sub_id}:before_end:${local.isoDate}:${lesson.lesson_id}@${lesson.end_time}`,
           payload: {
-            title: `До завершення пари ${row.before_end_minutes} хв`,
-            body: `${lesson.subject} завершується о ${lesson.end_time}.`,
+            title: 'Uni Schedule',
+            body: `До завершення пари ${row.before_end_minutes} хв — ${lesson.subject}\nКінець о ${lesson.end_time}. Не забудь відмітити відвідуваність.`,
             tag: `end-${lesson.lesson_id}-${local.isoDate}`,
-            url: '/',
+            url: `/?date=${local.isoDate}&lesson=${encodeURIComponent(lesson.lesson_id)}`,
+            ttlSeconds: 900,
+            urgency: 'high',
+            actions: [{ action: 'open-schedule', title: 'Відмітити' }],
           },
         });
       }
@@ -279,10 +335,12 @@ export function evaluateNotificationsForUser(
         type: 'evening',
         dedupKey: `${row.sub_id}:evening:${local.isoDate}`,
         payload: {
-          title: 'Вечірній підсумок дня',
-          body: `Навчальний день завершено! Сьогодні було ${counts.total} пар(и). ${formatSummaryLine(counts)}`,
+          title: 'Uni Schedule',
+          body: `Підсумок дня: ${counts.total} ${pluralizePairs(counts.total)}\n${formatSummaryLine(counts)}`,
           tag: `evening-${local.isoDate}`,
-          url: '/',
+          url: '/?tab=stats',
+          ttlSeconds: 21600,
+          urgency: 'normal',
         },
       });
     }
@@ -303,16 +361,27 @@ export function evaluateNotificationsForUser(
         type: 'friday',
         dedupKey: `${row.sub_id}:friday:${local.isoDate}`,
         payload: {
-          title: 'Тиждень завершено! 🎉',
-          body: `За тиждень було ${counts.total} пар(и). ${formatSummaryLine(counts)} Гарних вихідних!`,
+          title: 'Uni Schedule',
+          body: `Тиждень завершено: ${counts.total} ${pluralizePairs(counts.total)}\n${formatSummaryLine(counts)}`,
           tag: `friday-${local.isoDate}`,
-          url: '/',
+          url: '/?tab=stats',
+          ttlSeconds: 21600,
+          urgency: 'normal',
         },
       });
     }
   }
 
   return candidates;
+}
+
+export interface CronLatencyMetrics {
+  scheduledAt: string;
+  cronStartedAt: string;
+  cronFinishedAt: string;
+  cronLagMs: number;
+  processingMs: number;
+  pushAvgRttMs: number;
 }
 
 export interface CronRunStats {
@@ -322,14 +391,22 @@ export interface CronRunStats {
   deduplicated: number;
   expiredDeleted: number;
   failed: number;
+  latency: CronLatencyMetrics;
 }
 
 const MAX_SUBSCRIPTIONS_PER_TICK = 25;
+const MAX_CONCURRENT_DELIVERIES = 10;
 
 export async function runNotificationCron(
   env: Env,
   nowUtc: Date = new Date()
 ): Promise<CronRunStats> {
+  const startedMs = Date.now();
+  const scheduledAtIso = nowUtc.toISOString();
+  const cronStartedAtIso = new Date(startedMs).toISOString();
+  let rttSumMs = 0;
+  let rttCount = 0;
+
   const stats: CronRunStats = {
     checkedSubscriptions: 0,
     attempted: 0,
@@ -337,6 +414,14 @@ export async function runNotificationCron(
     deduplicated: 0,
     expiredDeleted: 0,
     failed: 0,
+    latency: {
+      scheduledAt: scheduledAtIso,
+      cronStartedAt: cronStartedAtIso,
+      cronFinishedAt: cronStartedAtIso,
+      cronLagMs: Math.max(0, startedMs - nowUtc.getTime()),
+      processingMs: 0,
+      pushAvgRttMs: 0,
+    },
   };
 
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
@@ -356,11 +441,13 @@ export async function runNotificationCron(
             np.before_lesson_enabled, np.before_lesson_minutes,
             np.before_end_enabled, np.before_end_minutes,
             np.evening_enabled, np.evening_time,
-            np.friday_enabled, np.friday_time
+            np.friday_enabled, np.friday_time,
+            sp.selected_electives, sp.selected_track
      FROM push_subscriptions ps
      JOIN user_devices ud ON ud.id = ps.device_id AND ud.revoked_at IS NULL
      JOIN student_profiles sp ON sp.user_id = ps.user_id
      JOIN notification_preferences np ON np.user_id = ps.user_id AND np.enabled = 1
+     WHERE ps.fail_count < 10
      ORDER BY ps.created_at ASC`
   ).all<ActiveSubscriptionRow>();
 
@@ -370,10 +457,8 @@ export async function runNotificationCron(
   // Cache schedule lookups per (groupKey, localIsoDate) within this Cron tick
   const dayScheduleCache = new Map<string, ScheduledLessonRow[]>();
 
-  for (let i = 0; i < rows.length; i += MAX_SUBSCRIPTIONS_PER_TICK) {
-    const batch = rows.slice(i, i + MAX_SUBSCRIPTIONS_PER_TICK);
-
-    for (const row of batch) {
+  const processSubscription = async (row: ActiveSubscriptionRow) => {
+    try {
       const local = getLocalDateTimeParts(nowUtc, row.timezone);
       const groupKey = `${row.university_id}:${row.group_id}`;
       const dayCacheKey = `${groupKey}:${local.isoDate}`;
@@ -382,7 +467,7 @@ export async function runNotificationCron(
       if (!todayLessons) {
         const res = await env.DB.prepare(
           `SELECT lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time,
-                  subject, lesson_type, teacher, room, building, subgroup
+                  subject, lesson_type, teacher, room, building, subgroup, is_elective, elective_key
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date = ? OR (lesson_date IS NULL AND day_of_week = ?))`
         )
@@ -392,23 +477,37 @@ export async function runNotificationCron(
         dayScheduleCache.set(dayCacheKey, todayLessons);
       }
 
-      let weekLessons: Array<{ lesson_id: string; lesson_date: string | null; subgroup: number | null }> = [];
+      let weekLessons: Array<{
+        lesson_id: string;
+        lesson_date: string | null;
+        subgroup: number | null;
+        subject: string;
+        is_elective?: number;
+        elective_key?: string | null;
+      }> = [];
       if (local.weekday === 5 && row.friday_enabled === 1) {
         const mondayIso = addDaysToIso(local.isoDate, -4);
         const weekRes = await env.DB.prepare(
-          `SELECT lesson_id, lesson_date, subgroup
+          `SELECT lesson_id, lesson_date, subgroup, subject, is_elective, elective_key
            FROM schedule_entries
-           WHERE group_id = ? AND lesson_date BETWEEN ? AND ?`
+           WHERE group_id = ? AND (lesson_date BETWEEN ? AND ? OR lesson_date IS NULL)`
         )
           .bind(groupKey, mondayIso, local.isoDate)
-          .all<{ lesson_id: string; lesson_date: string | null; subgroup: number | null }>();
-        weekLessons = (weekRes.results ?? []).filter(
-          (l) => l.subgroup === null || l.subgroup === row.subgroup
+          .all<{
+            lesson_id: string;
+            lesson_date: string | null;
+            subgroup: number | null;
+            subject: string;
+            is_elective?: number;
+            elective_key?: string | null;
+          }>();
+        weekLessons = (weekRes.results ?? []).filter((l) =>
+          matchesStudentLessonProfile(l, row)
         );
       }
 
-      const myTodayLessons = todayLessons.filter(
-        (l) => l.subgroup === null || l.subgroup === row.subgroup
+      const myTodayLessons = todayLessons.filter((l) =>
+        matchesStudentLessonProfile(l, row)
       );
 
       let todaySummary: AttendanceSummaryCounts | undefined;
@@ -502,6 +601,10 @@ export async function runNotificationCron(
           candidate.payload,
           vapid
         );
+        if (typeof sendRes.rttMs === 'number') {
+          rttSumMs += sendRes.rttMs;
+          rttCount += 1;
+        }
 
         if (sendRes.ok) {
           stats.sent += 1;
@@ -531,7 +634,43 @@ export async function runNotificationCron(
           ]);
         }
       }
+    } catch {
+      stats.failed += 1;
     }
+  };
+
+  for (let i = 0; i < rows.length; i += MAX_SUBSCRIPTIONS_PER_TICK) {
+    const batch = rows.slice(i, i + MAX_SUBSCRIPTIONS_PER_TICK);
+    for (let j = 0; j < batch.length; j += MAX_CONCURRENT_DELIVERIES) {
+      await Promise.allSettled(
+        batch.slice(j, j + MAX_CONCURRENT_DELIVERIES).map((row) => processSubscription(row))
+      );
+    }
+  }
+
+  const finishedMs = Date.now();
+  stats.latency = {
+    scheduledAt: scheduledAtIso,
+    cronStartedAt: cronStartedAtIso,
+    cronFinishedAt: new Date(finishedMs).toISOString(),
+    cronLagMs: Math.max(0, startedMs - nowUtc.getTime()),
+    processingMs: Math.max(0, finishedMs - startedMs),
+    pushAvgRttMs: rttCount > 0 ? Math.round(rttSumMs / rttCount) : 0,
+  };
+
+  if (stats.checkedSubscriptions > 0 || stats.attempted > 0) {
+    console.info(
+      JSON.stringify({
+        event: 'cron_tick',
+        checked: stats.checkedSubscriptions,
+        attempted: stats.attempted,
+        sent: stats.sent,
+        dedup: stats.deduplicated,
+        failed: stats.failed,
+        processingMs: stats.latency.processingMs,
+        pushAvgRttMs: stats.latency.pushAvgRttMs,
+      })
+    );
   }
 
   return stats;

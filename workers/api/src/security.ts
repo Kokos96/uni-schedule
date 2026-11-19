@@ -32,6 +32,14 @@ export function generateSyncToken(): string {
   return `ust_${toBase64Url(bytes)}`;
 }
 
+export function resolveTokenPepper(env: Env): string {
+  const pepper = env.TOKEN_PEPPER?.trim() ?? '';
+  if (env.REQUIRE_TOKEN_PEPPER === 'true' && pepper.length < 16) {
+    throw new Error('TOKEN_PEPPER is required when REQUIRE_TOKEN_PEPPER=true');
+  }
+  return pepper;
+}
+
 /**
  * Computes SHA-256 hex digest of a syncToken (optionally peppered with TOKEN_PEPPER).
  */
@@ -154,7 +162,7 @@ export async function authenticateRequest(
     return null;
   }
 
-  const tokenHash = await hashSyncToken(token, env.TOKEN_PEPPER ?? '');
+  const tokenHash = await hashSyncToken(token, resolveTokenPepper(env));
   const row = await env.DB.prepare(
     `SELECT id, user_id, revoked_at
      FROM user_devices

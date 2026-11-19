@@ -22,10 +22,18 @@ export interface UserSettings {
   semesterStartDate?: string;
   desktopScheduleMode?: DesktopScheduleMode;
   universityProfile?: StudentSelection;
+  /** Selected live DVVS elective keys (e.g. `el_...`) for synced schedules */
+  selectedElectives?: string[];
+  /** Selected numbered specialization/department track (e.g. 1 or 2) */
+  selectedTrack?: number;
 }
 
-export type ResolvedUserSettings = Required<Omit<UserSettings, 'universityProfile'>> & {
+export type ResolvedUserSettings = Required<
+  Omit<UserSettings, 'universityProfile' | 'selectedElectives' | 'selectedTrack'>
+> & {
   universityProfile?: StudentSelection;
+  selectedElectives?: string[];
+  selectedTrack?: number;
 };
 
 export interface Lesson {
@@ -40,7 +48,9 @@ export interface Lesson {
   weekType: WeekType;
   subgroup?: 1 | 2;
   isElective?: boolean;
-  electiveKey?: 'freelance' | 'management' | 'space';
+  electiveKey?: string;
+  trackNumber?: number;
+  groupLabel?: string;
   departments?: DepartmentType[]; // Які кафедри відвідують пару
 }
 

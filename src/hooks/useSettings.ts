@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { fetchProfileFromBackend, syncProfileToBackend } from '../services/apiClient';
 import {
   DepartmentType,
   DesktopScheduleMode,
@@ -103,6 +104,24 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
     };
   }
 
+  const selectedElectives = Array.isArray(candidate.selectedElectives)
+    ? Array.from(
+        new Set(
+          candidate.selectedElectives.filter(
+            (item): item is string => typeof item === 'string' && item.trim().length > 0
+          )
+        )
+      )
+    : undefined;
+
+  const selectedTrack =
+    typeof candidate.selectedTrack === 'number' &&
+    Number.isInteger(candidate.selectedTrack) &&
+    candidate.selectedTrack >= 1 &&
+    candidate.selectedTrack <= 20
+      ? candidate.selectedTrack
+      : undefined;
+
   return {
     subgroup,
     department,
@@ -112,7 +131,9 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
     showWeekends,
     semesterStartDate,
     desktopScheduleMode,
-    ...(universityProfile ? { universityProfile } : {}),
+    ...(universityProfile ? { universityProfile: { ...universityProfile, subgroup } } : {}),
+    ...(selectedElectives !== undefined ? { selectedElectives } : {}),
+    ...(selectedTrack !== undefined ? { selectedTrack } : {}),
   };
 }
 
@@ -135,8 +156,44 @@ export const useSettings = (): UseSettingsResult => {
     setStorageError(result.ok ? null : (result.error ?? 'unknown'));
   }, [settings]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetchProfileFromBackend()
+      .then((remote) => {
+        if (cancelled || !remote) return;
+        setSettings((prev) => {
+          if (prev.universityProfile) return prev;
+          return normalizeSettings({
+            ...prev,
+            subgroup: remote.subgroup,
+            ...(remote.department ? { department: remote.department as UserSettings['department'] } : {}),
+            electiveCourse: remote.electiveCourse as UserSettings['electiveCourse'],
+            ...(remote.selectedElectives ? { selectedElectives: remote.selectedElectives } : {}),
+            ...(remote.selectedTrack !== undefined ? { selectedTrack: remote.selectedTrack } : {}),
+            universityProfile: {
+              universityId: remote.universityId,
+              facultyId: remote.facultyId,
+              facultyName: remote.facultyName,
+              course: remote.course,
+              groupId: remote.groupId,
+              groupName: remote.groupName,
+              subgroup: remote.subgroup,
+            },
+          });
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const updateSettings = useCallback((newSettings: Partial<UserSettings>) => {
-    setSettings((prev) => normalizeSettings({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const next = normalizeSettings({ ...prev, ...newSettings });
+      void syncProfileToBackend(next).catch(() => {});
+      return next;
+    });
   }, []);
 
   const resetSettings = useCallback(() => {

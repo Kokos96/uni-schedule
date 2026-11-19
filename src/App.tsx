@@ -196,8 +196,21 @@ const AppContent: React.FC = () => {
   );
 
   const weekGrid = useMemo(
-    () => buildWeekGrid(scheduleSource.schedule, settings, weekDates, weekParity),
-    [scheduleSource.schedule, settings, weekDates, weekParity]
+    () =>
+      buildWeekGrid(
+        scheduleSource.schedule,
+        settings,
+        weekDates,
+        weekParity,
+        scheduleSource.datedLessonsByIso ?? undefined
+      ),
+    [
+      scheduleSource.schedule,
+      scheduleSource.datedLessonsByIso,
+      settings,
+      weekDates,
+      weekParity,
+    ]
   );
 
   const { liveLessonName, liveStatusLabel } = useMemo(() => {
@@ -440,6 +453,7 @@ const AppContent: React.FC = () => {
               <StatsView
                 records={records}
                 settings={settings}
+                scheduleMap={scheduleSource.scheduleMap}
                 onUpdateSettings={updateSettings}
               />
             </Suspense>
@@ -474,6 +488,9 @@ const AppContent: React.FC = () => {
                 syncError={scheduleSource.syncError}
                 onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
                 onResetBuiltinSchedule={scheduleSource.clearCachedSchedule}
+                isUsingCustomGroup={scheduleSource.isUsingCustomGroup}
+                availableElectives={scheduleSource.availableElectives}
+                availableTracks={scheduleSource.availableTracks}
               />
             </Suspense>
           )}

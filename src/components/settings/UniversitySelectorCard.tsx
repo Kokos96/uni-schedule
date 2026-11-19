@@ -70,6 +70,13 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   );
 
   useEffect(() => {
+    setSelectedUniId(resolved.universityProfile?.universityId ?? 'lnu');
+    setFacultyId(resolved.universityProfile?.facultyId ?? '1005');
+    setCourseNum(resolved.universityProfile?.course ?? 3);
+    setGroupInput(resolved.universityProfile?.groupName ?? 'ФЕП-33с');
+  }, [resolved.universityProfile]);
+
+  useEffect(() => {
     if (!adapter) return;
     let cancelled = false;
 
@@ -86,7 +93,10 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
         setLoadingGroups(true);
         setGroupsError(null);
         try {
-          const groupList = await adapter.getGroups({ course: courseNum });
+          const groupList = await adapter.getGroups({
+            facultyId: facultyId || undefined,
+            course: courseNum,
+          });
           if (!cancelled) {
             setGroups(groupList);
           }
@@ -112,7 +122,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [adapter, courseNum]);
+  }, [adapter, facultyId, courseNum]);
 
   const filteredGroups = useMemo(() => {
     const q = groupInput.trim().toLowerCase();
@@ -138,7 +148,15 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
       subgroup: resolved.subgroup,
     };
 
-    onUpdate({ universityProfile: selection });
+    const groupChanged =
+      resolved.universityProfile?.universityId !== selection.universityId ||
+      (resolved.universityProfile?.facultyId ?? '') !== (selection.facultyId ?? '') ||
+      resolved.universityProfile?.groupId !== selection.groupId;
+
+    onUpdate({
+      universityProfile: selection,
+      ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+    });
 
     if (adapter?.meta.supportStatus === 'manual_only') {
       toast.info('Обрано ручний режим для іншого університету');
@@ -156,7 +174,11 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   };
 
   const handleResetBuiltin = () => {
-    onUpdate({ universityProfile: undefined });
+    onUpdate({
+      universityProfile: undefined,
+      selectedElectives: undefined,
+      selectedTrack: undefined,
+    });
     onResetBuiltinSchedule?.();
     setSelectedUniId('lnu');
     setFacultyId('1005');
@@ -217,7 +239,12 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           <select
             id="uni-select"
             value={selectedUniId}
-            onChange={(e) => setSelectedUniId(e.target.value)}
+            onChange={(e) => {
+              setSelectedUniId(e.target.value);
+              setFacultyId('');
+              setGroupInput('');
+              setGroups([]);
+            }}
             className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs font-medium text-ink focus:border-amber focus:outline-none"
           >
             {universities.map((u) => (
@@ -249,7 +276,10 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                 <select
                   id="uni-faculty"
                   value={facultyId}
-                  onChange={(e) => setFacultyId(e.target.value)}
+                  onChange={(e) => {
+                    setFacultyId(e.target.value);
+                    setGroupInput('');
+                  }}
                   className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
                 >
                   {faculties.map((f) => (

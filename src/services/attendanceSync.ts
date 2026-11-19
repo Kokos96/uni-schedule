@@ -1,6 +1,10 @@
 import type { AttendanceRecord, AttendanceStatus } from '../types';
 import { readStorage, writeStorage } from '../utils/storage';
-import { ensureRegisteredDevice, getApiBaseUrl } from './apiClient';
+import {
+  clearStoredDeviceAuth,
+  ensureRegisteredDevice,
+  getApiBaseUrl,
+} from './apiClient';
 
 export type SyncAttendanceStatus = 'attended' | 'absent' | 'excused' | 'unmarked';
 
@@ -90,7 +94,8 @@ export function mergeAttendanceWithRemote(
     const current = map.get(key);
     const remoteHasNewerVersion =
       typeof remote.serverVersion === 'number' &&
-      (current?.serverVersion === undefined || remote.serverVersion >= current.serverVersion);
+      typeof current?.serverVersion === 'number' &&
+      remote.serverVersion > current.serverVersion;
     if (!current || remoteHasNewerVersion || remote.updatedAt >= current.updatedAt) {
       map.set(key, {
         status: toLocalStatus(remote.status),
@@ -168,6 +173,9 @@ export async function syncAttendanceWithServer(
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearStoredDeviceAuth();
+    }
     return { synced: false, records: [...localRecords] };
   }
 

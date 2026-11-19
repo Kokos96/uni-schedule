@@ -3,11 +3,19 @@
  * Zero Node.js dependencies — runs natively in Cloudflare Workers and modern JS runtimes.
  */
 
+export interface PushAction {
+  action: string;
+  title: string;
+}
+
 export interface PushPayload {
   title: string;
   body: string;
   tag?: string;
   url?: string;
+  actions?: PushAction[];
+  ttlSeconds?: number;
+  urgency?: 'very-low' | 'low' | 'normal' | 'high';
 }
 
 export interface PushSubscriptionKeys {
@@ -28,6 +36,8 @@ export interface PushSendResult {
   expired: boolean;
   retryable: boolean;
   errorMessage?: string;
+  rttMs?: number;
+  providerResponseAt?: string;
 }
 
 export function base64UrlToBytes(input: string): Uint8Array {
@@ -227,11 +237,15 @@ export async function sendWebPushOnce(
   payload: PushPayload,
   vapid: VapidConfig
 ): Promise<PushSendResult> {
+  const startedAt = Date.now();
   try {
     const [jwt, encryptedBody] = await Promise.all([
       createVapidJwt(subscription.endpoint, vapid),
       encryptWebPushPayload(payload, subscription),
     ]);
+
+    const ttl = String(payload.ttlSeconds ?? 3600);
+    const urgency = payload.urgency ?? 'normal';
 
     const res = await fetch(subscription.endpoint, {
       method: 'POST',
@@ -239,14 +253,16 @@ export async function sendWebPushOnce(
         Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
         'Content-Encoding': 'aes128gcm',
         'Content-Type': 'application/octet-stream',
-        TTL: '3600',
-        Urgency: 'normal',
+        TTL: ttl,
+        Urgency: urgency,
       },
       body: encryptedBody,
     });
+    const rttMs = Date.now() - startedAt;
+    const providerResponseAt = new Date().toISOString();
 
     if (res.status >= 200 && res.status < 300) {
-      return { ok: true, status: res.status, expired: false, retryable: false };
+      return { ok: true, status: res.status, expired: false, retryable: false, rttMs, providerResponseAt };
     }
 
     const expired = res.status === 404 || res.status === 410;
@@ -256,6 +272,8 @@ export async function sendWebPushOnce(
       status: res.status,
       expired,
       retryable,
+      rttMs,
+      providerResponseAt,
       errorMessage: `Push service HTTP ${res.status}`,
     };
   } catch (err) {
@@ -264,6 +282,8 @@ export async function sendWebPushOnce(
       status: 0,
       expired: false,
       retryable: true,
+      rttMs: Date.now() - startedAt,
+      providerResponseAt: new Date().toISOString(),
       errorMessage: err instanceof Error ? err.message.slice(0, 160) : 'Network error',
     };
   }

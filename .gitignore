@@ -17,3 +17,5 @@ dist-ssr
 *.db-shm
 .wrangler/
 workers/api/.wrangler/
+.vercel
+.env*

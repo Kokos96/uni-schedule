@@ -9,6 +9,7 @@ import {
   buildStableLessonId,
   extractDayOfWeekFromIso,
   parseRoomCodeAndBuilding,
+  stableSlug,
 } from '../normalizers/scheduleNormalizer';
 
 function decodeHtmlEntities(text: string): string {
@@ -100,10 +101,25 @@ function parseSubgroupFromGroupLabel(label: string): {
   isElective?: boolean;
 } {
   const lower = label.toLowerCase();
-  if (/підгр\.\s*1\b/.test(lower)) return { subgroup: 1 };
-  if (/підгр\.\s*2\b/.test(lower)) return { subgroup: 2 };
-  if (lower.includes('збірна')) return { isElective: true };
-  return {};
+  let subgroup: 1 | 2 | undefined;
+  if (/підгр\.\s*1\b/.test(lower)) subgroup = 1;
+  else if (/підгр\.\s*2\b/.test(lower)) subgroup = 2;
+
+  const isElective =
+    lower.includes('збірна') ||
+    lower.includes('дввс') ||
+    lower.includes('вибірков')
+      ? true
+      : undefined;
+
+  return { subgroup, isElective };
+}
+
+function parseTrackNumberFromSubject(subject: string): number | undefined {
+  const match = subject.match(/^(\d+)\.\s+\S/);
+  if (!match?.[1]) return undefined;
+  const num = Number.parseInt(match[1], 10);
+  return Number.isFinite(num) && num >= 1 && num <= 20 ? num : undefined;
 }
 
 function parseDdMmYyyyToIso(rawDate: string): string | null {
@@ -120,7 +136,7 @@ function parseDdMmYyyyToIso(rawDate: string): string | null {
  */
 export function parseLnuScheduleHtml(
   html: string,
-  selection: Pick<StudentSelection, 'groupId' | 'groupName'>,
+  selection: Pick<StudentSelection, 'groupId' | 'groupName' | 'facultyId'>,
   options?: { fetchedAt?: string; sourceUrl?: string }
 ): NormalizedSchedule {
   const warnings: string[] = [];
@@ -194,6 +210,8 @@ export function parseLnuScheduleHtml(
         const rawRoom = extractSpanText(blockHtml, 'room_name');
         const roomInfo = rawRoom ? parseRoomCodeAndBuilding(rawRoom) : undefined;
         const { subgroup, isElective } = parseSubgroupFromGroupLabel(groupLabel);
+        const trackNumber = parseTrackNumberFromSubject(subject);
+        const electiveKey = isElective ? `el_${stableSlug(subject)}` : undefined;
         const dayOfWeek = extractDayOfWeekFromIso(currentIsoDate);
 
         lessons.push({
@@ -216,8 +234,11 @@ export function parseLnuScheduleHtml(
           room: roomInfo?.code,
           building: roomInfo?.building,
           group: selection.groupName,
+          ...(groupLabel ? { groupLabel } : {}),
           subgroup,
           isElective,
+          ...(electiveKey ? { electiveKey } : {}),
+          ...(trackNumber !== undefined ? { trackNumber } : {}),
           status: 'active',
           universityId: 'lnu',
           updatedAt: fetchedAt,
@@ -235,6 +256,7 @@ export function parseLnuScheduleHtml(
   return {
     universityId: 'lnu',
     universityName: 'ЛНУ ім. Івана Франка',
+    ...(selection.facultyId ? { facultyId: selection.facultyId } : {}),
     groupId: selection.groupId,
     groupName: selection.groupName,
     fetchedAt,

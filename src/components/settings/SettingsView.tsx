@@ -37,6 +37,9 @@ export interface SettingsViewProps {
   syncError?: string | null;
   onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
+  isUsingCustomGroup?: boolean;
+  availableElectives?: Array<{ key: string; subject: string }>;
+  availableTracks?: Array<{ number: number; subjects: string[] }>;
 }
 
 const NOOP = () => {};
@@ -56,6 +59,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   syncError,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
+  isUsingCustomGroup = false,
+  availableElectives = [],
+  availableTracks = [],
 }) => {
   const { toast } = useToast();
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -91,7 +97,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <MetaChip variant="amber" mono>
-          ФЕП-33с · {resolved.department.toUpperCase()} · Підгр. {resolved.subgroup}
+          {resolved.universityProfile?.groupName || 'ФЕП-33с'} ·{' '}
+          {isUsingCustomGroup
+            ? resolved.selectedTrack
+              ? `Потік ${resolved.selectedTrack}`
+              : 'Онлайн'
+            : resolved.department.toUpperCase()}{' '}
+          · Підгр. {resolved.subgroup}
         </MetaChip>
       </div>
 
@@ -106,6 +118,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             syncError={syncError}
             onSyncGroupSchedule={onSyncGroupSchedule}
             onResetBuiltinSchedule={onResetBuiltinSchedule}
+            isUsingCustomGroup={isUsingCustomGroup}
+            availableElectives={availableElectives}
+            availableTracks={availableTracks}
           />
           <AppearanceSettingsSection
             resolved={resolved}

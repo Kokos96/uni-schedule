@@ -1,4 +1,5 @@
 import {
+  clearStoredDeviceAuth,
   ensureRegisteredDevice,
   getApiBaseUrl,
   getStoredDeviceAuth,
@@ -80,16 +81,16 @@ export async function subscribeDeviceToPush(): Promise<PushSubscription> {
     throw new Error('Цей браузер не підтримує Web Push Notifications.');
   }
 
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    throw new Error('Дозвіл на сповіщення не надано.');
-  }
-
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) {
     throw new Error(
       'Не налаштовано VITE_API_BASE_URL (серверний API Cloudflare Worker).'
     );
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Дозвіл на сповіщення не надано.');
   }
 
   const vapidRes = await fetch(`${apiBaseUrl}/api/push/vapid-public-key`);
@@ -125,6 +126,9 @@ export async function subscribeDeviceToPush(): Promise<PushSubscription> {
   });
 
   if (!saveRes.ok) {
+    if (saveRes.status === 401) {
+      clearStoredDeviceAuth();
+    }
     throw new Error(`Не вдалося зберегти підписку на сервері (HTTP ${saveRes.status})`);
   }
 

@@ -86,7 +86,10 @@ export async function syncProfileToBackend(
       groupId: settings.universityProfile.groupId,
       groupName: settings.universityProfile.groupName,
       subgroup: settings.subgroup,
+      department: settings.department,
       electiveCourse: settings.electiveCourse,
+      selectedElectives: settings.selectedElectives ?? [],
+      selectedTrack: settings.selectedTrack ?? null,
       timezone,
     }),
   });
@@ -97,4 +100,41 @@ export async function syncProfileToBackend(
   }
 
   return res.ok;
+}
+
+export interface RemoteStudentProfile {
+  universityId: string;
+  facultyId?: string;
+  facultyName?: string;
+  course?: number;
+  groupId: string;
+  groupName: string;
+  subgroup: 1 | 2;
+  department?: string;
+  electiveCourse: string;
+  selectedElectives?: string[];
+  selectedTrack?: number;
+}
+
+export async function fetchProfileFromBackend(): Promise<RemoteStudentProfile | null> {
+  const apiBaseUrl = getApiBaseUrl();
+  const auth = getStoredDeviceAuth();
+  if (!apiBaseUrl || !auth?.syncToken) {
+    return null;
+  }
+
+  const res = await fetch(`${apiBaseUrl}/api/profile`, {
+    headers: { Authorization: `Bearer ${auth.syncToken}` },
+  });
+
+  if (res.status === 401) {
+    clearStoredDeviceAuth();
+    return null;
+  }
+  if (!res.ok) {
+    return null;
+  }
+
+  const data = (await res.json()) as { profile?: RemoteStudentProfile };
+  return data.profile ?? null;
 }
