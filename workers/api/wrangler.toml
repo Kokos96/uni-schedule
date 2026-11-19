@@ -16,3 +16,21 @@ binding = "DB"
 database_name = "uni-schedule-db"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 migrations_dir = "migrations"
+
+[env.staging]
+name = "uni-schedule-staging"
+workers_dev = true
+
+[env.staging.vars]
+ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:4173,https://uni-schedule-git-feat-final-hardening.vercel.app"
+SCHEDULE_CACHE_TTL_SECONDS = "21600"
+GROUPS_CACHE_TTL_SECONDS = "86400"
+
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "uni-schedule-staging-db"
+database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+migrations_dir = "migrations"
