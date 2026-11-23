@@ -181,7 +181,7 @@ export async function handleGetGroups(
           );
         }
       } else {
-        const capped = upstreamGroups.slice(0, 1500);
+        const capped = upstreamGroups.slice(0, 5000);
         const statements = capped.map((g) =>
           env.DB.prepare(
             `INSERT INTO university_groups (
