@@ -62,6 +62,7 @@ export interface ScheduleViewProps {
   onResetToToday: () => void;
   lessons: Lesson[];
   dateAvailability?: ScheduleDateAvailability;
+  needsElectiveSelection?: boolean;
   todayLessons?: Lesson[];
   currentPair: CurrentPairState;
   settings: ResolvedUserSettings;
@@ -107,6 +108,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onResetToToday,
   lessons,
   dateAvailability = 'loaded',
+  needsElectiveSelection = false,
   todayLessons,
   currentPair,
   settings,
@@ -252,30 +254,45 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               )
             }
             showUnderline
-            title={unavailable ? 'Розклад недоступний' : isWeekend ? 'Вихідний день' : 'Пар немає'}
+            title={
+              unavailable
+                ? 'Розклад недоступний'
+                : needsElectiveSelection && !isWeekend
+                  ? 'Потрібно обрати ДВВС'
+                  : isWeekend
+                    ? 'Вихідний день'
+                    : 'Пар немає'
+            }
             description={
               dateAvailability === 'outside_coverage'
                 ? 'Ця дата поза завантаженим періодом. Оновіть розклад групи в налаштуваннях.'
                 : dateAvailability === 'not_loaded'
-                ? 'Розклад обраної групи ще не завантажено. Відкрийте налаштування та синхронізуйте його.'
-              : isWeekend
-                ? 'Час перепочити або спокійно підготуватися до наступного тижня.'
-                : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
+                  ? 'Розклад обраної групи ще не завантажено. Відкрийте налаштування та синхронізуйте його.'
+                  : needsElectiveSelection && !isWeekend
+                    ? 'У завантаженому розкладі знайдено вибіркові дисципліни (ДВВС), але жодна ще не обрана.'
+                    : isWeekend
+                      ? 'Час перепочити або спокійно підготуватися до наступного тижня.'
+                      : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
             }
             action={
-              !isToday
+              needsElectiveSelection && !unavailable && onNavigateToSettings
                 ? {
-                    label: 'Повернутися на сьогодні',
-                    onClick: onResetToToday,
-                    icon: <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" />,
+                    label: 'Обрати ДВВС в Опціях',
+                    onClick: onNavigateToSettings,
                   }
-                : onNavigateToDeadlines
+                : !isToday
                   ? {
-                      label: 'Переглянути дедлайни',
-                      onClick: onNavigateToDeadlines,
-                      icon: <ArrowRight className="h-3.5 w-3.5" weight="regular" />,
+                      label: 'Повернутися на сьогодні',
+                      onClick: onResetToToday,
+                      icon: <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" />,
                     }
-                  : undefined
+                  : onNavigateToDeadlines
+                    ? {
+                        label: 'Переглянути дедлайни',
+                        onClick: onNavigateToDeadlines,
+                        icon: <ArrowRight className="h-3.5 w-3.5" weight="regular" />,
+                      }
+                    : undefined
             }
           />
         </GlassCard>

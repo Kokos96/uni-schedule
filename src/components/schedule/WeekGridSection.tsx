@@ -21,6 +21,8 @@ export interface WeekGridSectionProps {
   teachersMap: Map<string, Teacher>;
   classroomsMap: Map<string, Classroom>;
   weekParity: WeekParity;
+  needsElectiveSelection?: boolean;
+  onNavigateToSettings?: () => void;
   selectedIso: string;
   todayIso: string;
   isToday: boolean;
@@ -40,6 +42,8 @@ export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
   teachersMap,
   classroomsMap,
   weekParity,
+  needsElectiveSelection = false,
+  onNavigateToSettings,
   selectedIso,
   todayIso,
   isToday,
@@ -127,6 +131,8 @@ export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
       >
         <WeekGrid
           weekGrid={weekGrid}
+          needsElectiveSelection={needsElectiveSelection}
+          onNavigateToSettings={onNavigateToSettings}
           teachersMap={teachersMap}
           classroomsMap={classroomsMap}
           selectedIso={selectedIso}

@@ -139,6 +139,8 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
   getNoteCountForLesson,
   onOpenNotes,
   onSelectDate,
+  needsElectiveSelection = false,
+  onNavigateToSettings,
 }) => {
   const [activeCell, setActiveCell] = useState<{
     lesson: Lesson;
