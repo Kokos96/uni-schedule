@@ -21,25 +21,29 @@ const LNU_TIMETABLE_URL = 'https://dekanat.lnu.edu.ua/cgi-bin/timetable.cgi';
 const DEFAULT_MEMORY_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const LNU_DEFAULT_FACULTIES: Faculty[] = [
-  { id: '1005', name: "Факультет електроніки та комп'ютерних технологій" },
-  { id: '1013', name: 'Факультет прикладної математики та інформатики' },
-  { id: '1011', name: 'Механіко-математичний факультет' },
-  { id: '1015', name: 'Фізичний факультет' },
-  { id: '1004', name: 'Економічний факультет' },
-  { id: '1019', name: 'Юридичний факультет' },
-  { id: '1007', name: 'Факультет іноземних мов' },
-  { id: '1010', name: 'Факультет міжнародних відносин' },
-  { id: '1006', name: 'Факультет журналістики' },
-  { id: '1016', name: 'Філологічний факультет' },
-  { id: '1008', name: 'Історичний факультет' },
-  { id: '1017', name: 'Філософський факультет' },
+  { id: '1021', name: 'Педагогічний фаховий коледж Львівського національного університету імені Івана Франка' },
+  { id: '1024', name: 'Загальноуніверситетські кафедри' },
+  { id: '1025', name: 'Аспірантура' },
   { id: '1001', name: 'Біологічний факультет' },
-  { id: '1018', name: 'Хімічний факультет' },
   { id: '1002', name: 'Географічний факультет' },
   { id: '1003', name: 'Геологічний факультет' },
-  { id: '1012', name: 'Факультет педагогічної освіти' },
+  { id: '1004', name: 'Економічний факультет' },
+  { id: '1005', name: "Факультет електроніки та комп'ютерних технологій" },
+  { id: '1006', name: 'Факультет журналістики' },
+  { id: '1007', name: 'Факультет іноземних мов' },
+  { id: '1008', name: 'Історичний факультет' },
   { id: '1009', name: 'Факультет культури і мистецтв' },
+  { id: '1010', name: 'Факультет міжнародних відносин' },
+  { id: '1011', name: 'Механіко-математичний факультет' },
+  { id: '1012', name: 'Факультет педагогічної освіти' },
+  { id: '1013', name: 'Факультет прикладної математики та інформатики' },
   { id: '1014', name: 'Факультет управління фінансами та бізнесу' },
+  { id: '1015', name: 'Фізичний факультет' },
+  { id: '1016', name: 'Філологічний факультет' },
+  { id: '1017', name: 'Філософський факультет' },
+  { id: '1018', name: 'Хімічний факультет' },
+  { id: '1019', name: 'Юридичний факультет' },
+  { id: '1020', name: 'Інститут післядипломної освіти та доуніверситетської підготовки' },
 ];
 
 const LNU_COURSES: Course[] = [1, 2, 3, 4, 5, 6].map((n) => ({
@@ -169,6 +173,7 @@ export class LnuAdapter implements UniversityAdapter {
     const proxy = this.proxyBaseUrl;
     if (proxy) {
       const qs = new URLSearchParams();
+      if (filter?.facultyId) qs.set('facultyId', filter.facultyId);
       if (filter?.course) qs.set('course', String(filter.course));
       const querySuffix = qs.toString() ? `?${qs.toString()}` : '';
       const res = await fetch(`${proxy}/api/universities/lnu/groups${querySuffix}`);
@@ -176,7 +181,11 @@ export class LnuAdapter implements UniversityAdapter {
         throw new Error(`Сервер API повернув помилку HTTP ${res.status}`);
       }
       const data = (await res.json()) as { groups?: Group[] };
-      return Array.isArray(data.groups) ? data.groups : [];
+      const groups = Array.isArray(data.groups) ? data.groups : [];
+      if (!filter?.facultyId) return groups;
+      return groups.filter(
+        (g) => !g.facultyId || g.facultyId === filter.facultyId
+      );
     }
 
     if (this.isBrowserWithoutProxy) {
@@ -202,10 +211,15 @@ export class LnuAdapter implements UniversityAdapter {
     }
 
     const groups = this.cachedGroups!.items;
-    if (!filter?.course) return groups;
-    return groups.filter(
-      (g) => g.course === undefined || g.course === filter.course
-    );
+    return groups.filter((g) => {
+      if (filter?.facultyId && g.facultyId && g.facultyId !== filter.facultyId) {
+        return false;
+      }
+      if (filter?.course && g.course !== undefined && g.course !== filter.course) {
+        return false;
+      }
+      return true;
+    });
   }
 
   public async getSubgroups(): Promise<Subgroup[]> {
@@ -266,6 +280,8 @@ export class LnuAdapter implements UniversityAdapter {
     const html = decodeCp1251(await res.arrayBuffer());
     return parseLnuScheduleHtml(html, selection, {
       sourceUrl: `${this.endpointUrl}?n=700`,
+      coveredFrom: formatIsoDate(addDays(today, -3)),
+      coveredTo: formatIsoDate(addDays(today, 14)),
     });
   }
 }

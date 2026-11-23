@@ -1,3 +1,12 @@
+# Release Notes — Uni Schedule `v3.5.0`
+
+Детальний опис релізу див. у [`docs/releases/v3.5.0.md`](./releases/v3.5.0.md).
+
+- **Фокус релізу:** надійність LNU-парсера, виправлення метаданих викладачів/аудиторій (`t_*`/`c_*`/`—`), коректність дат і кешу (`uni_schedule_cached_group_v2`), розділення кафедр/потоків/ДВВС, вирівнювання Push-фільтрації та міграція `0006_schedule_coverage.sql`.
+- **База даних:** перед деплоєм Worker необхідно застосувати `workers/api/migrations/0006_schedule_coverage.sql`.
+
+---
+
 # Release Notes — Uni Schedule `v3.0.0`
 
 **Версія:** `v3.0.0`  

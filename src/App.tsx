@@ -351,6 +351,8 @@ const AppContent: React.FC = () => {
     <WeekGridSection
       weekDates={weekDates}
       weekGrid={weekGrid}
+      teachersMap={scheduleSource.teachersMap}
+      classroomsMap={scheduleSource.classroomsMap}
       weekParity={weekParity}
       selectedIso={selectedIso}
       todayIso={todayIso}
@@ -415,6 +417,7 @@ const AppContent: React.FC = () => {
               onNextDay={handleNextDay}
               onResetToToday={handleResetToToday}
               lessons={selectedDayLessons}
+              dateAvailability={scheduleSource.getDateAvailability(selectedDate)}
               todayLessons={todayLessons}
               currentPair={currentPair}
               settings={settings}
@@ -491,6 +494,7 @@ const AppContent: React.FC = () => {
                 isUsingCustomGroup={scheduleSource.isUsingCustomGroup}
                 availableElectives={scheduleSource.availableElectives}
                 availableTracks={scheduleSource.availableTracks}
+                hasSubgroups={scheduleSource.hasSubgroups}
               />
             </Suspense>
           )}

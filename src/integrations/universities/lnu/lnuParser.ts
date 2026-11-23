@@ -11,16 +11,29 @@ import {
   parseRoomCodeAndBuilding,
   stableSlug,
 } from '../normalizers/scheduleNormalizer';
+import { elementText, hasClass, parseHtmlStructure, walkElements, type HtmlElement } from './htmlStructure';
+
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: ' ',
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+};
 
 function decodeHtmlEntities(text: string): string {
   return text
-    .replace(/&nbsp;|&#160;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&(?:(nbsp|amp|lt|gt|quot|apos)|#(?:x([\da-f]+)|(\d+)));/gi, (match, named, hex, dec) => {
+      if (named) {
+        return NAMED_ENTITIES[named.toLowerCase()] ?? match;
+      }
+      const code = Number.parseInt(hex ?? dec, hex ? 16 : 10);
+      if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) {
+        return '\ufffd';
+      }
+      return code === 160 ? ' ' : String.fromCodePoint(code);
+    })
     .replace(/\u00a0/g, ' ');
 }
 
@@ -87,13 +100,16 @@ export function parseLnuGroupsJson(rawJson: string): Group[] {
   return groups;
 }
 
-function extractSpanText(blockHtml: string, className: string): string {
-  const re = new RegExp(
-    `<span[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)<\\/span>`,
-    'i'
-  );
-  const match = blockHtml.match(re);
-  return match?.[1] ? stripTags(match[1]) : '';
+function spansIn(node: HtmlElement): HtmlElement[] {
+  const spans: HtmlElement[] = [];
+  walkElements(node, (element) => { if (element.tag === 'span') spans.push(element); });
+  return spans;
+}
+
+function spanText(spans: HtmlElement[], className: string): string {
+  return spans.filter((span) => hasClass(span, className))
+    .map((span) => decodeHtmlEntities(elementText(span)).replace(/\s+/g, ' ').trim())
+    .filter(Boolean).join(', ');
 }
 
 function parseSubgroupFromGroupLabel(label: string): {
@@ -115,18 +131,13 @@ function parseSubgroupFromGroupLabel(label: string): {
   return { subgroup, isElective };
 }
 
-function parseTrackNumberFromSubject(subject: string): number | undefined {
-  const match = subject.match(/^(\d+)\.\s+\S/);
-  if (!match?.[1]) return undefined;
-  const num = Number.parseInt(match[1], 10);
-  return Number.isFinite(num) && num >= 1 && num <= 20 ? num : undefined;
-}
-
 function parseDdMmYyyyToIso(rawDate: string): string | null {
   const match = rawDate.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!match) return null;
   const [, dd, mm, yyyy] = match;
-  return `${yyyy}-${mm}-${dd}`;
+  const iso = `${yyyy}-${mm}-${dd}`;
+  const date = new Date(`${iso}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== iso ? null : iso;
 }
 
 /**
@@ -137,7 +148,7 @@ function parseDdMmYyyyToIso(rawDate: string): string | null {
 export function parseLnuScheduleHtml(
   html: string,
   selection: Pick<StudentSelection, 'groupId' | 'groupName' | 'facultyId'>,
-  options?: { fetchedAt?: string; sourceUrl?: string }
+  options?: { fetchedAt?: string; sourceUrl?: string; coveredFrom?: string; coveredTo?: string }
 ): NormalizedSchedule {
   const warnings: string[] = [];
   const lessons: ScheduleLesson[] = [];
@@ -147,111 +158,146 @@ export function parseLnuScheduleHtml(
     throw new Error('Сервер ЛНУ повернув порожню або не-HTML відповідь');
   }
 
-  // Match either <h4>DD.MM.YYYY...</h4> or <tr>...</tr> in document order
-  const tokenRe = /<h4\b[^>]*>([\s\S]*?)<\/h4>|<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  const document = parseHtmlStructure(html);
   let currentIsoDate: string | null = null;
   let foundAnyDateHeader = false;
-  let token: RegExpExecArray | null;
+  let malformedRows = 0;
+  const seen = new Set<string>();
 
-  while ((token = tokenRe.exec(html)) !== null) {
-    if (token[1] !== undefined) {
-      const headerText = stripTags(token[1]);
-      const dateMatch = headerText.match(/(\d{2}\.\d{2}\.\d{4})/);
-      if (dateMatch?.[1]) {
-        const iso = parseDdMmYyyyToIso(dateMatch[1]);
-        if (iso) {
-          currentIsoDate = iso;
-          foundAnyDateHeader = true;
+  const visitScheduleNodes = (node: HtmlElement): void => {
+    for (const element of node.children) {
+      if (typeof element === 'string') continue;
+      if (element.tag === 'thead') continue;
+
+      if (element.tag === 'h4') {
+        const headerText = decodeHtmlEntities(elementText(element)).trim();
+        const isRangeTitle =
+          /^розклад\s+(?:групи|викладача|занять)/i.test(headerText) ||
+          /\bз\s+\d{2}\.\d{2}\.\d{4}\s+по\s+\d{2}\.\d{2}\.\d{4}\b/i.test(headerText);
+        if (!isRangeTitle) {
+          const dateMatch = headerText.match(/(\d{2}\.\d{2}\.\d{4})/);
+          if (dateMatch?.[1]) {
+            const iso = parseDdMmYyyyToIso(dateMatch[1]);
+            if (iso) {
+              currentIsoDate = iso;
+              foundAnyDateHeader = true;
+            }
+          }
         }
-      }
-      continue;
-    }
-
-    if (token[2] !== undefined && currentIsoDate) {
-      const rowHtml = token[2];
-      const tdMatches = Array.from(
-        rowHtml.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)
-      );
-      if (tdMatches.length !== 3) continue;
-
-      const pairNumRaw = stripTags(tdMatches[0]?.[1] ?? '');
-      const pairNumber = Number.parseInt(pairNumRaw, 10);
-      if (!Number.isFinite(pairNumber) || pairNumber < 1 || pairNumber > 12) {
         continue;
       }
 
-      const timeCellHtml = tdMatches[1]?.[1] ?? '';
-      const timeMatches = stripTags(timeCellHtml).match(/\d{2}:\d{2}/g);
-      if (!timeMatches || timeMatches.length < 2) continue;
-      const startTime = timeMatches[0]!;
-      const endTime = timeMatches[1]!;
+      if (element.tag === 'tr' && currentIsoDate) {
+        const cells = element.children.filter((child): child is HtmlElement =>
+          typeof child !== 'string' && (child.tag === 'td' || child.tag === 'th'));
+        if (cells.length < 3 || cells.every((cell) => cell.tag === 'th')) continue;
 
-      const detailsHtml = tdMatches[2]?.[1] ?? '';
-      if (!detailsHtml.includes('p_name')) continue;
+        const pairNumRaw = decodeHtmlEntities(elementText(cells[0]!));
+        const pairNumber = Number.parseInt(pairNumRaw, 10);
+        if (!Number.isFinite(pairNumber) || pairNumber < 1 || pairNumber > 12) {
+          malformedRows += 1;
+          continue;
+        }
 
-      // Split cell by `.p_name` occurrence so missing optional spans in one entry
-      // never misalign fields of subsequent entries in the same time slot.
-      const pNameStarts = Array.from(
-        detailsHtml.matchAll(/<span[^>]*class=["'][^"']*\bp_name\b[^"']*["'][^>]*>/gi)
-      ).map((m) => m.index ?? 0);
+        const timeMatches = decodeHtmlEntities(elementText(cells[1]!)).match(/\d{2}:\d{2}/g);
+        if (!timeMatches || timeMatches.length < 2) { malformedRows += 1; continue; }
+        const startTime = timeMatches[0]!;
+        const endTime = timeMatches[1]!;
 
-      for (let i = 0; i < pNameStarts.length; i += 1) {
-        const startIdx = pNameStarts[i]!;
-        const endIdx =
-          i + 1 < pNameStarts.length ? pNameStarts[i + 1]! : detailsHtml.length;
-        const blockHtml = detailsHtml.slice(startIdx, endIdx);
+        const detailSpans = cells.slice(2).flatMap(spansIn);
+        if (detailSpans.length === 0) continue;
+        const blocks: HtmlElement[][] = [];
+        for (const span of detailSpans) {
+          if (hasClass(span, 'p_name')) blocks.push([]);
+          if (blocks.length > 0) blocks[blocks.length - 1]!.push(span);
+        }
+        for (const block of blocks) {
+          const subject = spanText(block, 'p_name');
+          if (!subject) { malformedRows += 1; continue; }
 
-        const subject = extractSpanText(blockHtml, 'p_name');
-        if (!subject) continue;
+          const lessonType = spanText(block, 'p_type_name') || 'Л';
+          const teacher = spanText(block, 't_name') || undefined;
+          const groupLabel = spanText(block, 'gr2_name');
+          const rawRoom = spanText(block, 'room_name');
+          const roomInfo = rawRoom ? parseRoomCodeAndBuilding(rawRoom) : undefined;
+          const { subgroup, isElective } = parseSubgroupFromGroupLabel(groupLabel);
+          const electiveKey = isElective ? `el_${stableSlug(subject)}` : undefined;
+          const dayOfWeek = extractDayOfWeekFromIso(currentIsoDate);
 
-        const lessonType = extractSpanText(blockHtml, 'p_type_name') || 'Л';
-        const teacher = extractSpanText(blockHtml, 't_name') || undefined;
-        const groupLabel = extractSpanText(blockHtml, 'gr2_name');
-        const rawRoom = extractSpanText(blockHtml, 'room_name');
-        const roomInfo = rawRoom ? parseRoomCodeAndBuilding(rawRoom) : undefined;
-        const { subgroup, isElective } = parseSubgroupFromGroupLabel(groupLabel);
-        const trackNumber = parseTrackNumberFromSubject(subject);
-        const electiveKey = isElective ? `el_${stableSlug(subject)}` : undefined;
-        const dayOfWeek = extractDayOfWeekFromIso(currentIsoDate);
+          const dedupeKey = [currentIsoDate, pairNumber, subject, lessonType, subgroup, groupLabel, teacher, rawRoom].join('|');
+          if (seen.has(dedupeKey)) continue;
+          seen.add(dedupeKey);
 
-        lessons.push({
-          id: buildStableLessonId({
-            universityId: 'lnu',
-            groupId: selection.groupId,
+          lessons.push({
+            id: buildStableLessonId({
+              universityId: 'lnu',
+              groupId: selection.groupId,
+              dayOfWeek,
+              pairNumber,
+              subject,
+              subgroup,
+            }),
+            date: currentIsoDate,
             dayOfWeek,
-            pairNumber,
+            number: pairNumber,
+            startTime,
+            endTime,
             subject,
+            lessonType,
+            teacher,
+            room: roomInfo?.code,
+            building: roomInfo?.building,
+            group: selection.groupName,
+            ...(groupLabel ? { groupLabel } : {}),
             subgroup,
-          }),
-          date: currentIsoDate,
-          dayOfWeek,
-          number: pairNumber,
-          startTime,
-          endTime,
-          subject,
-          lessonType,
-          teacher,
-          room: roomInfo?.code,
-          building: roomInfo?.building,
-          group: selection.groupName,
-          ...(groupLabel ? { groupLabel } : {}),
-          subgroup,
-          isElective,
-          ...(electiveKey ? { electiveKey } : {}),
-          ...(trackNumber !== undefined ? { trackNumber } : {}),
-          status: 'active',
-          universityId: 'lnu',
-          updatedAt: fetchedAt,
-        });
+            isElective,
+            ...(electiveKey ? { electiveKey } : {}),
+            status: 'active',
+            universityId: 'lnu',
+            updatedAt: fetchedAt,
+          });
+        }
+        continue;
       }
+
+      visitScheduleNodes(element);
     }
-  }
+  };
+
+  visitScheduleNodes(document);
 
   if (!foundAnyDateHeader) {
-    warnings.push(
-      'У відповіді ЛНУ не знайдено дат розкладу. Можливо, група не має занять на обраний період або змінилася структура сторінки.'
-    );
+    throw new Error('У відповіді ЛНУ не знайдено дат розкладу; структура сторінки невідома');
   }
+  if (malformedRows > 0) warnings.push(`Пропущено некоректних рядків розкладу: ${malformedRows}`);
+
+  // Disambiguate parallel sessions deterministically from lesson content so IDs stay stable across weeks.
+  const countsByDateId = new Map<string, number>();
+  for (const lesson of lessons) {
+    const dateKey = `${lesson.date}:${lesson.id}`;
+    countsByDateId.set(dateKey, (countsByDateId.get(dateKey) ?? 0) + 1);
+  }
+
+  const usedDateIds = new Set<string>();
+  let ambiguousIds = 0;
+  for (const lesson of lessons) {
+    const baseDateKey = `${lesson.date}:${lesson.id}`;
+    if ((countsByDateId.get(baseDateKey) ?? 0) <= 1) {
+      usedDateIds.add(baseDateKey);
+      continue;
+    }
+    const discriminator = [lesson.lessonType, lesson.groupLabel ?? '', lesson.electiveKey ?? '', lesson.teacher ?? '', lesson.room ?? ''].join('|');
+    const suffix = stableSlug(discriminator);
+    let candidate = `${lesson.id}_${suffix}`;
+    let sequence = 2;
+    while (usedDateIds.has(`${lesson.date}:${candidate}`)) {
+      candidate = `${lesson.id}_${suffix}_${sequence++}`;
+    }
+    lesson.id = candidate;
+    usedDateIds.add(`${lesson.date}:${candidate}`);
+    ambiguousIds += 1;
+  }
+  if (ambiguousIds > 0) warnings.push(`Розрізнено паралельних занять зі спільним старим ID: ${ambiguousIds}`);
 
   return {
     universityId: 'lnu',
@@ -260,6 +306,9 @@ export function parseLnuScheduleHtml(
     groupId: selection.groupId,
     groupName: selection.groupName,
     fetchedAt,
+    sourceType: 'dated',
+    ...(options?.coveredFrom ? { coveredFrom: options.coveredFrom } : {}),
+    ...(options?.coveredTo ? { coveredTo: options.coveredTo } : {}),
     sourceUrl: options?.sourceUrl,
     lessons,
     warnings,

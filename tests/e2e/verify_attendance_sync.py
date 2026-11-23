@@ -113,8 +113,49 @@ def main() -> None:
             ctx_a = browser.new_context(viewport={"width": 1280, "height": 900})
             ctx_b = browser.new_context(viewport={"width": 1280, "height": 900})
 
-            ctx_a.add_init_script(f"localStorage.setItem('uni_schedule_sync_token_v1', {json.dumps(json.dumps(auth_a))});")
-            ctx_b.add_init_script(f"localStorage.setItem('uni_schedule_sync_token_v1', {json.dumps(json.dumps(auth_b))});")
+            seed_cache = """
+            (() => {
+              const today = new Date();
+              const diffToTue = 2 - (today.getDay() === 0 ? 7 : today.getDay());
+              const tue = new Date(today);
+              tue.setDate(today.getDate() + diffToTue);
+              const iso = tue.toISOString().slice(0, 10);
+              const cached = {
+                schemaVersion: 2,
+                schedule: {
+                  universityId: 'lnu',
+                  universityName: 'ЛНУ ім. Івана Франка',
+                  facultyId: '1005',
+                  groupId: 'ФЕП-33с',
+                  groupName: 'ФЕП-33с',
+                  fetchedAt: today.toISOString(),
+                  sourceType: 'dated',
+                  coveredFrom: iso,
+                  coveredTo: iso,
+                  warnings: [],
+                  lessons: [{
+                    id: 'lnu_sync_e2e_tue_1',
+                    date: iso,
+                    dayOfWeek: 2,
+                    number: 1,
+                    startTime: '08:30',
+                    endTime: '09:50',
+                    subject: 'Тестова пара синхронізації',
+                    lessonType: 'Л',
+                    teacher: 'Тестовий Викладач',
+                    room: '301/1',
+                    universityId: 'lnu',
+                    subgroup: 1
+                  }]
+                }
+              };
+              if (!localStorage.getItem('uni_schedule_cached_group_v2')) {
+                localStorage.setItem('uni_schedule_cached_group_v2', JSON.stringify(cached));
+              }
+            })();
+            """
+            ctx_a.add_init_script(f"localStorage.setItem('uni_schedule_sync_token_v1', {json.dumps(json.dumps(auth_a))});\n{seed_cache}")
+            ctx_b.add_init_script(f"localStorage.setItem('uni_schedule_sync_token_v1', {json.dumps(json.dumps(auth_b))});\n{seed_cache}")
 
             page_a = ctx_a.new_page()
             page_b = ctx_b.new_page()

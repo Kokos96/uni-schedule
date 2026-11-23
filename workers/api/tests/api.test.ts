@@ -137,7 +137,7 @@ class MockD1Database {
           results = [{ newest_at: newest, total: rows.length }];
         } else if (normalized.startsWith('SELECT group_code, group_name, course FROM university_groups')) {
           results = Array.from(db.university_groups.values()).filter((g) => g.university_id === 'lnu');
-        } else if (normalized.startsWith('SELECT id, faculty_id, last_synced_at, content_hash FROM university_groups WHERE id = ?')) {
+        } else if (normalized.startsWith('SELECT id, faculty_id, last_synced_at, content_hash, schedule_source_type, covered_from, covered_to FROM university_groups WHERE id = ?')) {
           const id = bound[0] as string;
           const g = db.university_groups.get(id);
           if (g) results = [g];
@@ -244,7 +244,7 @@ class MockD1Database {
               created_at: prev.created_at ?? created_at,
             });
           } else {
-            const [id, university_id, faculty_id, course, group_code, group_name, content_hash, last_synced_at, created_at] = bound;
+            const [id, university_id, faculty_id, course, group_code, group_name, content_hash, last_synced_at, created_at, schedule_source_type, covered_from, covered_to] = bound;
             const prev = db.university_groups.get(id as string) ?? {};
             db.university_groups.set(id as string, {
               ...prev,
@@ -256,6 +256,9 @@ class MockD1Database {
               group_name,
               content_hash,
               last_synced_at,
+              schedule_source_type,
+              covered_from,
+              covered_to,
               created_at: prev.created_at ?? created_at,
             });
           }
@@ -589,10 +592,29 @@ describe('workers/api Stage 3 endpoints', () => {
         env
       );
       assert.equal(res1.status, 200);
-      const data1 = (await res1.json()) as { cacheHit: boolean; schedule: { lessons: unknown[] } };
+      const data1 = (await res1.json()) as {
+        cacheHit: boolean;
+        schedule: {
+          lessons: unknown[];
+          sourceType?: string;
+          coveredFrom?: string;
+          coveredTo?: string;
+        };
+      };
       assert.equal(data1.cacheHit, false);
       assert.equal(data1.schedule.lessons.length, 6);
       assert.equal(upstreamCalls, 1);
+      assert.equal(data1.schedule.sourceType, 'dated');
+      assert.match(data1.schedule.coveredFrom ?? '', /^\d{4}-\d{2}-\d{2}$/);
+      assert.match(data1.schedule.coveredTo ?? '', /^\d{4}-\d{2}-\d{2}$/);
+      assert.ok(data1.schedule.coveredFrom! <= data1.schedule.coveredTo!);
+
+      // Verify coverage fields persisted in MockD1Database (0006_schedule_coverage.sql)
+      const persistedGroup = db.university_groups.get('lnu:ФЕП-33с');
+      assert.ok(persistedGroup);
+      assert.equal(persistedGroup.schedule_source_type, data1.schedule.sourceType);
+      assert.equal(persistedGroup.covered_from, data1.schedule.coveredFrom);
+      assert.equal(persistedGroup.covered_to, data1.schedule.coveredTo);
 
       // 2nd request serves shared D1 cache (0 new upstream calls)
       const res2 = await worker.fetch(
@@ -600,10 +622,21 @@ describe('workers/api Stage 3 endpoints', () => {
         env
       );
       assert.equal(res2.status, 200);
-      const data2 = (await res2.json()) as { cacheHit: boolean; schedule: { lessons: unknown[] } };
+      const data2 = (await res2.json()) as {
+        cacheHit: boolean;
+        schedule: {
+          lessons: unknown[];
+          sourceType?: string;
+          coveredFrom?: string;
+          coveredTo?: string;
+        };
+      };
       assert.equal(data2.cacheHit, true);
       assert.equal(data2.schedule.lessons.length, 6);
       assert.equal(upstreamCalls, 1);
+      assert.equal(data2.schedule.sourceType, data1.schedule.sourceType);
+      assert.equal(data2.schedule.coveredFrom, data1.schedule.coveredFrom);
+      assert.equal(data2.schedule.coveredTo, data1.schedule.coveredTo);
 
       // Force refresh when upstream fails preserves valid cached schedule
       failUpstream = true;
@@ -612,10 +645,23 @@ describe('workers/api Stage 3 endpoints', () => {
         env
       );
       assert.equal(res3.status, 200);
-      const data3 = (await res3.json()) as { cacheHit: boolean; stale: boolean; schedule: { lessons: unknown[]; warnings: string[] } };
+      const data3 = (await res3.json()) as {
+        cacheHit: boolean;
+        stale: boolean;
+        schedule: {
+          lessons: unknown[];
+          warnings: string[];
+          sourceType?: string;
+          coveredFrom?: string;
+          coveredTo?: string;
+        };
+      };
       assert.equal(data3.stale, true);
       assert.equal(data3.schedule.lessons.length, 6);
       assert.ok(data3.schedule.warnings.length > 0);
+      assert.equal(data3.schedule.sourceType, data1.schedule.sourceType);
+      assert.equal(data3.schedule.coveredFrom, data1.schedule.coveredFrom);
+      assert.equal(data3.schedule.coveredTo, data1.schedule.coveredTo);
     } finally {
       globalThis.fetch = origFetch;
     }

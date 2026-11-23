@@ -106,31 +106,38 @@ export function toAppScheduleBundle(
   }
 
   for (const item of normalized.lessons) {
-    const teacherName = item.teacher?.trim() || 'Викладача не вказано';
-    const teacherId = `t_${stableSlug(teacherName)}`;
-    const existingTeacher = teachersById.get(teacherId);
-    if (existingTeacher) {
-      if (!existingTeacher.subjects.includes(item.subject)) {
-        existingTeacher.subjects.push(item.subject);
+    const teacherName = item.teacher?.trim() ?? '';
+    let teacherId = '';
+    if (teacherName) {
+      teacherId = `t_${stableSlug(teacherName)}`;
+      const existingTeacher = teachersById.get(teacherId);
+      if (existingTeacher) {
+        if (!existingTeacher.subjects.includes(item.subject)) {
+          existingTeacher.subjects.push(item.subject);
+        }
+      } else {
+        teachersById.set(teacherId, {
+          id: teacherId,
+          fullName: teacherName,
+          department: normalized.universityName,
+          subjects: [item.subject],
+        });
       }
-    } else {
-      teachersById.set(teacherId, {
-        id: teacherId,
-        fullName: teacherName,
-        department: normalized.universityName,
-        subjects: [item.subject],
-      });
     }
 
-    const roomInfo = parseRoomCodeAndBuilding(item.room ?? '');
-    const classroomId = `c_${stableSlug(roomInfo.code)}`;
-    if (!classroomsById.has(classroomId)) {
-      classroomsById.set(classroomId, {
-        id: classroomId,
-        code: roomInfo.code,
-        building: item.building || roomInfo.building,
-        floor: 1,
-      });
+    const rawRoom = item.room?.replace(/\u00a0/g, ' ').trim() ?? '';
+    let classroomId = '';
+    if (rawRoom) {
+      const roomInfo = parseRoomCodeAndBuilding(rawRoom);
+      classroomId = `c_${stableSlug(roomInfo.code)}`;
+      if (!classroomsById.has(classroomId)) {
+        classroomsById.set(classroomId, {
+          id: classroomId,
+          code: roomInfo.code,
+          building: item.building || roomInfo.building,
+          floor: 1,
+        });
+      }
     }
 
     const lessonId =
@@ -184,7 +191,7 @@ export function toAppScheduleBundle(
     );
     schedule.push({
       dayNumber,
-      dayName: DAY_NAMES_UA_FULL[dayNumber - 1] ?? `День ${dayNumber}`,
+      dayName: DAY_NAMES_UA_FULL[dayNumber] ?? `День ${dayNumber}`,
       lessons,
     });
   }

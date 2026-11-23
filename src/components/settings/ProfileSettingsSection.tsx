@@ -47,6 +47,14 @@ function handleRadioGroupKeyDown<T extends string>(
   }
 }
 
+function formatMissingElectiveLabel(key: string): string {
+  const cleaned = key
+    .replace(/^el_/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return cleaned || key;
+}
+
 export interface ProfileSettingsSectionProps {
   resolved: ResolvedUserSettings;
   onUpdate: (newSettings: Partial<UserSettings>) => void;
@@ -58,6 +66,8 @@ export interface ProfileSettingsSectionProps {
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
   availableTracks?: Array<{ number: number; subjects: string[] }>;
+  hasSubgroups?: boolean;
+  hasDepartments?: boolean;
 }
 
 export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
@@ -71,10 +81,20 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   isUsingCustomGroup = false,
   availableElectives = [],
   availableTracks = [],
+  hasSubgroups = true,
+  hasDepartments = false,
 }) => {
   const deptRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const electiveRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedElectives = resolved.selectedElectives ?? [];
+  const hasLiveProfile = Boolean(resolved.universityProfile);
+  const showDepartmentSelector = !hasLiveProfile || hasDepartments;
+  const showMissingDepartmentsNote =
+    hasLiveProfile && isUsingCustomGroup && !showDepartmentSelector;
+  const availableElectiveKeys = new Set(availableElectives.map((e) => e.key));
+  const savedMissingElectives = selectedElectives.filter(
+    (key) => !availableElectiveKeys.has(key)
+  );
 
   const toggleLiveElective = (key: string) => {
     const next = selectedElectives.includes(key)
@@ -95,11 +115,11 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
         onResetBuiltinSchedule={onResetBuiltinSchedule}
       />
 
-      {!isUsingCustomGroup && (
+      {showDepartmentSelector && (
         <GlassCard variant="glass" padding="lg">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
             <Buildings weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
-            <span>Твоя кафедра (Спецпотік)</span>
+            <span>Твоя кафедра</span>
           </div>
 
           <div
@@ -141,9 +161,11 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
                     >
                       {dept.label}
                     </span>
-                    <span className="mt-0.5 block text-xs leading-snug text-ink-secondary">
-                      {dept.sub}
-                    </span>
+                    {!hasLiveProfile && (
+                      <span className="mt-0.5 block text-xs leading-snug text-ink-secondary">
+                        {dept.sub}
+                      </span>
+                    )}
                   </div>
                   <span className="mt-1 shrink-0">
                     {isSelected ? (
@@ -159,6 +181,19 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
               );
             })}
           </div>
+        </GlassCard>
+      )}
+
+      {showMissingDepartmentsNote && (
+        <GlassCard variant="glass" padding="lg">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
+            <Buildings weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
+            <span>Поділ за кафедрами</span>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
+            Університетський розклад не передає кодів кафедр для автоматичного фільтрування (лише
+            потоки та підгрупи), тому всі пари групи відображаються разом.
+          </p>
         </GlassCard>
       )}
 
@@ -208,6 +243,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
         </GlassCard>
       )}
 
+      {hasSubgroups && (
       <GlassCard variant="glass" padding="lg">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
           <Users weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
@@ -227,6 +263,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
           />
         </div>
       </GlassCard>
+      )}
 
       <GlassCard variant="glass" padding="lg">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
@@ -234,8 +271,8 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
           <span>Вибіркові дисципліни (ДВВС)</span>
         </div>
 
-        {isUsingCustomGroup ? (
-          availableElectives.length > 0 ? (
+        {hasLiveProfile ? (
+          availableElectives.length > 0 || savedMissingElectives.length > 0 ? (
             <>
               <p className="mt-1 text-xs text-ink-secondary">
                 Обери лише ті ДВВС, на які ти записався(лась). Необрані вибіркові пари приховуються.
@@ -274,11 +311,33 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
                     </button>
                   );
                 })}
+                {savedMissingElectives.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={true}
+                    onClick={() => toggleLiveElective(key)}
+                    className="flex w-full items-center justify-between gap-3 bg-amber-soft/75 px-4 py-3 text-left transition-colors duration-150"
+                  >
+                    <div className="min-w-0">
+                      <span className="block text-xs font-semibold text-amber-fg">
+                        {formatMissingElectiveLabel(key)}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-ink-secondary">
+                        Збережено (поза поточним вікном розкладу)
+                      </span>
+                    </div>
+                    <StatusDot tone="amber" size="md" />
+                  </button>
+                ))}
               </div>
             </>
           ) : (
             <p className="mt-2 text-xs text-ink-secondary">
-              У завантаженому розкладі цієї групи вибіркових дисциплін (ДВВС) не виявлено.
+              {isUsingCustomGroup
+                ? 'У завантаженому розкладі цієї групи вибіркових дисциплін (ДВВС) не виявлено.'
+                : 'Отримай розклад групи, щоб побачити доступні вибіркові дисципліни.'}
             </p>
           )
         ) : (

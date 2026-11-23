@@ -55,13 +55,13 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   const [loadingGroups, setLoadingGroups] = useState(false);
 
   const [facultyId, setFacultyId] = useState<string>(
-    currentProfile?.facultyId ?? '1005'
+    currentProfile?.facultyId ?? ''
   );
-  const [courseNum, setCourseNum] = useState<number>(
-    currentProfile?.course ?? 3
+  const [courseNum, setCourseNum] = useState<number | undefined>(
+    currentProfile?.course
   );
   const [groupInput, setGroupInput] = useState<string>(
-    currentProfile?.groupName ?? 'ФЕП-33с'
+    currentProfile?.groupName ?? ''
   );
 
   const adapter = useMemo(
@@ -70,11 +70,11 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   );
 
   useEffect(() => {
-    setSelectedUniId(resolved.universityProfile?.universityId ?? 'lnu');
-    setFacultyId(resolved.universityProfile?.facultyId ?? '1005');
-    setCourseNum(resolved.universityProfile?.course ?? 3);
-    setGroupInput(resolved.universityProfile?.groupName ?? 'ФЕП-33с');
-  }, [resolved.universityProfile]);
+    setSelectedUniId(resolved.universityProfile?.universityId ?? universities[0]?.id ?? 'lnu');
+    setFacultyId(resolved.universityProfile?.facultyId ?? '');
+    setCourseNum(resolved.universityProfile?.course);
+    setGroupInput(resolved.universityProfile?.groupName ?? '');
+  }, [resolved.universityProfile, universities]);
 
   useEffect(() => {
     if (!adapter) return;
@@ -138,13 +138,16 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     }
 
     const facultyName = faculties.find((f) => f.id === facultyId)?.name;
+    const matchedGroup = groups.find(
+      (g) => g.name.toLocaleLowerCase('uk-UA') === cleanGroup.toLocaleLowerCase('uk-UA')
+    );
     const selection: StudentSelection = {
       universityId: selectedUniId,
       facultyId: facultyId || undefined,
       facultyName,
       course: courseNum,
-      groupId: cleanGroup,
-      groupName: cleanGroup,
+      groupId: matchedGroup?.id ?? cleanGroup,
+      groupName: matchedGroup?.name ?? cleanGroup,
       subgroup: resolved.subgroup,
     };
 
@@ -180,11 +183,13 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
       selectedTrack: undefined,
     });
     onResetBuiltinSchedule?.();
-    setSelectedUniId('lnu');
-    setFacultyId('1005');
-    setCourseNum(3);
-    setGroupInput('ФЕП-33с');
-    toast.info('Повернуто вбудований розклад ФЕП-33с');
+    setSelectedUniId(universities[0]?.id ?? 'lnu');
+    setFacultyId('');
+    setCourseNum(undefined);
+    setGroupInput('');
+    setGroups([]);
+    setGroupsError(null);
+    toast.info('Повернуто вбудований розклад');
   };
 
   const formattedSyncTime = lastSyncedAt
@@ -242,8 +247,10 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
             onChange={(e) => {
               setSelectedUniId(e.target.value);
               setFacultyId('');
+              setCourseNum(undefined);
               setGroupInput('');
               setGroups([]);
+              setGroupsError(null);
             }}
             className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs font-medium text-ink focus:border-amber focus:outline-none"
           >
@@ -278,10 +285,14 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                   value={facultyId}
                   onChange={(e) => {
                     setFacultyId(e.target.value);
+                    setCourseNum(undefined);
                     setGroupInput('');
+                    setGroups([]);
+                    setGroupsError(null);
                   }}
                   className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
                 >
+                  <option value="">Усі факультети</option>
                   {faculties.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.name}
@@ -299,10 +310,16 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                 </label>
                 <select
                   id="uni-course"
-                  value={courseNum}
-                  onChange={(e) => setCourseNum(Number(e.target.value))}
+                  value={courseNum ?? ''}
+                  onChange={(e) => {
+                    setCourseNum(e.target.value ? Number(e.target.value) : undefined);
+                    setGroupInput('');
+                    setGroups([]);
+                    setGroupsError(null);
+                  }}
                   className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
                 >
+                  <option value="">Усі курси</option>
                   {courses.map((c) => (
                     <option key={c.id} value={c.number}>
                       {c.label}
@@ -325,7 +342,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                 list="uni-groups-datalist"
                 value={groupInput}
                 onChange={(e) => setGroupInput(e.target.value)}
-                placeholder="Напр., ФЕП-33с"
+                placeholder="Введіть назву групи"
                 className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs font-medium text-ink placeholder:text-ink-muted focus:border-amber focus:outline-none"
               />
               <datalist id="uni-groups-datalist">

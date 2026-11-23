@@ -5,6 +5,7 @@ import {
   Export,
   Laptop,
 } from '@phosphor-icons/react';
+import { DEPARTMENT_OPTIONS } from '../../constants/profile';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
 import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { StudentSelection } from '../../integrations/universities/types';
@@ -40,6 +41,8 @@ export interface SettingsViewProps {
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
   availableTracks?: Array<{ number: number; subjects: string[] }>;
+  hasSubgroups?: boolean;
+  hasDepartments?: boolean;
 }
 
 const NOOP = () => {};
@@ -62,6 +65,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   isUsingCustomGroup = false,
   availableElectives = [],
   availableTracks = [],
+  hasSubgroups = true,
+  hasDepartments = false,
 }) => {
   const { toast } = useToast();
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -71,6 +76,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     () => getWeekParity(new Date(), resolved.semesterStartDate),
     [resolved.semesterStartDate]
   );
+
+  const departmentLabel =
+    DEPARTMENT_OPTIONS.find((d) => d.id === resolved.department)?.label ?? resolved.department;
 
   const handleResetSettings = () => {
     if (onResetSettings) {
@@ -97,13 +105,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <MetaChip variant="amber" mono>
-          {resolved.universityProfile?.groupName || 'ФЕП-33с'} ·{' '}
-          {isUsingCustomGroup
-            ? resolved.selectedTrack
-              ? `Потік ${resolved.selectedTrack}`
-              : 'Онлайн'
-            : resolved.department.toUpperCase()}{' '}
-          · Підгр. {resolved.subgroup}
+          {resolved.universityProfile
+            ? resolved.universityProfile.groupName || 'Група не обрана'
+            : 'ФЕП-33с'}{' '}
+          ·{' '}
+          {resolved.universityProfile
+            ? isUsingCustomGroup
+              ? resolved.selectedTrack && availableTracks.some((track) => track.number === resolved.selectedTrack)
+                ? `Потік ${resolved.selectedTrack}`
+                : 'Онлайн'
+              : 'Очікує синхронізації'
+            : departmentLabel}
+          {hasSubgroups ? ` · Підгр. ${resolved.subgroup}` : ''}
         </MetaChip>
       </div>
 
@@ -121,6 +134,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             isUsingCustomGroup={isUsingCustomGroup}
             availableElectives={availableElectives}
             availableTracks={availableTracks}
+            hasSubgroups={hasSubgroups}
+            hasDepartments={hasDepartments}
           />
           <AppearanceSettingsSection
             resolved={resolved}

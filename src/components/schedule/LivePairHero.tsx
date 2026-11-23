@@ -229,23 +229,23 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
           </h2>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-secondary">
-            {classroom && (
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" weight="regular" aria-hidden="true" />
                 <span>
                   <strong className="font-mono font-semibold text-ink">
-                    {classroom.code}
+                    {classroom?.code && classroom.code !== '—' && !/^c_/.test(classroom.code)
+                      ? classroom.code
+                      : 'Аудиторію не вказано'}
                   </strong>{' '}
-                  · {classroom.building}
+                  {classroom?.code && classroom.code !== '—' && !/^c_/.test(classroom.code) && classroom?.building
+                    ? `· ${classroom.building}`
+                    : null}
                 </span>
               </span>
-            )}
-            {teacher && (
               <span className="inline-flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" weight="regular" aria-hidden="true" />
-                <span>{teacher.fullName}</span>
+                <span>{teacher?.fullName && !/^t_/.test(teacher.fullName) ? teacher.fullName : 'Викладача не вказано'}</span>
               </span>
-            )}
           </div>
         </div>
 
@@ -354,19 +354,21 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
           </p>
           <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-secondary">
             <div className="flex flex-wrap items-center gap-3">
-              {classroom && (
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="h-3.5 w-3.5 text-amber-fg" weight="regular" aria-hidden="true" />
-                  <strong className="font-mono text-ink">{classroom.code}</strong>
-                  <span>· {classroom.building}</span>
+                  <strong className="font-mono text-ink">
+                    {classroom?.code && classroom.code !== '—' && !/^c_/.test(classroom.code)
+                      ? classroom.code
+                      : 'Аудиторію не вказано'}
+                  </strong>
+                  {classroom?.code && classroom.code !== '—' && !/^c_/.test(classroom.code) && classroom?.building && (
+                    <span>· {classroom.building}</span>
+                  )}
                 </span>
-              )}
-              {teacher && (
                 <span className="inline-flex items-center gap-1">
                   <User className="h-3.5 w-3.5 text-ink-muted" weight="regular" aria-hidden="true" />
-                  <span>{teacher.fullName}</span>
+                  <span>{teacher?.fullName && !/^t_/.test(teacher.fullName) ? teacher.fullName : 'Викладача не вказано'}</span>
                 </span>
-              )}
             </div>
             <button
               type="button"

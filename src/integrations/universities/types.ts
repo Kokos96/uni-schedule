@@ -81,6 +81,9 @@ export interface NormalizedSchedule {
   groupId: string;
   groupName: string;
   fetchedAt: string;
+  sourceType?: 'dated' | 'recurring';
+  coveredFrom?: string;
+  coveredTo?: string;
   sourceUrl?: string;
   lessons: ScheduleLesson[];
   warnings: string[];

@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import type {
   AttendanceStatus,
+  Classroom,
   Lesson,
   LessonType,
   Teacher,
@@ -22,11 +23,7 @@ import {
   formatShortDateUa,
   parseIsoDate,
 } from '../../utils/date';
-import {
-  getClassroomById,
-  getTeacherById,
-  type WeekGridData,
-} from '../../utils/schedule';
+import type { WeekGridData } from '../../utils/schedule';
 import { cn } from '../../utils/cn';
 import { LessonTypeBadge, MetaChip, StatusDot, type StatusDotTone } from '../ui/Badge';
 import { FreeDayIllustration } from '../ui/EditorialOrnaments';
@@ -36,6 +33,8 @@ import { ModalDrawer } from '../ui/ModalDrawer';
 
 export interface WeekGridProps {
   weekGrid: WeekGridData;
+  teachersMap: Map<string, Teacher>;
+  classroomsMap: Map<string, Classroom>;
   selectedIso: string;
   todayIso: string;
   currentLessonId?: string;
@@ -100,9 +99,21 @@ const ATTENDANCE_BUTTONS: ReadonlyArray<{
 ];
 
 function getTeacherSurname(teacher: Teacher | undefined): string {
-  if (!teacher) return '';
-  const firstToken = teacher.fullName.trim().split(/\s+/)[0];
-  return firstToken ?? '';
+  if (!teacher) return 'Викладача не вказано';
+  const trimmed = teacher.fullName.trim();
+  if (!trimmed || trimmed === 'Викладача не вказано' || /^t_/.test(trimmed)) {
+    return 'Викладача не вказано';
+  }
+  const firstToken = trimmed.split(/\s+/)[0];
+  return firstToken || 'Викладача не вказано';
+}
+
+function getClassroomCodeLabel(classroom: Classroom | undefined): string {
+  const code = classroom?.code?.trim();
+  if (!code || code === '—' || /^c_/.test(code)) {
+    return 'Аудиторію не вказано';
+  }
+  return code;
 }
 
 function formatFullDateUa(isoDate: string, fallbackDayNumber?: number): string {
@@ -116,6 +127,8 @@ function formatFullDateUa(isoDate: string, fallbackDayNumber?: number): string {
 
 export const WeekGrid: React.FC<WeekGridProps> = ({
   weekGrid,
+  teachersMap,
+  classroomsMap,
   selectedIso,
   todayIso,
   currentLessonId,
@@ -158,8 +171,8 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
 
   const activeLesson = activeCell?.lesson ?? null;
   const activeDateIso = activeCell?.dateIso ?? '';
-  const activeTeacher = activeLesson ? getTeacherById(activeLesson.teacherId) : undefined;
-  const activeClassroom = activeLesson ? getClassroomById(activeLesson.classroomId) : undefined;
+  const activeTeacher = activeLesson ? teachersMap.get(activeLesson.teacherId) : undefined;
+  const activeClassroom = activeLesson ? classroomsMap.get(activeLesson.classroomId) : undefined;
   const activeAttendance = activeLesson
     ? getAttendanceStatus(activeLesson.id, activeDateIso)
     : null;
@@ -303,8 +316,8 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                                 lesson.id,
                                 day.isoDate
                               );
-                              const teacher = getTeacherById(lesson.teacherId);
-                              const classroom = getClassroomById(lesson.classroomId);
+                              const teacher = teachersMap.get(lesson.teacherId);
+                              const classroom = classroomsMap.get(lesson.classroomId);
                               const surname = getTeacherSurname(teacher);
                               const attendanceMeta = attendance
                                 ? ATTENDANCE_DOT_META[attendance]
@@ -377,13 +390,11 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                                   {/* Bottom Row: Room Code & Teacher Surname */}
                                   <div className="mt-2 flex items-center justify-between gap-1.5 text-[10.5px] text-ink-secondary">
                                     <span className="font-mono font-medium tabular-nums text-ink shrink-0">
-                                      {classroom?.code ?? lesson.classroomId}
+                                      {getClassroomCodeLabel(classroom)}
                                     </span>
-                                    {surname && (
-                                      <span className="truncate text-right">
-                                        {surname}
-                                      </span>
-                                    )}
+                                    <span className="truncate text-right">
+                                      {surname}
+                                    </span>
                                   </div>
                                 </button>
                               );
@@ -489,7 +500,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                     Викладач
                   </span>
                   <span className="block text-sm font-medium text-ink">
-                    {activeTeacher?.fullName ?? activeLesson.teacherId}
+                    {activeTeacher?.fullName?.trim() && !/^t_/.test(activeTeacher.fullName.trim()) ? activeTeacher.fullName.trim() : 'Викладача не вказано'}
                   </span>
                   {activeTeacher?.department && (
                     <span className="block text-xs text-ink-secondary">
@@ -513,7 +524,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                   </span>
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="font-mono text-sm font-semibold text-ink tabular-nums">
-                      {activeClassroom?.code ?? activeLesson.classroomId}
+                      {getClassroomCodeLabel(activeClassroom)}
                     </span>
                     {activeClassroom && (
                       <span className="text-xs text-ink-secondary">

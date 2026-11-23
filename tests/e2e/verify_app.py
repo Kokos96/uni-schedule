@@ -608,6 +608,59 @@ def test_pwa_and_reduced_motion(browser: Browser, base_url: str, failures: list[
         context.close()
 
 
+def test_cached_live_schedule_labels(browser: Browser, base_url: str, failures: list[str]) -> None:
+    """Synthetic cache fixture: verify source metadata survives view switches and reload."""
+    print("2f) Checking cached live schedule labels through Day → Week → Day...")
+    context = browser.new_context(viewport={"width": 1280, "height": 900})
+    try:
+        context.add_init_script("""
+            const today = new Date();
+            const iso = [today.getFullYear(), String(today.getMonth()+1).padStart(2,'0'), String(today.getDate()).padStart(2,'0')].join('-');
+            const weekday = ((today.getDay() + 6) % 7) + 1;
+            const profile = { universityId: 'lnu', facultyId: '1005', groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' };
+            localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({
+              subgroup: 1, department: 'sp', electiveCourse: 'both',
+              desktopScheduleMode: 'day', universityProfile: profile,
+            }));
+            localStorage.setItem('uni_schedule_cached_group_v2', JSON.stringify({
+              schemaVersion: 2,
+              schedule: { universityId: 'lnu', universityName: 'ЛНУ', facultyId: '1005',
+                groupId: 'ФЕП-33с', groupName: 'ФЕП-33с', fetchedAt: today.toISOString(),
+                sourceType: 'dated', coveredFrom: iso, coveredTo: iso, warnings: [],
+                lessons: [{ id: 'live_label_test', date: iso, dayOfWeek: weekday, number: 1,
+                  startTime: '08:30', endTime: '09:50', subject: 'Тестова пара ЛНУ',
+                  lessonType: 'Л', teacher: 'Тестовий Викладач', room: '301/1',
+                  universityId: 'lnu' }]
+              }
+            }));
+        """)
+        page = context.new_page()
+        page.goto(base_url, wait_until="networkidle")
+        mode_group = page.get_by_role("radiogroup", name="Режим перегляду розкладу")
+        for mode in ("День", "Тиждень", "День"):
+            mode_group.get_by_role("radio", name=mode, exact=True).click()
+            expect(page.get_by_text("Тестова пара ЛНУ").first).to_be_visible()
+            expect(page.get_by_text("301/1").first).to_be_visible()
+            if mode == "Тиждень":
+                expect(page.get_by_text("Тестовий").first).to_be_visible()
+                page.get_by_role("button", name="Тестова пара ЛНУ 301/1 Тестовий").first.click()
+                expect(page.get_by_text("Тестовий Викладач").first).to_be_visible()
+                page.keyboard.press("Escape")
+            else:
+                expect(page.get_by_text("Тестовий Викладач").first).to_be_visible()
+            assert page.locator("body").get_by_text("t_").count() == 0
+            assert page.locator("body").get_by_text("c_").count() == 0
+        page.reload(wait_until="networkidle")
+        expect(page.get_by_text("Тестовий Викладач").first).to_be_visible()
+        expect(page.get_by_text("301/1").first).to_be_visible()
+        print("   PASS cached live labels through Day → Week → Day and reload")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"Cached live schedule labels: {exc}")
+        print(f"   FAIL cached live schedule labels: {exc}")
+    finally:
+        context.close()
+
+
 def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -633,6 +686,7 @@ def main() -> int:
             try:
                 test_all_viewports(browser, base_url, failures)
                 test_schedule_attendance_notes(browser, base_url, failures)
+                test_cached_live_schedule_labels(browser, base_url, failures)
                 test_deadlines_flow(browser, base_url, failures)
                 test_directory_flow(browser, base_url, failures)
                 test_stats_flow(browser, base_url, failures)

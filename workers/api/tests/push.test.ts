@@ -114,6 +114,9 @@ class MockPushD1 {
                 university_id: prof.university_id,
                 group_id: prof.group_id,
                 subgroup: prof.subgroup,
+                elective_course: prof.elective_course ?? 'freelance',
+                selected_electives: prof.selected_electives ?? null,
+                selected_track: prof.selected_track ?? null,
                 timezone: prof.timezone,
                 morning_enabled: pref.morning_enabled,
                 morning_time: pref.morning_time,
@@ -378,6 +381,14 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
     assert.equal(morning[0]?.type, 'morning');
     assert.match(morning[0]?.payload.body ?? '', /1 пар/);
 
+    const hiddenLessons: ScheduledLessonRow[] = [
+      { ...lessons[0], lesson_id: 'cancelled', status: 'cancelled' },
+      { ...lessons[0], lesson_id: 'elective', is_elective: 1, elective_key: 'el_unselected' },
+      { ...lessons[0], lesson_id: 'unknown-elective', is_elective: 1, elective_key: null },
+    ];
+    const noLessons = evaluateNotificationsForUser(baseRow, { isoDate: '2026-11-20', weekday: 5, minutesOfDay: 480 }, hiddenLessons, 0);
+    assert.match(noLessons[0]?.payload.body ?? '', /Сьогодні пар немає/);
+
     const beforeLesson = evaluateNotificationsForUser(baseRow, { isoDate: '2026-11-20', weekday: 5, minutesOfDay: 500 }, lessons, 4);
     assert.equal(beforeLesson[0]?.type, 'before_lesson');
     assert.match(beforeLesson[0]?.payload.body ?? '', /Через 10 хв/);
@@ -479,5 +490,190 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
 
     // Also verify retry helper returns retryable result cleanly
     assert.equal(typeof sendWebPushWithRetry, 'function');
+  });
+
+  it('filters lessons by elective_course fallback, week_type parity on recurring lessons, track_number, and excludes cancelled lessons', () => {
+    const baseRow: ActiveSubscriptionRow = {
+      sub_id: 'sub-filter',
+      user_id: 'u-filter',
+      device_id: 'd-filter',
+      endpoint: 'https://push.example/filter',
+      p256dh: 'p',
+      auth: 'a',
+      university_id: 'lnu',
+      group_id: 'ФЕП-33с',
+      subgroup: 1,
+      elective_course: 'management',
+      selected_electives: JSON.stringify(['el_ai']),
+      selected_track: 1,
+      timezone: 'Europe/Kyiv',
+      morning_enabled: 1,
+      morning_time: '08:00',
+      before_lesson_enabled: 0,
+      before_lesson_minutes: 10,
+      before_end_enabled: 0,
+      before_end_minutes: 10,
+      evening_enabled: 0,
+      evening_time: '20:00',
+      friday_enabled: 0,
+      friday_time: '18:00',
+    };
+
+    const lessons: ScheduledLessonRow[] = [
+      // Legacy non-el_* electives
+      {
+        lesson_id: 'l-mgmt',
+        lesson_date: '2026-09-04',
+        day_of_week: 5,
+        pair_number: 1,
+        start_time: '08:30',
+        end_time: '09:50',
+        subject: 'Менеджмент',
+        lesson_type: 'lecture',
+        teacher: null,
+        room: '101',
+        building: null,
+        subgroup: null,
+        is_elective: 1,
+        elective_key: 'management',
+      },
+      {
+        lesson_id: 'l-free',
+        lesson_date: '2026-09-04',
+        day_of_week: 5,
+        pair_number: 2,
+        start_time: '10:10',
+        end_time: '11:30',
+        subject: 'Фріланс',
+        lesson_type: 'lecture',
+        teacher: null,
+        room: '102',
+        building: null,
+        subgroup: null,
+        is_elective: 1,
+        elective_key: 'freelance',
+      },
+      // Modern el_* elective
+      {
+        lesson_id: 'l-el-ai',
+        lesson_date: '2026-09-04',
+        day_of_week: 5,
+        pair_number: 3,
+        start_time: '11:50',
+        end_time: '13:10',
+        subject: 'Штучний інтелект',
+        lesson_type: 'lecture',
+        teacher: null,
+        room: '103',
+        building: null,
+        subgroup: null,
+        is_elective: 1,
+        elective_key: 'el_ai',
+      },
+      // Cancelled lesson (must be excluded)
+      {
+        lesson_id: 'l-cancelled',
+        lesson_date: '2026-09-04',
+        day_of_week: 5,
+        pair_number: 4,
+        start_time: '13:30',
+        end_time: '14:50',
+        subject: 'Скасована пара',
+        lesson_type: 'practice',
+        teacher: null,
+        room: '104',
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+        status: 'cancelled',
+      },
+      // Recurring lessons with week_type parity
+      {
+        lesson_id: 'l-rec-num',
+        lesson_date: null,
+        day_of_week: 5,
+        pair_number: 5,
+        start_time: '15:05',
+        end_time: '16:25',
+        subject: 'Чисельник пара',
+        lesson_type: 'lecture',
+        teacher: null,
+        room: '105',
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+        week_type: 'numerator',
+      },
+      {
+        lesson_id: 'l-rec-den',
+        lesson_date: null,
+        day_of_week: 5,
+        pair_number: 6,
+        start_time: '16:40',
+        end_time: '18:00',
+        subject: 'Знаменник пара',
+        lesson_type: 'lecture',
+        teacher: null,
+        room: '106',
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+        week_type: 'denominator',
+      },
+      // Track mismatch (must be excluded when selected_track = 1)
+      {
+        lesson_id: 'l-track-2',
+        lesson_date: '2026-09-04',
+        day_of_week: 5,
+        pair_number: 7,
+        start_time: '18:10',
+        end_time: '19:30',
+        subject: 'Трек 2',
+        lesson_type: 'practice',
+        teacher: null,
+        room: '107',
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+        track_number: 2,
+      },
+    ];
+
+    // 2026-09-04 is week 0 from 2026-09-01 -> numerator week
+    // Matching lessons: l-mgmt, l-el-ai, l-rec-num (3 pairs)
+    const numMorning = evaluateNotificationsForUser(
+      baseRow,
+      { isoDate: '2026-09-04', weekday: 5, minutesOfDay: 480 },
+      lessons,
+      3
+    );
+    assert.equal(numMorning.length, 1);
+    assert.match(numMorning[0]?.payload.body ?? '', /3 пари/);
+    assert.match(numMorning[0]?.payload.body ?? '', /Менеджмент/);
+
+    // 2026-09-11 is week 1 from 2026-09-01 -> denominator week
+    // Only recurring lessons match (dated 2026-09-04 ones are included in passed `lessons` array unless filtered by SQL,
+    // so test recurring-only array to isolate denominator parity)
+    const recurringOnly = lessons.filter((l) => l.lesson_date === null);
+    const denMorning = evaluateNotificationsForUser(
+      baseRow,
+      { isoDate: '2026-09-11', weekday: 5, minutesOfDay: 480 },
+      recurringOnly,
+      1
+    );
+    assert.equal(denMorning.length, 1);
+    assert.match(denMorning[0]?.payload.body ?? '', /1 пара/);
+    assert.match(denMorning[0]?.payload.body ?? '', /Знаменник пара/);
+
+    // elective_course = 'both' includes both legacy electives (l-mgmt, l-free) + l-el-ai + l-rec-num = 4 pairs
+    const bothRow: ActiveSubscriptionRow = { ...baseRow, elective_course: 'both' };
+    const bothMorning = evaluateNotificationsForUser(
+      bothRow,
+      { isoDate: '2026-09-04', weekday: 5, minutesOfDay: 480 },
+      lessons,
+      4
+    );
+    assert.equal(bothMorning.length, 1);
+    assert.match(bothMorning[0]?.payload.body ?? '', /4 пари/);
   });
 });

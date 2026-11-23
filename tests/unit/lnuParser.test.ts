@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { encodeCp1251Component, encodeCp1251Form } from '../../src/integrations/universities/lnu/cp1251';
+import { hasClass, parseHtmlStructure } from '../../src/integrations/universities/lnu/htmlStructure';
+import { LnuAdapter } from '../../src/integrations/universities/lnu/lnuAdapter';
 import {
   inferCourseFromGroupName,
   parseLnuFacultiesHtml,
@@ -32,6 +34,8 @@ describe('integrations/universities/lnu/cp1251', () => {
 
 describe('integrations/universities/lnu/lnuParser', () => {
   const htmlFixture = fs.readFileSync(path.join(FIXTURES_DIR, 'lnu-timetable.html'), 'utf-8');
+  // Captured from official dekanat.lnu.edu.ua n=700 for ФЕП-33с, 23–29 Nov 2026.
+  const liveFixture = fs.readFileSync(path.join(FIXTURES_DIR, 'lnu-fep33s-2026-11-23-live.html'), 'utf-8');
   const groupsFixture = fs.readFileSync(path.join(FIXTURES_DIR, 'lnu-groups.json'), 'utf-8');
 
   it('extracts faculties from LNU select element excluding placeholder 0', () => {
@@ -89,17 +93,79 @@ describe('integrations/universities/lnu/lnuParser', () => {
     assert.equal(normalizeLessonType(noMetaLesson?.lessonType ?? ''), 'Практична');
   });
 
-  it('handles broken/empty HTML safely without throwing on empty schedule days', () => {
+  it('parses the captured official ФЕП-33с week without inventing tracks', () => {
+    const normalized = parseLnuScheduleHtml(liveFixture, {
+      facultyId: '1005', groupId: 'ФЕП-33с', groupName: 'ФЕП-33с',
+    }, { coveredFrom: '2026-11-23', coveredTo: '2026-11-29' });
+    assert.equal(normalized.sourceType, 'dated');
+    assert.equal(normalized.coveredFrom, '2026-11-23');
+    assert.ok(normalized.lessons.length > 20);
+    assert.ok(normalized.lessons.some((lesson) => lesson.subject === 'Freelance: робота онлайн' && lesson.isElective));
+    assert.ok(normalized.lessons.some((lesson) => lesson.subject.includes('Нереляційні та розподілені бази даних')));
+    assert.ok(normalized.lessons.some((lesson) => lesson.subject.includes('Професійний Python') && lesson.trackNumber === undefined));
+    assert.equal(normalized.lessons.some((lesson) => lesson.subject === 'Людина і космос'), false);
+    assert.equal(normalized.warnings.length, 0);
+  });
+
+  it('handles extra cells, nested labels, numeric entities and duplicate rows', () => {
+    const html = `<h4>24.11.2026</h4><table>
+      <tr><td>1</td><td>08:30<br>09:50</td><td><div><span class='p_name'>Фізика &#x1F680; &amp; математика</span><span class='p_type_name'>Л</span><span class='t_name'><b>Іван</b> Петренко</span><span class='room_name'>101/Б</span></div></td><td>Примітка</td></tr>
+      <tr><td>1</td><td>08:30<br>09:50</td><td><span class='p_name'>Фізика &#x1F680; &amp; математика</span><span class='p_type_name'>Л</span><span class='t_name'>Іван Петренко</span><span class='room_name'>101/Б</span></td></tr>
+    </table>`;
+    const normalized = parseLnuScheduleHtml(html, { groupId: 'X-1', groupName: 'X-1' });
+    assert.equal(normalized.lessons.length, 1);
+    assert.equal(normalized.lessons[0]?.subject, 'Фізика 🚀 & математика');
+    assert.equal(normalized.lessons[0]?.teacher, 'Іван Петренко');
+  });
+
+  it('keeps <script>/<style> raw, preserves inline word boundaries, and strips self-closing slash in hasClass', () => {
+    const doc = parseHtmlStructure('<div class=box/><script>if (a < b) { const x = "<h4>23.11.2026</h4>"; }</script><style>.x > .y { color: red; }</style><span class=p_name/></div>');
+    const div = doc.children.find((c) => typeof c !== 'string' && c.tag === 'div');
+    assert.ok(div && typeof div !== 'string');
+    assert.equal(hasClass(div, 'box'), true);
+
+    const html = `
+      <script>if (a < b) { document.write("<h4>29.11.2026</h4><table><tr><td>1</td></tr></table>"); }</script>
+      <style>table > tr { display: block; }</style>
+      <h4>24.11.2026 <small>Вівторок</small></h4>
+      <table>
+        <thead><tr><th>№</th><th>Час</th><th>Дисципліна</th></tr></thead>
+        <tr>
+          <td>1</td><td>08:30<br>09:50</td>
+          <td>
+            <span class="p_name">Хімія H<sub>2</sub>O &amp;lt;test&amp;gt;</span>
+            <span class="p_type_name">Л</span>
+            <span class="t_name"><b>І</b>ван Петренко</span>
+          </td>
+        </tr>
+      </table>`;
+    const normalized = parseLnuScheduleHtml(html, { groupId: 'X-1', groupName: 'X-1' });
+    assert.equal(normalized.warnings.length, 0);
+    assert.equal(normalized.lessons.length, 1);
+    assert.equal(normalized.lessons[0]?.subject, 'Хімія H2O &lt;test&gt;');
+    assert.equal(normalized.lessons[0]?.teacher, 'Іван Петренко');
+  });
+
+  it('rejects broken HTML and unrecognized upstream responses including title-only <h4> on empty schedule', () => {
     assert.throws(() =>
       parseLnuScheduleHtml('plain text not html', { groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' })
     );
 
-    const noDates = parseLnuScheduleHtml('<html><body><div>Помилка</div></body></html>', {
-      groupId: 'ФЕП-33с',
-      groupName: 'ФЕП-33с',
-    });
-    assert.equal(noDates.lessons.length, 0);
-    assert.equal(noDates.warnings.length, 1);
+    assert.throws(() => parseLnuScheduleHtml('<html><body><div>Помилка</div></body></html>', {
+      groupId: 'ФЕП-33с', groupName: 'ФЕП-33с',
+    }), /не знайдено дат/);
+
+    const titleOnlyHtml = `
+      <html><body>
+        <h4>Львівський національний університет імені Івана Франка</h4>
+        <h4 class="d-none d-sm-block">Розклад групи <a href="./timetable.cgi">ФЕП-33с</a> з 23.11.2026 по 29.11.2026</h4>
+        <div class="alert alert-info">Заняття відсутні</div>
+      </body></html>
+    `;
+    assert.throws(
+      () => parseLnuScheduleHtml(titleOnlyHtml, { groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' }),
+      /не знайдено дат/
+    );
   });
 });
 
@@ -134,7 +200,7 @@ describe('integrations/universities/normalizers', () => {
     assert.equal(parsedModified.lessons[0]?.id, idBefore);
   });
 
-  it('converts NormalizedSchedule into AppScheduleBundle for UI consumption', () => {
+  it('converts NormalizedSchedule into AppScheduleBundle with 1-indexed dayName and no fake empty directories', () => {
     const htmlFixture = fs.readFileSync(path.join(FIXTURES_DIR, 'lnu-timetable.html'), 'utf-8');
     const normalized = parseLnuScheduleHtml(htmlFixture, {
       groupId: 'ФЕП-33с',
@@ -143,8 +209,29 @@ describe('integrations/universities/normalizers', () => {
 
     const bundle = toAppScheduleBundle(normalized);
     assert.equal(bundle.schedule.length, 7);
+    assert.equal(bundle.schedule[0]?.dayNumber, 1);
+    assert.equal(bundle.schedule[0]?.dayName, 'Понеділок');
+    assert.equal(bundle.schedule[1]?.dayName, 'Вівторок');
+    assert.equal(bundle.schedule[6]?.dayNumber, 7);
+    assert.equal(bundle.schedule[6]?.dayName, 'Неділя');
+
     assert.ok(bundle.teachers.length >= 4);
     assert.ok(bundle.classrooms.length >= 3);
+    assert.equal(
+      bundle.teachers.some((t) => t.fullName === 'Викладача не вказано'),
+      false
+    );
+    assert.equal(
+      bundle.classrooms.some((c) => c.code === '—' || c.building === 'Університет'),
+      false
+    );
+
+    const noMetaLesson = bundle.datedLessonsByIso['2026-11-24']?.find(
+      (l) => l.name === 'Програмування'
+    );
+    assert.equal(noMetaLesson?.teacherId, '');
+    assert.equal(noMetaLesson?.classroomId, '');
+
     assert.equal(bundle.datedLessonsByIso['2026-11-23']?.length, 3);
     assert.equal(bundle.datedLessonsByIso['2026-11-24']?.length, 3);
   });
@@ -169,5 +256,15 @@ describe('integrations/universities/registry', () => {
         }),
       /недоступне/
     );
+  });
+
+  it('includes all 23 live LNU faculties in fallback list', async () => {
+    const adapter = new LnuAdapter('http://127.0.0.1:0/unreachable', null);
+    const faculties = await adapter.getFaculties({ forceRefresh: true });
+    assert.equal(faculties.length, 23);
+    assert.ok(faculties.some((f) => f.id === '1021'));
+    assert.ok(faculties.some((f) => f.id === '1024'));
+    assert.ok(faculties.some((f) => f.id === '1025'));
+    assert.ok(faculties.some((f) => f.id === '1020'));
   });
 });

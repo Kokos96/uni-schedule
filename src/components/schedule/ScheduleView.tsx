@@ -10,6 +10,7 @@ import {
   Columns,
 } from '@phosphor-icons/react';
 import type { CurrentPairState } from '../../hooks/useCurrentPair';
+import type { ScheduleDateAvailability } from '../../hooks/useScheduleSource';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import {
   REDUCED_MOTION_TRANSITION,
@@ -60,6 +61,7 @@ export interface ScheduleViewProps {
   onNextDay: () => void;
   onResetToToday: () => void;
   lessons: Lesson[];
+  dateAvailability?: ScheduleDateAvailability;
   todayLessons?: Lesson[];
   currentPair: CurrentPairState;
   settings: ResolvedUserSettings;
@@ -104,6 +106,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onNextDay,
   onResetToToday,
   lessons,
+  dateAvailability = 'loaded',
   todayLessons,
   currentPair,
   settings,
@@ -237,6 +240,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
   const renderDayLessons = () => {
     if (lessons.length === 0) {
+      const unavailable = dateAvailability === 'outside_coverage' || dateAvailability === 'not_loaded';
       return (
         <GlassCard variant="matte" padding="none">
           <EmptyState
@@ -248,9 +252,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               )
             }
             showUnderline
-            title={isWeekend ? 'Вихідний день' : 'Пар немає'}
+            title={unavailable ? 'Розклад недоступний' : isWeekend ? 'Вихідний день' : 'Пар немає'}
             description={
-              isWeekend
+              dateAvailability === 'outside_coverage'
+                ? 'Ця дата поза завантаженим періодом. Оновіть розклад групи в налаштуваннях.'
+                : dateAvailability === 'not_loaded'
+                ? 'Розклад обраної групи ще не завантажено. Відкрийте налаштування та синхронізуйте його.'
+              : isWeekend
                 ? 'Час перепочити або спокійно підготуватися до наступного тижня.'
                 : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
             }

@@ -4,7 +4,7 @@ import {
   CaretLeft,
   CaretRight,
 } from '@phosphor-icons/react';
-import type { AttendanceStatus, Lesson, WeekParity } from '../../types';
+import type { AttendanceStatus, Classroom, Lesson, Teacher, WeekParity } from '../../types';
 import { formatIsoDate, formatShortDateUa } from '../../utils/date';
 import type { WeekGridData } from '../../utils/schedule';
 import { GlassCard } from '../ui/GlassCard';
@@ -18,6 +18,8 @@ const WeekGrid = lazy(() =>
 export interface WeekGridSectionProps {
   weekDates: readonly Date[];
   weekGrid: WeekGridData;
+  teachersMap: Map<string, Teacher>;
+  classroomsMap: Map<string, Classroom>;
   weekParity: WeekParity;
   selectedIso: string;
   todayIso: string;
@@ -35,6 +37,8 @@ export interface WeekGridSectionProps {
 export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
   weekDates,
   weekGrid,
+  teachersMap,
+  classroomsMap,
   weekParity,
   selectedIso,
   todayIso,
@@ -123,6 +127,8 @@ export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
       >
         <WeekGrid
           weekGrid={weekGrid}
+          teachersMap={teachersMap}
+          classroomsMap={classroomsMap}
           selectedIso={selectedIso}
           todayIso={todayIso}
           currentLessonId={currentLessonId}

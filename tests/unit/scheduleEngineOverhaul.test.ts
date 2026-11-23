@@ -66,18 +66,18 @@ describe('Schedule Engine Overhaul: Groups, Subgroups, Tracks & DVVS', () => {
   const freelanceLesson = normalized.lessons.find((l) => l.subject.includes('Freelance'));
   const cyberpunkLesson = normalized.lessons.find((l) => l.subject.includes('кіберпанку'));
 
-  it('extracts electiveKey and trackNumber cleanly from LNU HTML', () => {
+  it('extracts elective keys without treating numbered subjects as tracks', () => {
     assert.ok(freelanceLesson?.isElective);
     assert.ok(freelanceLesson?.electiveKey?.startsWith('el_'));
     assert.ok(cyberpunkLesson?.isElective);
     assert.notEqual(freelanceLesson?.electiveKey, cyberpunkLesson?.electiveKey);
     assert.equal(
       normalized.lessons.find((l) => l.subject.includes("М'які"))?.trackNumber,
-      1
+      undefined
     );
     assert.equal(
       normalized.lessons.find((l) => l.subject.includes('Python'))?.trackNumber,
-      2
+      undefined
     );
   });
 
@@ -93,7 +93,7 @@ describe('Schedule Engine Overhaul: Groups, Subgroups, Tracks & DVVS', () => {
     assert.equal(filtered.some((l) => l.name.includes('інженерії даних')), true);
   });
 
-  it('separates two students in the same group with different DVVS and subgroups/tracks', () => {
+  it('separates two students in the same group with different DVVS and subgroups', () => {
     const studentA: LessonFilterProfile = {
       subgroup: 1,
       department: 'sp',
@@ -116,13 +116,13 @@ describe('Schedule Engine Overhaul: Groups, Subgroups, Tracks & DVVS', () => {
     assert.ok(resA.some((l) => l.name.includes('інженерії даних')));
     assert.ok(resB.some((l) => l.name.includes('інженерії даних')));
 
-    // Student A sees ONLY subgroup 1 / track 1 + Freelance
+    // Student A sees subgroup 1 + Freelance
     assert.ok(resA.some((l) => l.name.includes("М'які обчислення")));
     assert.equal(resA.some((l) => l.name.includes('Python')), false);
     assert.ok(resA.some((l) => l.name.includes('Freelance')));
     assert.equal(resA.some((l) => l.name.includes('кіберпанку')), false);
 
-    // Student B sees ONLY subgroup 2 / track 2 + Cyberpunk
+    // Student B sees subgroup 2 + Cyberpunk
     assert.ok(resB.some((l) => l.name.includes('Python')));
     assert.equal(resB.some((l) => l.name.includes("М'які обчислення")), false);
     assert.ok(resB.some((l) => l.name.includes('кіберпанку')));

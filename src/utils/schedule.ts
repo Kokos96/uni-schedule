@@ -193,14 +193,23 @@ export function buildWeekGrid(
   datedLessonsByIso?: Readonly<Record<string, readonly Lesson[]>>
 ): WeekGridData {
   const activeOrdersSet = new Set<number>();
+  const hasDatedLessons = Boolean(
+    datedLessonsByIso && Object.keys(datedLessonsByIso).length > 0
+  );
 
   const days: WeekGridDayColumn[] = weekDates.map((date) => {
     const isoDate = formatIsoDate(date);
     const dayNumber = getScheduleDayNumber(date);
     const dayData = schedule.find((entry) => entry.dayNumber === dayNumber);
     const dayName = dayData?.dayName ?? UK_DAY_NAMES[dayNumber] ?? '';
-    const sourceLessons = datedLessonsByIso?.[isoDate] ?? dayData?.lessons ?? [];
-    const filtered = filterLessons(sourceLessons, settings, weekParity);
+    const sourceLessons = hasDatedLessons
+      ? datedLessonsByIso![isoDate] ?? []
+      : dayData?.lessons ?? [];
+    const filtered = filterLessons(
+      sourceLessons,
+      settings,
+      hasDatedLessons ? undefined : weekParity
+    );
 
     const lessonsByOrder: Record<number, Lesson[]> = {};
     for (const lesson of filtered) {

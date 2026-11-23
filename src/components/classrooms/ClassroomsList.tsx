@@ -33,14 +33,7 @@ export interface ClassroomsListProps {
   teachersMap?: Map<string, Teacher>;
 }
 
-const BUILDING_FILTERS = [
-  'Всі',
-  'вул. Драгоманова',
-  'вул. Тарнавського',
-  'Головний корпус',
-] as const;
-
-type BuildingFilter = (typeof BUILDING_FILTERS)[number];
+type BuildingFilter = string;
 
 interface ClassroomLessonSlot {
   dayNumber: number;
@@ -58,6 +51,24 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
   const [query, setQuery] = useState('');
   const [buildingFilter, setBuildingFilter] = useState<BuildingFilter>('Всі');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const buildingFilters = useMemo(() => {
+    const buildings = new Set<string>();
+    for (const room of classrooms) {
+      const building = room.building.trim();
+      if (building) {
+        buildings.add(building);
+      }
+    }
+    return [
+      'Всі',
+      ...Array.from(buildings).sort((a, b) => a.localeCompare(b, 'uk')),
+    ];
+  }, [classrooms]);
+
+  const activeBuildingFilter = buildingFilters.includes(buildingFilter)
+    ? buildingFilter
+    : 'Всі';
 
   const lessonsByClassroomId = useMemo(() => {
     const map = new Map<string, ClassroomLessonSlot[]>();
@@ -91,7 +102,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
 
     return [...classrooms]
       .filter((room) => {
-        if (buildingFilter !== 'Всі' && room.building !== buildingFilter) {
+        if (activeBuildingFilter !== 'Всі' && room.building.trim() !== activeBuildingFilter) {
           return false;
         }
         if (!q) return true;
@@ -110,7 +121,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
         }
         return a.code.localeCompare(b.code, 'uk', { numeric: true });
       });
-  }, [classrooms, buildingFilter, query, lessonsByClassroomId]);
+  }, [classrooms, activeBuildingFilter, query, lessonsByClassroomId]);
 
   return (
     <div className="space-y-4">
@@ -147,8 +158,8 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
           role="group"
           aria-label="Фільтр за корпусом"
         >
-          {BUILDING_FILTERS.map((building) => {
-            const isActive = buildingFilter === building;
+          {buildingFilters.map((building) => {
+            const isActive = activeBuildingFilter === building;
             return (
               <button
                 key={building}
@@ -242,7 +253,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                           aria-hidden="true"
                         />
                         <h3 className="font-mono text-lg font-semibold tracking-tight text-ink">
-                          {room.code}
+                          {room.code !== '—' && !/^c_/.test(room.code) ? room.code : 'Аудиторію не вказано'}
                         </h3>
                       </div>
 
@@ -303,7 +314,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                             <ul className="space-y-2">
                               {slots.map((slot) => (
                                 <li
-                                  key={slot.lesson.id}
+                                  key={`${slot.lesson.id}:${slot.dayNumber}:${slot.lesson.type}`}
                                   className="rounded-xl border border-line/70 bg-surface/85 px-3 py-2.5"
                                 >
                                   <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
@@ -346,7 +357,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                                         className="h-3 w-3 shrink-0 text-ink-muted"
                                         aria-hidden="true"
                                       />
-                                      <span>{slot.teacher.fullName}</span>
+                                      <span>{!/^t_/.test(slot.teacher.fullName) ? slot.teacher.fullName : 'Викладача не вказано'}</span>
                                     </div>
                                   )}
                                 </li>

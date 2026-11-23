@@ -32,7 +32,13 @@ async function computeContentHash(lessons: readonly ScheduleLesson[]): Promise<s
       l.lessonType,
       l.teacher ?? '',
       l.room ?? '',
+      l.building ?? '',
       l.subgroup ?? 0,
+      l.isElective ?? false,
+      l.electiveKey ?? '',
+      l.trackNumber ?? 0,
+      l.weekType ?? '',
+      l.groupLabel ?? '',
       l.status ?? 'active',
     ])
   );
@@ -271,7 +277,8 @@ async function readCachedGroupSchedule(
   db: D1Database,
   groupKey: string,
   groupName: string,
-  fetchedAt: string
+  fetchedAt: string,
+  coverage?: { sourceType?: 'dated' | 'recurring' | null; coveredFrom?: string | null; coveredTo?: string | null }
 ): Promise<NormalizedSchedule | null> {
   const entries = await db
     .prepare(
@@ -294,9 +301,10 @@ async function readCachedGroupSchedule(
     groupId: groupName,
     groupName,
     fetchedAt,
+    sourceType: coverage?.sourceType ?? (rows.every((r) => r.lesson_date) ? 'dated' : 'recurring'),
+    ...(coverage?.coveredFrom ? { coveredFrom: coverage.coveredFrom } : {}),
+    ...(coverage?.coveredTo ? { coveredTo: coverage.coveredTo } : {}),
     lessons: rows.map((r) => {
-      const trackMatch = r.subject.match(/^(\d+)\.\s+\S/);
-      const trackNumber = trackMatch?.[1] ? Number.parseInt(trackMatch[1], 10) : undefined;
       return {
         id: r.lesson_id,
         ...(r.lesson_date ? { date: r.lesson_date } : {}),
@@ -314,7 +322,6 @@ async function readCachedGroupSchedule(
         ...(r.elective_key ? { electiveKey: r.elective_key } : {}),
         ...(r.week_type ? { weekType: r.week_type as ScheduleLesson['weekType'] } : {}),
         ...(r.group_label ? { groupLabel: r.group_label } : {}),
-        ...(trackNumber !== undefined && trackNumber >= 1 && trackNumber <= 20 ? { trackNumber } : {}),
         status: (r.status as ScheduleLesson['status']) ?? 'active',
         universityId: 'lnu',
         updatedAt: r.updated_at,
@@ -356,7 +363,9 @@ export async function handleGetSchedule(
   const cacheTtl = parsePositiveInt(env.SCHEDULE_CACHE_TTL_SECONDS, 21600);
 
   const groupRow = await env.DB.prepare(
-    `SELECT id, faculty_id, last_synced_at, content_hash FROM university_groups WHERE id = ?`
+    `SELECT id, faculty_id, last_synced_at, content_hash,
+            schedule_source_type, covered_from, covered_to
+     FROM university_groups WHERE id = ?`
   )
     .bind(groupKey)
     .first<{
@@ -364,6 +373,9 @@ export async function handleGetSchedule(
       faculty_id?: string | null;
       last_synced_at: string | null;
       content_hash: string | null;
+      schedule_source_type: 'dated' | 'recurring' | null;
+      covered_from: string | null;
+      covered_to: string | null;
     }>();
 
   const requestedFaculty = facultyId && facultyId !== '0' ? facultyId : null;
@@ -371,6 +383,11 @@ export async function handleGetSchedule(
     !requestedFaculty ||
     !groupRow?.faculty_id ||
     groupRow.faculty_id === requestedFaculty;
+  const cacheCoverage = groupRow ? {
+    sourceType: groupRow.schedule_source_type,
+    coveredFrom: groupRow.covered_from,
+    coveredTo: groupRow.covered_to,
+  } : undefined;
 
   // Serve shared group cache if fresh, faculty-compatible, and not force-refreshed
   if (!force && groupRow && facultyMatches && isFreshTimestamp(groupRow.last_synced_at, cacheTtl)) {
@@ -378,7 +395,8 @@ export async function handleGetSchedule(
       env.DB,
       groupKey,
       groupName,
-      groupRow.last_synced_at!
+      groupRow.last_synced_at!,
+      cacheCoverage
     );
     if (cached) {
       return jsonResponse(
@@ -418,7 +436,8 @@ export async function handleGetSchedule(
           env.DB,
           groupKey,
           groupName,
-          groupRow.last_synced_at
+          groupRow.last_synced_at,
+          cacheCoverage
         );
         if (staleCache) {
           staleCache.warnings.push(
@@ -441,16 +460,21 @@ export async function handleGetSchedule(
 
     const contentHash = await computeContentHash(fresh.lessons);
 
-    await env.DB.prepare(
+    // Publish cache metadata only after schedule rows have been written.
+    const publishGroupMetadata = () => env.DB.prepare(
       `INSERT INTO university_groups (
          id, university_id, faculty_id, course, group_code, group_name,
-         content_hash, last_synced_at, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         content_hash, last_synced_at, created_at,
+         schedule_source_type, covered_from, covered_to
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          faculty_id = COALESCE(excluded.faculty_id, university_groups.faculty_id),
          course = COALESCE(excluded.course, university_groups.course),
          content_hash = excluded.content_hash,
-         last_synced_at = excluded.last_synced_at`
+         last_synced_at = excluded.last_synced_at,
+         schedule_source_type = excluded.schedule_source_type,
+         covered_from = excluded.covered_from,
+         covered_to = excluded.covered_to`
     )
       .bind(
         groupKey,
@@ -461,7 +485,10 @@ export async function handleGetSchedule(
         groupName,
         contentHash,
         now,
-        now
+        now,
+        fresh.sourceType ?? 'dated',
+        fresh.coveredFrom ?? null,
+        fresh.coveredTo ?? null
       )
       .run();
 
@@ -508,6 +535,8 @@ export async function handleGetSchedule(
       }
     }
 
+    await publishGroupMetadata();
+
     await env.DB.prepare(
       `INSERT INTO schedule_sync_logs (id, group_id, status, entries_count, error_message, synced_at)
        VALUES (?, ?, 'success', ?, NULL, ?)`
@@ -535,7 +564,8 @@ export async function handleGetSchedule(
         env.DB,
         groupKey,
         groupName,
-        groupRow.last_synced_at
+          groupRow.last_synced_at,
+          cacheCoverage
       );
       if (staleCache) {
         staleCache.warnings.push(

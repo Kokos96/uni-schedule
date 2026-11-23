@@ -184,7 +184,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                           aria-hidden="true"
                         />
                         <h3 className="font-serif text-[17px] font-medium leading-snug text-ink">
-                          {teacher.fullName}
+                          {!/^t_/.test(teacher.fullName) ? teacher.fullName : 'Викладача не вказано'}
                         </h3>
                       </div>
 
@@ -244,7 +244,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                             <ul className="space-y-2">
                               {slots.map((slot) => (
                                 <li
-                                  key={slot.lesson.id}
+                                  key={`${slot.lesson.id}:${slot.dayNumber}:${slot.lesson.type}`}
                                   className="rounded-xl border border-line/70 bg-surface/85 px-3 py-2.5"
                                 >
                                   <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
@@ -290,7 +290,7 @@ export const TeachersList: React.FC<TeachersListProps> = ({
                                       <span>
                                         Ауд.{' '}
                                         <strong className="font-mono text-ink">
-                                          {slot.classroom.code}
+                                          {slot.classroom.code !== '—' && !/^c_/.test(slot.classroom.code) ? slot.classroom.code : 'Аудиторію не вказано'}
                                         </strong>{' '}
                                         · {slot.classroom.building}
                                       </span>

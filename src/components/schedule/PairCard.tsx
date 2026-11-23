@@ -102,6 +102,15 @@ export const PairCard: React.FC<PairCardProps> = ({
       : null;
 
   const hasIndicators = noteCount > 0 || Boolean(activeDeadlineLabel);
+  const classroomCode = classroom?.code?.trim();
+  const hasClassroomCode = Boolean(
+    classroomCode && classroomCode !== '—' && !/^c_/.test(classroomCode)
+  );
+  const teacherName = teacher?.fullName?.trim();
+  const displayTeacher =
+    teacherName && !/^t_/.test(teacherName)
+      ? teacherName
+      : 'Викладача не вказано';
 
   return (
     <GlassCard
@@ -160,27 +169,30 @@ export const PairCard: React.FC<PairCardProps> = ({
 
       {/* Classroom & teacher metadata */}
       <div className="mt-2.5 space-y-1.5 text-xs text-ink-secondary">
-        {classroom && (
-          <div className="flex items-center gap-2">
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" weight="regular" aria-hidden="true" />
-            <span className="min-w-0 truncate">
-              Ауд.{' '}
-              <strong className="font-mono font-semibold text-ink">
-                {classroom.code}
-              </strong>{' '}
-              <span className="text-ink-secondary">· {classroom.building}</span>
-            </span>
-          </div>
-        )}
-
-        {teacher && (
-          <div className="flex items-center gap-2">
-            <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" weight="regular" aria-hidden="true" />
-            <span className="min-w-0 truncate text-ink-secondary">
-              {teacher.fullName}
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-fg" weight="regular" aria-hidden="true" />
+          <span className="min-w-0 truncate">
+            {hasClassroomCode ? (
+              <>
+                Ауд.{' '}
+                <strong className="font-mono font-semibold text-ink">
+                  {classroomCode}
+                </strong>
+                {classroom?.building && (
+                  <span className="text-ink-secondary"> · {classroom.building}</span>
+                )}
+              </>
+            ) : (
+              <span className="text-ink-secondary">Аудиторію не вказано</span>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <User className="h-3.5 w-3.5 shrink-0 text-ink-muted" weight="regular" aria-hidden="true" />
+          <span className="min-w-0 truncate text-ink-secondary">
+            {displayTeacher}
+          </span>
+        </div>
       </div>
 
       {/* Inline note & deadline indicator pill */}

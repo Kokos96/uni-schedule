@@ -101,6 +101,7 @@ export interface ActiveSubscriptionRow {
   evening_time: string;
   friday_enabled: number;
   friday_time: string;
+  elective_course?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
 }
@@ -120,6 +121,38 @@ export interface ScheduledLessonRow {
   subgroup: number | null;
   is_elective?: number;
   elective_key?: string | null;
+  track_number?: number | null;
+  week_type?: string | null;
+  status?: string;
+}
+
+const DEFAULT_SEMESTER_START_DATE = '2026-09-01';
+const MS_PER_DAY = 86_400_000;
+
+function getUtcMondayMs(isoDate: string): number {
+  const parts = isoDate.split('-').map(Number);
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay(); // 0=Sun, 1=Mon .. 6=Sat
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  return Date.UTC(y, m - 1, d + diffToMonday);
+}
+
+/**
+ * Determine week parity ('numerator' | 'denominator') relative to `semesterStartDate`.
+ * Mirrors `getWeekParity` in `src/utils/date.ts`.
+ */
+export function getWeekParityFromIso(
+  isoDate: string,
+  semesterStartDate: string = DEFAULT_SEMESTER_START_DATE
+): 'numerator' | 'denominator' {
+  const dateMondayUtc = getUtcMondayMs(isoDate);
+  const startMondayUtc = getUtcMondayMs(semesterStartDate);
+  const diffWeeks = Math.floor((dateMondayUtc - startMondayUtc) / (7 * MS_PER_DAY));
+  const normalizedMod = ((diffWeeks % 2) + 2) % 2;
+  return normalizedMod === 0 ? 'numerator' : 'denominator';
 }
 
 function parseSelectedElectivesList(raw: string | null | undefined): string[] {
@@ -141,23 +174,49 @@ function matchesStudentLessonProfile(
     subject: string;
     is_elective?: number;
     elective_key?: string | null;
+    track_number?: number | null;
+    week_type?: string | null;
+    lesson_date?: string | null;
+    status?: string;
   },
-  row: Pick<ActiveSubscriptionRow, 'subgroup' | 'selected_electives' | 'selected_track'>
+  row: Pick<ActiveSubscriptionRow, 'subgroup' | 'elective_course' | 'selected_electives' | 'selected_track'>,
+  weekParity?: 'numerator' | 'denominator'
 ): boolean {
   if (lesson.subgroup !== null && lesson.subgroup !== row.subgroup) {
     return false;
   }
-  if (row.selected_track !== null && row.selected_track !== undefined) {
-    const trackMatch = lesson.subject.match(/^(\d+)\.\s+\S/);
-    if (trackMatch?.[1] && Number.parseInt(trackMatch[1], 10) !== row.selected_track) {
-      return false;
+  if (lesson.status === 'cancelled') return false;
+  if (
+    lesson.track_number !== undefined &&
+    lesson.track_number !== null &&
+    row.selected_track !== undefined &&
+    row.selected_track !== null &&
+    lesson.track_number !== row.selected_track
+  ) {
+    return false;
+  }
+  if (lesson.is_elective === 1) {
+    if (!lesson.elective_key) return false;
+    if (lesson.elective_key.startsWith('el_')) {
+      const selected = parseSelectedElectivesList(row.selected_electives);
+      if (!selected.includes(lesson.elective_key)) {
+        return false;
+      }
+    } else {
+      const electiveCourse = row.elective_course ?? 'freelance';
+      if (electiveCourse !== 'both' && lesson.elective_key !== electiveCourse) {
+        return false;
+      }
     }
   }
-  if (lesson.is_elective === 1 && lesson.elective_key) {
-    const selected = parseSelectedElectivesList(row.selected_electives);
-    if (!selected.includes(lesson.elective_key)) {
-      return false;
-    }
+  if (
+    weekParity &&
+    !lesson.lesson_date &&
+    lesson.week_type &&
+    lesson.week_type !== 'both' &&
+    lesson.week_type !== weekParity
+  ) {
+    return false;
   }
   return true;
 }
@@ -249,9 +308,10 @@ export function evaluateNotificationsForUser(
 ): CandidateNotification[] {
   const candidates: CandidateNotification[] = [];
 
-  // Filter lessons by student's subgroup, track, and selected DVVS electives
+  // Filter lessons by student's subgroup, track, week parity, and selected DVVS electives
+  const weekParity = getWeekParityFromIso(local.isoDate);
   const myTodayLessons = todayLessons
-    .filter((l) => matchesStudentLessonProfile(l, row))
+    .filter((l) => matchesStudentLessonProfile(l, row, weekParity))
     .sort((a, b) => a.pair_number - b.pair_number || a.start_time.localeCompare(b.start_time));
 
   // 1. Morning digest
@@ -442,7 +502,7 @@ export async function runNotificationCron(
             np.before_end_enabled, np.before_end_minutes,
             np.evening_enabled, np.evening_time,
             np.friday_enabled, np.friday_time,
-            sp.selected_electives, sp.selected_track
+            sp.elective_course, sp.selected_electives, sp.selected_track
      FROM push_subscriptions ps
      JOIN user_devices ud ON ud.id = ps.device_id AND ud.revoked_at IS NULL
      JOIN student_profiles sp ON sp.user_id = ps.user_id
@@ -460,6 +520,7 @@ export async function runNotificationCron(
   const processSubscription = async (row: ActiveSubscriptionRow) => {
     try {
       const local = getLocalDateTimeParts(nowUtc, row.timezone);
+      const todayParity = getWeekParityFromIso(local.isoDate);
       const groupKey = `${row.university_id}:${row.group_id}`;
       const dayCacheKey = `${groupKey}:${local.isoDate}`;
 
@@ -467,7 +528,7 @@ export async function runNotificationCron(
       if (!todayLessons) {
         const res = await env.DB.prepare(
           `SELECT lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time,
-                  subject, lesson_type, teacher, room, building, subgroup, is_elective, elective_key
+                  subject, lesson_type, teacher, room, building, subgroup, is_elective, elective_key, week_type, status
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date = ? OR (lesson_date IS NULL AND day_of_week = ?))`
         )
@@ -484,11 +545,13 @@ export async function runNotificationCron(
         subject: string;
         is_elective?: number;
         elective_key?: string | null;
+        week_type?: string | null;
+        status?: string;
       }> = [];
       if (local.weekday === 5 && row.friday_enabled === 1) {
         const mondayIso = addDaysToIso(local.isoDate, -4);
         const weekRes = await env.DB.prepare(
-          `SELECT lesson_id, lesson_date, subgroup, subject, is_elective, elective_key
+          `SELECT lesson_id, lesson_date, subgroup, subject, is_elective, elective_key, week_type, status
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date BETWEEN ? AND ? OR lesson_date IS NULL)`
         )
@@ -500,14 +563,16 @@ export async function runNotificationCron(
             subject: string;
             is_elective?: number;
             elective_key?: string | null;
+            week_type?: string | null;
+            status?: string;
           }>();
         weekLessons = (weekRes.results ?? []).filter((l) =>
-          matchesStudentLessonProfile(l, row)
+          matchesStudentLessonProfile(l, row, todayParity)
         );
       }
 
       const myTodayLessons = todayLessons.filter((l) =>
-        matchesStudentLessonProfile(l, row)
+        matchesStudentLessonProfile(l, row, todayParity)
       );
 
       let todaySummary: AttendanceSummaryCounts | undefined;
