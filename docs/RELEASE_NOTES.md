@@ -1,3 +1,9 @@
+# Release Notes — Uni Schedule `v3.5.1`
+
+Детальний опис див. у [`docs/releases/v3.5.1.md`](./releases/v3.5.1.md): автопідстановка префікса групи (`ІНА-34` → `ІНА-34с`), банер вибору ДВВС при порожньому `selectedElectives`, та збереження вбудованого розкладу на першому запуску.
+
+---
+
 # Release Notes — Uni Schedule `v3.5.0`
 
 Детальний опис релізу див. у [`docs/releases/v3.5.0.md`](./releases/v3.5.0.md).

@@ -161,6 +161,17 @@ export const useSettings = (): UseSettingsResult => {
     void fetchProfileFromBackend()
       .then((remote) => {
         if (cancelled || !remote) return;
+        const isDefaultUnedited =
+          remote.universityId === 'lnu' &&
+          (remote.facultyId ?? '') === '1005' &&
+          remote.groupId === 'ФЕП-33с' &&
+          !remote.department &&
+          (!remote.selectedElectives || remote.selectedElectives.length === 0) &&
+          remote.selectedTrack === undefined;
+        const hasCachedLive =
+          typeof window !== 'undefined' &&
+          window.localStorage.getItem('uni_schedule_cached_group_v2') !== null;
+        if (isDefaultUnedited && !hasCachedLive) return;
         setSettings((prev) => {
           if (prev.universityProfile) return prev;
           return normalizeSettings({

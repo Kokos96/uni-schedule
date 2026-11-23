@@ -347,9 +347,17 @@ const AppContent: React.FC = () => {
     />
   );
 
+  const needsElectiveSelection = Boolean(
+    settings.universityProfile &&
+      scheduleSource.availableElectives.length > 0 &&
+      (settings.selectedElectives?.length ?? 0) === 0
+  );
+
   const renderedWeekGrid = (
     <WeekGridSection
       weekDates={weekDates}
+      needsElectiveSelection={needsElectiveSelection}
+      onNavigateToSettings={() => handleTabChange('settings')}
       weekGrid={weekGrid}
       teachersMap={scheduleSource.teachersMap}
       classroomsMap={scheduleSource.classroomsMap}
@@ -418,6 +426,7 @@ const AppContent: React.FC = () => {
               onResetToToday={handleResetToToday}
               lessons={selectedDayLessons}
               dateAvailability={scheduleSource.getDateAvailability(selectedDate)}
+              needsElectiveSelection={needsElectiveSelection}
               todayLessons={todayLessons}
               currentPair={currentPair}
               settings={settings}

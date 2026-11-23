@@ -138,9 +138,19 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     }
 
     const facultyName = faculties.find((f) => f.id === facultyId)?.name;
-    const matchedGroup = groups.find(
-      (g) => g.name.toLocaleLowerCase('uk-UA') === cleanGroup.toLocaleLowerCase('uk-UA')
+    const lowerClean = cleanGroup.toLocaleLowerCase('uk-UA');
+    let matchedGroup = groups.find(
+      (g) => g.name.toLocaleLowerCase('uk-UA') === lowerClean
     );
+    if (!matchedGroup && groups.length > 0) {
+      const prefixMatches = groups.filter((g) =>
+        g.name.toLocaleLowerCase('uk-UA').startsWith(lowerClean)
+      );
+      if (prefixMatches.length === 1) {
+        matchedGroup = prefixMatches[0];
+        setGroupInput(matchedGroup.name);
+      }
+    }
     const selection: StudentSelection = {
       universityId: selectedUniId,
       facultyId: facultyId || undefined,
@@ -169,7 +179,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     if (onSyncGroupSchedule) {
       const ok = await onSyncGroupSchedule(selection);
       if (ok) {
-        toast.success(`Розклад групи ${cleanGroup} оновлено`);
+        toast.success(`Розклад групи ${selection.groupName} оновлено`);
       } else {
         toast.warning('Не вдалося синхронізувати розклад онлайн');
       }

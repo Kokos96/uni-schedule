@@ -43,6 +43,8 @@ export interface WeekGridProps {
   getNoteCountForLesson: (lessonId: string, dateIso: string) => number;
   onOpenNotes: (lesson: Lesson, dateIso: string) => void;
   onSelectDate: (dateIso: string) => void;
+  needsElectiveSelection?: boolean;
+  onNavigateToSettings?: () => void;
 }
 
 const STRIPE_CLASS_BY_TYPE: Record<LessonType, string> = {
@@ -150,10 +152,22 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     return (
       <GlassCard variant="matte" padding="lg">
         <EmptyState
-          title="На цей тиждень пар немає"
-          description="Оберіть інший тиждень або перевірте налаштування підгрупи та кафедри."
+          title={needsElectiveSelection ? 'Потрібно обрати ДВВС' : 'На цей тиждень пар немає'}
+          description={
+            needsElectiveSelection
+              ? 'У завантаженому розкладі знайдено вибіркові дисципліни (ДВВС), але жодна ще не обрана.'
+              : 'Оберіть інший тиждень або перевірте налаштування підгрупи та кафедри.'
+          }
           illustration={<FreeDayIllustration size={72} />}
           showUnderline
+          action={
+            needsElectiveSelection && onNavigateToSettings
+              ? {
+                  label: 'Обрати ДВВС в Опціях',
+                  onClick: onNavigateToSettings,
+                }
+              : undefined
+          }
         />
       </GlassCard>
     );
