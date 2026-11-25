@@ -5,7 +5,7 @@ import React, {Suspense,
   useMemo,
   useState, useRef } from 'react';
 import { AppShell } from './components/layout/AppShell';
-import { AppSplash } from './components/layout/AppSplash';
+import { AppSplash, getInitialLaunchPhase, type LaunchPhase } from './components/layout/AppSplash';
 import { FirstLaunchOnboarding } from './components/onboarding/FirstLaunchOnboarding';
 import { BottomNav, type TabType } from './components/layout/BottomNav';
 import { OfflineBanner } from './components/layout/OfflineBanner';
@@ -92,6 +92,7 @@ const STORAGE_ERROR_MESSAGES: Record<StorageErrorCode, string> = {
 const AppContent: React.FC = () => {
   const { toast } = useToast();
 
+  const [launchPhase, setLaunchPhase] = useState<LaunchPhase>(() => getInitialLaunchPhase());
   const [activeTab, setActiveTab] = useState<TabType>('schedule');
   const [tabDirection, setTabDirection] = useState<number>(0);
 
@@ -282,6 +283,9 @@ const AppContent: React.FC = () => {
     setActiveTab((prevTab) => {
       if (prevTab === nextTab) return prevTab;
       setTabDirection(TAB_ORDER[nextTab] > TAB_ORDER[prevTab] ? 1 : -1);
+      if (typeof window !== 'undefined' && window.scrollY > 0) {
+        window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      }
       return nextTab;
     });
   }, []);
@@ -422,8 +426,9 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      <AppSplash />
+      <AppSplash phase={launchPhase} onPhaseChange={setLaunchPhase} />
       <AppShell
+        launchRevealed={launchPhase !== 'intro'}
         currentTab={activeTab}
         onTabChange={handleTabChange}
         settings={settings}

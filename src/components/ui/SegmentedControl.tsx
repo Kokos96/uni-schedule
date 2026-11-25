@@ -1,4 +1,4 @@
-import React, { useId, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '../../utils/cn';
 
@@ -20,20 +20,54 @@ export interface SegmentedControlProps<T extends string> {
   className?: string;
 }
 
+const INDICATOR_SPRING = {
+  type: 'spring' as const,
+  stiffness: 420,
+  damping: 32,
+  mass: 0.8,
+};
+
 export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
-  layoutId,
   ariaLabel,
   size = 'md',
   fullWidth = false,
   className,
 }: SegmentedControlProps<T>) {
-  const generatedId = useId();
-  const resolvedLayoutId = layoutId ?? `segmented-${generatedId}`;
   const prefersReducedMotion = useReducedMotion();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
+  const hasMeasuredRef = useRef(false);
+
+  const selectedIndex = options.findIndex((opt) => opt.value === value);
+
+  const measureIndicator = useCallback(() => {
+    const activeBtn = selectedIndex >= 0 ? buttonRefs.current[selectedIndex] : null;
+    if (!activeBtn) {
+      setIndicator(null);
+      return;
+    }
+    const next = { left: activeBtn.offsetLeft, width: activeBtn.offsetWidth };
+    setIndicator((prev) =>
+      prev && prev.left === next.left && prev.width === next.width ? prev : next
+    );
+    hasMeasuredRef.current = true;
+  }, [selectedIndex]);
+
+  useLayoutEffect(() => {
+    measureIndicator();
+  }, [measureIndicator, options.length, size, fullWidth]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measureIndicator());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measureIndicator]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
     const enabledIndices = options
@@ -70,14 +104,30 @@ export function SegmentedControl<T extends string>({
 
   return (
     <div
+      ref={containerRef}
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex max-w-full items-center rounded-xl border border-line bg-surface-elevated/90 p-1 select-none',
+        'relative inline-flex max-w-full items-center rounded-xl border border-line bg-surface-elevated/90 p-1 select-none',
         fullWidth && 'w-full',
         className
       )}
     >
+      {indicator && (
+        <motion.span
+          aria-hidden="true"
+          data-testid="segmented-indicator"
+          initial={false}
+          animate={{ x: indicator.left - 4, width: indicator.width }}
+          transition={
+            prefersReducedMotion || !hasMeasuredRef.current
+              ? { duration: 0.01 }
+              : INDICATOR_SPRING
+          }
+          className="pointer-events-none absolute top-1 bottom-1 left-1 rounded-lg border border-line-strong/40 bg-surface shadow-elevated"
+        />
+      )}
+
       {options.map((option, index) => {
         const isSelected = option.value === value;
 
@@ -99,7 +149,7 @@ export function SegmentedControl<T extends string>({
             }}
             onKeyDown={(e) => handleKeyDown(e, index)}
             className={cn(
-              'relative inline-flex min-w-0 items-center justify-center gap-1 xs:gap-1.5 rounded-lg font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
+              'relative z-10 inline-flex min-w-0 items-center justify-center gap-1 xs:gap-1.5 rounded-lg font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
               fullWidth && 'flex-1',
               size === 'sm'
                 ? 'min-h-[30px] px-2 xs:px-2.5 text-[11px] xs:text-xs'
@@ -108,21 +158,12 @@ export function SegmentedControl<T extends string>({
               option.disabled && 'cursor-not-allowed opacity-45'
             )}
           >
-            {isSelected && (
-              <motion.span
-                layoutId={resolvedLayoutId}
-                transition={
-                  prefersReducedMotion
-                    ? { duration: 0.12 }
-                    : { type: 'spring', stiffness: 420, damping: 32, mass: 0.8 }
-                }
-                className="absolute inset-0 rounded-lg border border-line-strong/40 bg-surface shadow-elevated"
-                aria-hidden="true"
-              />
-            )}
             <span className="relative z-10 inline-flex min-w-0 max-w-full items-center gap-1 xs:gap-1.5">
               {option.icon && (
-                <span className={cn('shrink-0', isSelected ? 'text-amber-fg' : 'text-ink-secondary')} aria-hidden="true">
+                <span
+                  className={cn('shrink-0', isSelected ? 'text-amber-fg' : 'text-ink-secondary')}
+                  aria-hidden="true"
+                >
                   {option.icon}
                 </span>
               )}

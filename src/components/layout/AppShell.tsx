@@ -17,6 +17,7 @@ export interface AppShellProps {
   headerActions?: React.ReactNode;
   banner?: React.ReactNode;
   bottomNav?: React.ReactNode;
+  launchRevealed?: boolean;
   children: React.ReactNode;
 }
 
@@ -46,6 +47,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   headerActions,
   banner,
   bottomNav,
+  launchRevealed = true,
   children,
 }) => {
   const reducedMotion = useAppReducedMotion();
@@ -80,9 +82,9 @@ export const AppShell: React.FC<AppShellProps> = ({
 
         <motion.main
           id="main-content"
-          initial={reducedMotion ? false : { opacity: 0.92, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={reducedMotion ? { duration: 0.01 } : { duration: 0.34, delay: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          initial={reducedMotion ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: launchRevealed ? 1 : 0, y: launchRevealed ? 0 : 10 }}
+          transition={reducedMotion ? { duration: 0.05 } : { duration: 0.46, ease: [0.22, 1, 0.36, 1] }}
           tabIndex={-1}
           className="relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pt-6 lg:pb-10 focus:outline-none"
         >

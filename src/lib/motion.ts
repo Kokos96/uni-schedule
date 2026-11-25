@@ -80,7 +80,7 @@ export const pageTransitionVariants: Variants = {
   initial: (direction = 0) => ({
     opacity: 0,
     x: direction === 0 ? 0 : direction > 0 ? 8 : -8,
-    y: direction === 0 ? 8 : 0,
+    y: 0,
   }),
   animate: {
     opacity: 1,

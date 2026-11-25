@@ -188,14 +188,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex items-center gap-3.5">
               <img
                 src="/icons/icon-192.png"
-                alt="Іконка uni-schedule 2.0"
+                alt="Іконка Uni Schedule"
                 width={52}
                 height={52}
                 className="h-[52px] w-[52px] shrink-0 rounded-2xl shadow-elevated"
               />
               <div className="min-w-0">
                 <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
-                  uni-schedule 2.0 · Graphite Glass
+                  Uni Schedule v4.1.0
                 </h3>
                 <p className="mt-0.5 text-xs text-ink-secondary">
                   Розклад занять, відвідуваність, нотатки та дедлайни (PWA)
@@ -239,8 +239,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       >
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-ink-secondary">
-            Буде відновлено вбудований розклад ФЕП-33с і стандартні налаштування: кафедра СП, 1-ша підгрупа, темна тема, ціль
-            відвідуваності 80% та дата початку семестру 2026-09-01.
+            Буде скинуто налаштування оформлення, кафедри (СП), 1-ї підгрупи, цілі відвідуваності (80%) та дати початку семестру.
+            Обрана група, відвідуваність, нотатки та дедлайни залишаться без змін.
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button

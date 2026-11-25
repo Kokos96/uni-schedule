@@ -1,5 +1,13 @@
 # Release Notes — Uni Schedule `v3.5.1`
 
+## v4.1.0 (2026-11-25) — Premium Motion & Native Interaction
+
+- **Stage A:** Усунуто вертикальні стрибки індикаторів (`SegmentedControl` та `BottomNav` переведено на локальні transform-індикатори) та стрибки скролу при перемиканні вкладок.
+- **Stage B:** Хореографований ~2.5s `AppSplash` із єдиним `launchPhase` (`intro → reveal → done`).
+- **Stage C–D:** Узгоджені іконки Phosphor `duotone/regular` та динамічна scroll-responsive капсула `BottomNav` (без glassmorphism).
+- **Stage E:** Очищено застарілі тексти `v2.0 / Graphite Glass / Вбудований ФЕП-33с` у Налаштуваннях, безпечний `resetSettings`, задокументовано перевірку «Людина і космос» в ЛНУ.
+- Service Worker оновлено до `v11`. Деталі: [docs/releases/v4.1.0.md](releases/v4.1.0.md).
+
 ## v4.0.0 (2026-11-25) — Native Mobile Experience & Academic Profiles
 
 - **Stage A–C:** Плаваюча капсула `BottomNav` зі спільним індикатором `layoutId="mobileNavIndicator"` (без glassmorphism), анімований запуск `AppSplash`, приховані мобільні скролбари та захист від випадкового зуму.
