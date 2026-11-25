@@ -216,7 +216,7 @@ def main() -> None:
             p2.wait_for_timeout(650)
             expect(nav).to_have_attribute("data-dock-state", "compact")
             box_cmp = nav.bounding_box()
-            assert box_cmp is not None and 295 <= box_cmp["width"] <= 318 and 50 <= box_cmp["height"] <= 54, f"Compact dock out of spec: {box_cmp}"
+            assert box_cmp is not None and 280 <= box_cmp["width"] <= 318 and 48 <= box_cmp["height"] <= 54, f"Compact dock out of spec: {box_cmp}"
             p2.evaluate("window.scrollTo({top: 0, behavior: 'smooth'})")
             p2.wait_for_timeout(650)
             expect(nav).to_have_attribute("data-dock-state", "expanded")
@@ -262,7 +262,9 @@ def main() -> None:
 
             # Unconfigured first launch shows onboarding with UniversitySelectorCard
             expect(p4.get_by_text("Налаштування розкладу")).to_be_visible()
-            p4.locator("#uni-faculty").select_option("1005")
+            p4.locator("#uni-faculty").click()
+            p4.wait_for_timeout(250)
+            p4.get_by_role("option", name="Факультет електроніки та комп'ютерних технологій").click()
             p4.wait_for_timeout(350)
             # Specialty selector appears for verified faculty 1005
             expect(p4.locator("#uni-program")).to_be_visible()
@@ -274,11 +276,15 @@ def main() -> None:
             listbox_text = listbox.inner_text()
             assert "ФЕП-33с" in listbox_text, f"ФЕП-33с missing: {listbox_text}"
             assert "ІНА-21" not in listbox_text, f"ІНА-21 leaked into faculty 1005: {listbox_text}"
+            p4.get_by_role("button", name="Закрити").click()
+            p4.wait_for_timeout(200)
             # Narrow by specialty
-            p4.locator("#uni-program").select_option("lnu-1005-se")
+            p4.locator("#uni-program").click()
+            p4.wait_for_timeout(200)
+            p4.get_by_role("option", name="Інженерія програмного забезпечення (121)").click()
             p4.wait_for_timeout(300)
             p4.locator("#uni-group").click()
-            p4.wait_for_timeout(200)
+            p4.wait_for_timeout(250)
             listbox_se = listbox.inner_text()
             assert "ФЕП-33с" in listbox_se and "ФЕІ-31" not in listbox_se
             listbox.get_by_role("option", name="ФЕП-33с").click()
@@ -323,7 +329,9 @@ def main() -> None:
             wait_splash_done(p5)
             p5.locator('nav[aria-label="Мобільна навігація"]').get_by_role("button", name="Опції").click()
             p5.wait_for_timeout(400)
-            p5.locator("#uni-faculty").select_option("1013")
+            p5.locator("#uni-faculty").click()
+            p5.wait_for_timeout(250)
+            p5.get_by_role("option", name="Факультет прикладної математики та інформатики").click()
             p5.wait_for_timeout(350)
             p5.locator("#uni-group").click()
             p5.wait_for_timeout(250)
@@ -333,7 +341,12 @@ def main() -> None:
             p5.wait_for_timeout(600)
             expect(p5.get_by_text("Активний розклад групи: ПМІ-41")).to_be_visible()
             # Verify failed group activation preserves ПМІ-41 and shows retry button
-            p5.locator("#uni-group").fill("FAIL-99")
+            p5.locator("#uni-group").click()
+            p5.wait_for_timeout(200)
+            p5.locator("#uni-group-search").fill("FAIL-99")
+            p5.wait_for_timeout(200)
+            p5.get_by_role("option", name="Вказати групу «FAIL-99»").click()
+            p5.wait_for_timeout(200)
             p5.get_by_role("button", name="Активувати групу").click()
             p5.wait_for_timeout(500)
             expect(p5.get_by_text("Спробувати ще раз")).to_be_visible()

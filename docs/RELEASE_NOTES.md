@@ -1,5 +1,13 @@
 # Release Notes — Uni Schedule
 
+## v4.2.0 (2026-11-26) — Premium Experience Update
+
+- **Stage A (iOS Viewport & Zoom):** Усунуто автоматичний iOS-зум на полях вводу (`font-size: 16px !important` для мобільних полів), прибрано пастку `gesturestart` в `index.html`, додано `useKeyboardViewport` із приховуванням `BottomNav` під час відкритої клавіатури.
+- **Stage B (Signature Brand Reveal):** Новий 2.5s запуск `AppSplash` із оптично скоригованим 136px логотипом, діагональним розкриттям, типографічним словознаком `Uni Schedule` та aperture-морфінгом у реальний інтерфейс.
+- **Stage C (Scroll-Driven BottomNav):** Плавна scroll-driven навігація на `MotionValue` (`356×58px` → `292×50px`, 0 ре-рендерів при скролі, миттєвий розворот вгору, 5-колонковий індикатор без `ResizeObserver`).
+- **Stage D–E (Academic Selectors & Profile Hydration):** Портальний `PremiumSelect` (Bottom Sheet на мобільних / Popover на десктопі, `z-[90]` — усуває перекриття карткою «Підгрупа»), перегляд груп без авто-клавіатури, `isHydratingRemoteProfile`.
+- Service Worker оновлено до `v13`; нових міграцій D1 не потрібно. Деталі: [docs/releases/v4.2.0.md](releases/v4.2.0.md).
+
 ## v4.1.1 (2026-11-25) — Academic Reliability & Premium Launch Experience
 
 - **Stage A:** Усунуто циклічну інвалідацію запитів у `useScheduleSource`, розділено активний і очікуваний профілі, стабілізовано чернетку `UniversitySelectorCard`, додано підтримку підтверджених порожніх розкладів.

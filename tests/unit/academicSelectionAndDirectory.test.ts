@@ -14,6 +14,7 @@ import {
   writeCachedSchedule,
 } from '../../src/hooks/scheduleCache';
 import { handleGetGroups, handleGetSchedule } from '../../workers/api/src/routes/universities';
+import { LnuAdapter } from '../../src/integrations/universities/lnu/lnuAdapter';
 import type { Env } from '../../workers/api/src/types';
 import type { NormalizedSchedule } from '../../src/integrations/universities/types';
 
@@ -381,5 +382,41 @@ describe('Stage A & B: Verified LNU academic catalog and canonical identity', ()
     assert.equal(okBody.cacheHit, true);
     assert.equal(okBody.schedule.facultyId, '1005');
     assert.equal(okBody.schedule.groupId, 'ФЕП-33с');
+  });
+
+  it('returns user-friendly Ukrainian error instead of raw JSON parse error when API returns HTML', async () => {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('<!doctype html><html><body>SPA Fallback</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })) as typeof fetch;
+    try {
+      const adapter = new LnuAdapter(undefined, 'https://preview.local');
+      await assert.rejects(
+        () => adapter.getGroups({ facultyId: '1005' }),
+        (err: Error) => {
+          assert.doesNotMatch(err.message, /Unexpected token/i);
+          assert.match(err.message, /Сервер довідника груп/);
+          return true;
+        }
+      );
+      await assert.rejects(
+        () =>
+          adapter.fetchSchedule({
+            universityId: 'lnu',
+            facultyId: '1005',
+            groupId: 'ФЕП-33с',
+            groupName: 'ФЕП-33с',
+          }),
+        (err: Error) => {
+          assert.doesNotMatch(err.message, /Unexpected token/i);
+          assert.match(err.message, /Сервер розкладу повернув некоректну відповідь/);
+          return true;
+        }
+      );
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });

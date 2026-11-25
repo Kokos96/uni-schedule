@@ -8,7 +8,7 @@ import {
   GearSix,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
-import { useScrollCompact } from '../../hooks/useScrollCompact';
+import { useScrollDockProgress } from '../../hooks/useScrollCompact';
 import { useAppReducedMotion } from '../../lib/motion';
 import { cn } from '../../utils/cn';
 
@@ -19,6 +19,7 @@ export interface BottomNavProps {
   onTabChange: (tab: TabType) => void;
   deadlinesBadgeCount?: number;
   visible?: boolean;
+  hiddenByKeyboard?: boolean;
 }
 
 interface NavTabItem {
@@ -35,22 +36,17 @@ const NAV_TABS: readonly NavTabItem[] = [
   { id: 'settings', label: 'Опції', icon: GearSix },
 ] as const;
 
-const DOCK_SPRING = {
-  stiffness: 380,
-  damping: 34,
-  mass: 0.78,
-};
-
 const INDICATOR_SPRING = {
-  stiffness: 420,
-  damping: 34,
-  mass: 0.75,
+  stiffness: 430,
+  damping: 35,
+  mass: 0.72,
 };
 
 function computeDockBounds(viewportWidth: number): { expanded: number; compact: number } {
   const safeVw = Math.max(320, viewportWidth);
-  const expanded = Math.round(Math.min(safeVw - 32, 358));
-  const compact = Math.round(Math.max(264, Math.min(expanded - 50, 306)));
+  // 390px iPhone -> expanded 356px, compact 292px (64px sleek Instagram-inspired contraction, >= 56px per slot)
+  const expanded = Math.round(Math.min(safeVw - 34, 356));
+  const compact = Math.round(Math.max(256, Math.min(expanded - 60, 292)));
   return { expanded, compact };
 }
 
@@ -59,9 +55,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onTabChange,
   deadlinesBadgeCount = 0,
   visible = true,
+  hiddenByKeyboard = false,
 }) => {
   const reducedMotion = useAppReducedMotion();
-  const isCompact = useScrollCompact({ resetKey: currentTab });
+  const isShown = visible && !hiddenByKeyboard;
+
+  const { progress: compactProgress, dockState } = useScrollDockProgress({
+    resetKey: currentTab,
+    paused: hiddenByKeyboard || !visible,
+    reducedMotion,
+  });
 
   const [viewportWidth, setViewportWidth] = useState<number>(() =>
     typeof window !== 'undefined' ? window.innerWidth : 390
@@ -79,19 +82,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     NAV_TABS.findIndex((t) => t.id === currentTab)
   );
 
-  // Single coordinated geometry progress model:
-  // `compactProgress` (0 = expanded, 1 = compact) drives capsule width, height,
-  // horizontal padding, and icon scale synchronously without ResizeObserver lag.
-  const compactProgress = useSpring(isCompact ? 1 : 0, DOCK_SPRING);
   const activeIndexSpring = useSpring(activeIndex, INDICATOR_SPRING);
-
-  useEffect(() => {
-    if (reducedMotion) {
-      compactProgress.jump(isCompact ? 1 : 0);
-    } else {
-      compactProgress.set(isCompact ? 1 : 0);
-    }
-  }, [isCompact, reducedMotion, compactProgress]);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -102,11 +93,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   }, [activeIndex, reducedMotion, activeIndexSpring]);
 
   const bounds = computeDockBounds(viewportWidth);
+  // Single coordinated scroll-driven geometry model (zero ResizeObserver, zero per-frame React renders)
   const dockWidth = useTransform(compactProgress, [0, 1], [bounds.expanded, bounds.compact]);
-  const dockHeight = useTransform(compactProgress, [0, 1], [58, 52]);
-  const trackPaddingX = useTransform(compactProgress, [0, 1], [6, 5]);
+  const dockHeight = useTransform(compactProgress, [0, 1], [58, 50]);
+  const trackPaddingX = useTransform(compactProgress, [0, 1], [7, 5]);
   const iconScale = useTransform(compactProgress, [0, 1], [1, 0.9]);
-  // Normalized local coordinate inside the 5-column equal grid: each slot is 100% of indicator width.
   const indicatorX = useTransform(activeIndexSpring, (i) => `${i * 100}%`);
 
   const hasDeadlinesBadge = deadlinesBadgeCount > 0;
@@ -114,19 +105,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     deadlinesBadgeCount > 99 ? '99+' : String(deadlinesBadgeCount);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.375rem))] lg:hidden">
+    <div
+      data-keyboard-hidden={hiddenByKeyboard ? 'true' : 'false'}
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.375rem))] lg:hidden"
+    >
       <motion.nav
         aria-label="Мобільна навігація"
-        data-dock-state={isCompact ? 'compact' : 'expanded'}
+        aria-hidden={!isShown || undefined}
+        data-dock-state={dockState}
         initial={reducedMotion ? false : { opacity: 0, y: 24 }}
         animate={{
-          opacity: visible ? 1 : 0,
-          y: visible ? 0 : 24,
+          opacity: isShown ? 1 : 0,
+          y: isShown ? 0 : 28,
         }}
         transition={
           reducedMotion
             ? { duration: 0.05 }
-            : { type: 'spring', stiffness: 360, damping: 32, mass: 0.8 }
+            : { type: 'spring', stiffness: 380, damping: 34, mass: 0.76 }
         }
         style={{
           width: dockWidth,
@@ -135,11 +130,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           paddingRight: trackPaddingX,
         }}
         className={cn(
-          'relative flex items-center rounded-full border border-line/90 bg-surface-elevated shadow-[0_10px_28px_rgba(0,0,0,0.20)]',
-          visible ? 'pointer-events-auto' : 'pointer-events-none'
+          'relative flex items-center rounded-full border border-line/85 bg-surface-elevated shadow-[0_12px_30px_-4px_rgba(0,0,0,0.28)]',
+          isShown ? 'pointer-events-auto' : 'pointer-events-none'
         )}
       >
-        {/* Normalized 5-column track keeps indicator mathematically locked during width morphs */}
+        {/* Normalized 5-column equal track keeps active indicator mathematically locked during width morphs */}
         <div className="relative grid h-full w-full grid-cols-5 items-center">
           <motion.span
             aria-hidden="true"
@@ -150,7 +145,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             }}
             className="pointer-events-none absolute inset-y-[5px] left-0 px-[2px]"
           >
-            <span className="block h-full w-full rounded-full border border-amber/20 bg-amber-soft" />
+            <span className="block h-full w-full rounded-full border border-amber/15 bg-amber-soft" />
           </motion.span>
 
           {NAV_TABS.map((tab) => {
@@ -165,13 +160,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <motion.button
                 key={tab.id}
                 type="button"
+                tabIndex={isShown ? 0 : -1}
                 onClick={() => onTabChange(tab.id)}
-                whileTap={reducedMotion ? undefined : { scale: 0.92 }}
+                whileTap={reducedMotion ? undefined : { scale: 0.94 }}
                 aria-label={accessibleLabel}
                 title={tab.label}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'group relative z-10 flex h-full min-h-[44px] min-w-[44px] w-full items-center justify-center rounded-full transition-colors select-none touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60',
+                  'group relative z-10 flex h-full min-h-[44px] min-w-[44px] w-full items-center justify-center rounded-full transition-colors duration-150 select-none touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60',
                   isActive
                     ? 'text-amber-fg'
                     : 'text-ink-secondary hover:text-ink'
@@ -182,7 +178,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   className="relative z-10 flex items-center justify-center"
                 >
                   <Icon
-                    className="h-[22px] w-[22px] shrink-0 transition-colors duration-150"
+                    className="h-[24px] w-[24px] shrink-0 transition-colors duration-150"
                     weight={isActive ? 'duotone' : 'regular'}
                     aria-hidden
                   />

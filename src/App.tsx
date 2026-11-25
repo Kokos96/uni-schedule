@@ -23,6 +23,7 @@ import { ToastProvider, useToast } from './components/ui/Toast';
 import { useAttendance } from './hooks/useAttendance';
 import { useCurrentPair } from './hooks/useCurrentPair';
 import { useDeadlines } from './hooks/useDeadlines';
+import { useKeyboardViewport } from './hooks/useKeyboardViewport';
 import { useNotes } from './hooks/useNotes';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useScheduleSource } from './hooks/useScheduleSource';
@@ -107,6 +108,7 @@ const AppContent: React.FC = () => {
     profileSyncStatus,
     profileSyncError,
     confirmProfileOverwrite,
+    isHydratingRemoteProfile,
   } = useSettings();
   useTheme(settings.theme);
 
@@ -149,6 +151,7 @@ const AppContent: React.FC = () => {
 
   const { isOnline, updateAvailable, applyUpdate, dismissUpdate } =
     useOnlineStatus();
+  const { isKeyboardOpen } = useKeyboardViewport();
 
   const [notesDrawerTarget, setNotesDrawerTarget] = useState<{
     lesson: Lesson;
@@ -458,23 +461,28 @@ const AppContent: React.FC = () => {
             onTabChange={handleTabChange}
             deadlinesBadgeCount={deadlinesBadgeCount}
             visible={launchPhase === 'content' || launchPhase === 'done'}
+            hiddenByKeyboard={isKeyboardOpen}
           />
         }
       >
         <PageTransition pageKey={activeTab} direction={tabDirection}>
           {activeTab === 'schedule' && settings.scheduleSourceMode === 'unconfigured' && (
-            <FirstLaunchOnboarding
-              settings={settings}
-              onUpdate={updateSettings}
-              syncStatus={scheduleSource.syncStatus}
-              lastSyncedAt={scheduleSource.lastSyncedAt}
-              syncError={scheduleSource.syncError}
-              profileSyncStatus={profileSyncStatus}
-              profileSyncError={profileSyncError}
-              onConfirmProfileOverwrite={confirmProfileOverwrite}
-              onActivateGroupSchedule={scheduleSource.activateGroupSchedule}
-              onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
-            />
+            isHydratingRemoteProfile ? (
+              <ViewSkeleton />
+            ) : (
+              <FirstLaunchOnboarding
+                settings={settings}
+                onUpdate={updateSettings}
+                syncStatus={scheduleSource.syncStatus}
+                lastSyncedAt={scheduleSource.lastSyncedAt}
+                syncError={scheduleSource.syncError}
+                profileSyncStatus={profileSyncStatus}
+                profileSyncError={profileSyncError}
+                onConfirmProfileOverwrite={confirmProfileOverwrite}
+                onActivateGroupSchedule={scheduleSource.activateGroupSchedule}
+                onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
+              />
+            )
           )}
 
           {activeTab === 'schedule' && settings.scheduleSourceMode !== 'unconfigured' && (

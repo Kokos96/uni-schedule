@@ -5,7 +5,6 @@ import {
   Globe,
   GraduationCap,
   Info,
-  MagnifyingGlass,
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
@@ -33,6 +32,7 @@ import type {
 import type { ResolvedUserSettings, UserSettings } from '../../types';
 import { MetaChip } from '../ui/Badge';
 import { GlassCard } from '../ui/GlassCard';
+import { PremiumSelect, type PremiumSelectOption } from '../ui/PremiumSelect';
 import { useToast } from '../ui/Toast';
 
 export interface UniversitySelectorCardProps {
@@ -100,7 +100,6 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   const [programId, setProgramId] = useState<string>(currentProfile?.programId ?? '');
   const [courseNum, setCourseNum] = useState<number | undefined>(currentProfile?.course);
 
-  // Separate canonical selected group from live search query
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(() =>
     currentProfile?.groupId
       ? {
@@ -113,17 +112,12 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
         }
       : null
   );
-  const [groupQuery, setGroupQuery] = useState<string>(currentProfile?.groupName ?? '');
-  const [comboOpen, setComboOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [globalSearchMode, setGlobalSearchMode] = useState(false);
 
-  // Separate explicit user activation state from background syncStatus
   const [isActivating, setIsActivating] = useState(false);
   const [activationError, setActivationError] = useState<string | null>(null);
   const [activatedGroupName, setActivatedGroupName] = useState<string | null>(null);
 
-  const comboContainerRef = useRef<HTMLDivElement | null>(null);
   const groupsReqSeqRef = useRef(0);
   const metaReqSeqRef = useRef(0);
 
@@ -132,8 +126,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     [selectedUniId]
   );
 
-  // Only resync local draft when the committed academic profile VALUE changes,
-  // never when unrelated settings (electives, theme, subgroup) recreate the object.
+  // Sync draft ONLY when the committed academic profile VALUE changes
   useEffect(() => {
     if (lastCommittedSigRef.current === committedSig) return;
     lastCommittedSigRef.current = committedSig;
@@ -153,10 +146,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           }
         : null
     );
-    setGroupQuery(currentProfile?.groupName ?? '');
   }, [committedSig, currentProfile, universities]);
 
-  // Load faculties, courses, and verified programs for selected university/faculty
+  // Load faculties, courses, and verified programs
   useEffect(() => {
     if (!adapter) return;
     const seq = ++metaReqSeqRef.current;
@@ -180,7 +172,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     };
   }, [adapter, facultyId, programId]);
 
-  // Load academic groups for current scope (strict faculty/program/course or explicit global mode)
+  // Load groups for current scope
   useEffect(() => {
     if (!adapter) return;
     if (adapter.meta.supportStatus !== 'live') {
@@ -226,52 +218,78 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     };
   }, [adapter, facultyId, programId, courseNum, globalSearchMode]);
 
-  const filteredGroups = useMemo(() => {
-    const q = groupQuery.trim().toLowerCase();
-    // When the input displays the already-selected group name, show full scoped list on open
-    // so users can browse other groups without manually erasing the field first.
-    if (!q || (selectedGroup && selectedGroup.name.toLowerCase() === q)) {
-      return groups;
-    }
-    const qNorm = normalizeGroupHomoglyphs(q);
-    return groups.filter(
-      (g) =>
-        g.name.toLowerCase().includes(q) ||
-        normalizeGroupHomoglyphs(g.name).includes(qNorm)
-    );
-  }, [groups, groupQuery, selectedGroup]);
+  const universityOptions = useMemo<PremiumSelectOption[]>(
+    () =>
+      universities.map((u) => ({
+        value: u.id,
+        label: u.shortName,
+        description: u.supportStatus === 'manual_only' ? 'Без автосинхронізації' : u.city,
+      })),
+    [universities]
+  );
 
-  useEffect(() => {
-    const onPointerDown = (event: MouseEvent) => {
-      if (
-        comboContainerRef.current &&
-        !comboContainerRef.current.contains(event.target as Node)
-      ) {
-        setComboOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
-  }, []);
+  const facultyOptions = useMemo<PremiumSelectOption[]>(
+    () => [
+      { value: '', label: 'Усі факультети' },
+      ...faculties.map((f) => ({ value: f.id, label: f.name })),
+    ],
+    [faculties]
+  );
 
-  const handleSelectGroupOption = (group: Group) => {
-    setSelectedGroup(group);
-    setGroupQuery(group.name);
-    setComboOpen(false);
+  const courseOptions = useMemo<PremiumSelectOption[]>(
+    () => [
+      { value: '', label: 'Усі курси' },
+      ...courses.map((c) => ({ value: String(c.number), label: c.label })),
+    ],
+    [courses]
+  );
+
+  const programOptions = useMemo<PremiumSelectOption[]>(
+    () => [
+      { value: '', label: 'Усі підтверджені спеціальності' },
+      ...programs.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [programs]
+  );
+
+  const groupOptions = useMemo<PremiumSelectOption[]>(
+    () =>
+      groups.map((g) => ({
+        value: g.id,
+        label: g.name,
+        description: g.programName,
+        badge: g.course ? `${g.course} курс` : undefined,
+      })),
+    [groups]
+  );
+
+  const handleSelectGroupValue = (nextValue: string) => {
     setActivationError(null);
+    const trimmed = nextValue.trim();
+    if (!trimmed) {
+      setSelectedGroup(null);
+      return;
+    }
+    const matched = groups.find(
+      (g) =>
+        g.id === trimmed ||
+        normalizeGroupHomoglyphs(g.name) === normalizeGroupHomoglyphs(trimmed)
+    );
+    const nextGroup: Group = matched ?? { id: trimmed, name: trimmed };
+    setSelectedGroup(nextGroup);
 
-    // If selected via global search and the group belongs to a different verified faculty,
+    // If selected via global search and the group belongs to another verified faculty,
     // align the academic hierarchy to its verified identity instead of relabeling it.
     if (globalSearchMode) {
       const verified =
-        group.facultyId
-          ? { facultyId: group.facultyId, programId: group.programId }
-          : resolveVerifiedLnuGroupMetadata(group.name);
+        nextGroup.facultyId
+          ? { facultyId: nextGroup.facultyId, programId: nextGroup.programId }
+          : resolveVerifiedLnuGroupMetadata(nextGroup.name);
       if (verified?.facultyId && verified.facultyId !== facultyId) {
         const matchedFac = faculties.find((f) => f.id === verified.facultyId);
         setFacultyId(verified.facultyId);
         setProgramId(verified.programId ?? '');
-        if (group.course) setCourseNum(group.course);
+        if (nextGroup.course) setCourseNum(nextGroup.course);
         setGlobalSearchMode(false);
         if (matchedFac) {
           toast.info(`Факультет оновлено відповідно до групи: ${matchedFac.name}`);
@@ -281,44 +299,17 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   };
 
   const resolveDraftSelection = (): { selection?: StudentSelection; error?: string } => {
-    const cleanQuery = groupQuery.trim();
-    if (!cleanQuery && !selectedGroup) {
+    if (!selectedGroup || !selectedGroup.name.trim()) {
       return { error: 'Оберіть або введіть назву академічної групи.' };
     }
 
-    let matchedGroup: Group | undefined = selectedGroup ?? undefined;
-    if (!matchedGroup || normalizeGroupHomoglyphs(matchedGroup.name) !== normalizeGroupHomoglyphs(cleanQuery)) {
-      const lowerClean = cleanQuery.toLocaleLowerCase('uk-UA');
-      const normClean = normalizeGroupHomoglyphs(cleanQuery);
-      matchedGroup = groups.find(
-        (g) =>
-          g.name.toLocaleLowerCase('uk-UA') === lowerClean ||
-          normalizeGroupHomoglyphs(g.name) === normClean
-      );
-      if (!matchedGroup && groups.length > 0) {
-        const prefixMatches = groups.filter(
-          (g) =>
-            g.name.toLocaleLowerCase('uk-UA').startsWith(lowerClean) ||
-            normalizeGroupHomoglyphs(g.name).startsWith(normClean)
-        );
-        if (prefixMatches.length === 1) {
-          matchedGroup = prefixMatches[0];
-        } else if (prefixMatches.length > 1) {
-          return {
-            error: `Знайдено кілька схожих груп (${prefixMatches.slice(0, 3).map((g) => g.name).join(', ')}…). Оберіть точну групу зі списку.`,
-          };
-        }
-      }
-    }
-
-    const canonicalGroupId = matchedGroup?.id ?? cleanQuery;
-    const canonicalGroupName = matchedGroup?.name ?? cleanQuery;
+    const canonicalGroupId = selectedGroup.id;
+    const canonicalGroupName = selectedGroup.name;
     const verifiedMeta =
       selectedUniId === 'lnu' ? resolveVerifiedLnuGroupMetadata(canonicalGroupName) : null;
 
-    // Never relabel a verified group with an incompatible faculty.
     const effectiveFacultyId =
-      verifiedMeta?.facultyId ?? matchedGroup?.facultyId ?? (facultyId || undefined);
+      verifiedMeta?.facultyId ?? selectedGroup.facultyId ?? (facultyId || undefined);
     if (
       verifiedMeta?.facultyId &&
       facultyId &&
@@ -331,10 +322,11 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     }
 
     const facultyName = faculties.find((f) => f.id === effectiveFacultyId)?.name;
-    const effectiveProgramId = verifiedMeta?.programId ?? matchedGroup?.programId ?? (programId || undefined);
+    const effectiveProgramId =
+      verifiedMeta?.programId ?? selectedGroup.programId ?? (programId || undefined);
     const effectiveProgramName =
       verifiedMeta?.programName ??
-      matchedGroup?.programName ??
+      selectedGroup.programName ??
       programs.find((p) => p.id === effectiveProgramId)?.name;
 
     return {
@@ -344,7 +336,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
         facultyName,
         programId: effectiveProgramId,
         programName: effectiveProgramName,
-        course: matchedGroup?.course ?? courseNum,
+        course: selectedGroup.course ?? courseNum,
         groupId: canonicalGroupId,
         groupName: canonicalGroupName,
         subgroup: resolved.subgroup,
@@ -402,7 +394,6 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
             programName: committedSelection.programName,
             course: committedSelection.course,
           });
-          setGroupQuery(committedSelection.groupName);
           onUpdate({
             universityProfile: committedSelection,
             scheduleSourceMode: 'live',
@@ -456,9 +447,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
 
   const isSelectedSameAsActive =
     Boolean(currentProfile?.groupId) &&
-    Boolean(groupQuery.trim()) &&
+    Boolean(selectedGroup?.id) &&
     normalizeGroupHomoglyphs(currentProfile?.groupId ?? '') ===
-      normalizeGroupHomoglyphs(selectedGroup?.id ?? groupQuery.trim()) &&
+      normalizeGroupHomoglyphs(selectedGroup?.id ?? '') &&
     (currentProfile?.facultyId ?? '') === (facultyId || (currentProfile?.facultyId ?? ''));
 
   const facultyHasCatalog =
@@ -511,38 +502,23 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
       </div>
 
       <div className="space-y-3">
-        <div>
-          <label
-            htmlFor="uni-select"
-            className="mb-1 block text-xs font-medium text-ink-secondary"
-          >
-            Університет
-          </label>
-          <select
-            id="uni-select"
-            value={selectedUniId}
-            onChange={(e) => {
-              setSelectedUniId(e.target.value);
-              setFacultyId('');
-              setProgramId('');
-              setCourseNum(undefined);
-              setSelectedGroup(null);
-              setGroupQuery('');
-              setGroups([]);
-              setGroupsError(null);
-              setGlobalSearchMode(false);
-              setActivationError(null);
-            }}
-            className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs font-medium text-ink focus:border-amber focus:outline-none"
-          >
-            {universities.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.shortName}
-                {u.supportStatus === 'manual_only' ? ' (без автосинхронізації)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+        <PremiumSelect
+          id="uni-select"
+          label="Університет"
+          value={selectedUniId}
+          options={universityOptions}
+          onChange={(nextUni) => {
+            setSelectedUniId(nextUni);
+            setFacultyId('');
+            setProgramId('');
+            setCourseNum(undefined);
+            setSelectedGroup(null);
+            setGroups([]);
+            setGroupsError(null);
+            setGlobalSearchMode(false);
+            setActivationError(null);
+          }}
+        />
 
         {adapter?.meta.supportStatus === 'manual_only' ? (
           <div className="flex items-start gap-2.5 rounded-xl border border-line bg-surface-elevated/60 p-3 text-xs text-ink-secondary">
@@ -555,122 +531,59 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           <>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <div className="sm:col-span-2">
-                <label
-                  htmlFor="uni-faculty"
-                  className="mb-1 block text-xs font-medium text-ink-secondary"
-                >
-                  Факультет
-                </label>
-                <select
+                <PremiumSelect
                   id="uni-faculty"
+                  label="Факультет"
                   value={facultyId}
-                  onChange={(e) => {
-                    const nextFaculty = e.target.value;
+                  options={facultyOptions}
+                  placeholder="Усі факультети"
+                  searchable={faculties.length > 8}
+                  searchPlaceholder="Пошук факультету…"
+                  onChange={(nextFaculty) => {
                     setFacultyId(nextFaculty);
                     setProgramId('');
                     setCourseNum(undefined);
                     setSelectedGroup(null);
-                    setGroupQuery('');
                     setGroups([]);
                     setGroupsError(null);
                     setGlobalSearchMode(false);
                     setActivationError(null);
                   }}
-                  className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
-                >
-                  <option value="">Усі факультети</option>
-                  {faculties.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
-                <label
-                  htmlFor="uni-course"
-                  className="mb-1 block text-xs font-medium text-ink-secondary"
-                >
-                  Курс
-                </label>
-                <select
+                <PremiumSelect
                   id="uni-course"
-                  value={courseNum ?? ''}
-                  onChange={(e) => {
-                    setCourseNum(e.target.value ? Number(e.target.value) : undefined);
+                  label="Курс"
+                  value={courseNum ? String(courseNum) : ''}
+                  options={courseOptions}
+                  placeholder="Усі курси"
+                  onChange={(nextCourse) => {
+                    setCourseNum(nextCourse ? Number(nextCourse) : undefined);
                     setSelectedGroup(null);
-                    setGroupQuery('');
                     setActivationError(null);
                   }}
-                  className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
-                >
-                  <option value="">Усі курси</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.number}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
 
             {facultyId && !globalSearchMode && programs.length > 0 && (
-              <div>
-                <label
-                  htmlFor="uni-program"
-                  className="mb-1 block text-xs font-medium text-ink-secondary"
-                >
-                  Спеціальність / освітня програма
-                </label>
-                <select
-                  id="uni-program"
-                  value={programId}
-                  onChange={(e) => {
-                    setProgramId(e.target.value);
-                    setSelectedGroup(null);
-                    setGroupQuery('');
-                    setActivationError(null);
-                  }}
-                  className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs text-ink focus:border-amber focus:outline-none"
-                >
-                  <option value="">Усі підтверджені спеціальності</option>
-                  {programs.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <PremiumSelect
+                id="uni-program"
+                label="Спеціальність / освітня програма"
+                value={programId}
+                options={programOptions}
+                placeholder="Усі підтверджені спеціальності"
+                onChange={(nextProgram) => {
+                  setProgramId(nextProgram);
+                  setSelectedGroup(null);
+                  setActivationError(null);
+                }}
+              />
             )}
 
-            <div ref={comboContainerRef} className="relative z-20">
-              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <label
-                  htmlFor="uni-group"
-                  className="block text-xs font-medium text-ink-secondary"
-                >
-                  Академічна група {loadingGroups ? '(завантаження списку…)' : ''}
-                </label>
-                {facultyId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGlobalSearchMode((prev) => !prev);
-                      setComboOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-fg hover:underline"
-                  >
-                    <Globe weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>
-                      {globalSearchMode
-                        ? 'Повернутися до обраного факультету'
-                        : 'Глобальний пошук по всіх групах'}
-                    </span>
-                  </button>
-                )}
-              </div>
-
+            <div>
               {globalSearchMode && (
                 <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber/35 bg-amber-soft/60 px-3 py-1.5 text-[11px] text-amber-fg">
                   <span>Режим глобального пошуку по всьому довіднику ЛНУ</span>
@@ -685,170 +598,70 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                 </div>
               )}
 
-              <div className="relative">
-                <MagnifyingGlass
-                  weight="regular"
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
-                  aria-hidden="true"
-                />
-                <input
-                  id="uni-group"
-                  type="text"
-                  role="combobox"
-                  aria-expanded={comboOpen}
-                  aria-controls="uni-group-listbox"
-                  aria-autocomplete="list"
-                  autoComplete="off"
-                  value={groupQuery}
-                  onFocus={() => setComboOpen(true)}
-                  onClick={() => setComboOpen(true)}
-                  onChange={(e) => {
-                    const nextVal = e.target.value;
-                    setGroupQuery(nextVal);
-                    if (
-                      selectedGroup &&
-                      normalizeGroupHomoglyphs(nextVal) !==
-                        normalizeGroupHomoglyphs(selectedGroup.name)
-                    ) {
-                      setSelectedGroup(null);
-                    }
-                    setHighlightedIndex(0);
-                    setComboOpen(true);
-                    setActivationError(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setComboOpen(false);
-                      return;
-                    }
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setComboOpen(true);
-                      setHighlightedIndex((idx) =>
-                        filteredGroups.length > 0
-                          ? Math.min(idx + 1, filteredGroups.length - 1)
-                          : 0
-                      );
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setHighlightedIndex((idx) => Math.max(0, idx - 1));
-                    } else if (
-                      e.key === 'Enter' &&
-                      comboOpen &&
-                      filteredGroups[highlightedIndex]
-                    ) {
-                      e.preventDefault();
-                      handleSelectGroupOption(filteredGroups[highlightedIndex]!);
-                    }
-                  }}
-                  placeholder="Оберіть зі списку або введіть назву групи"
-                  className="w-full rounded-xl border border-line bg-surface-elevated/70 py-2.5 pl-9 pr-8 text-sm font-medium text-ink placeholder:text-ink-muted focus:border-amber focus:outline-none"
-                />
-                {groupQuery && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGroupQuery('');
-                      setSelectedGroup(null);
-                      setComboOpen(true);
-                    }}
-                    aria-label="Очистити поле групи"
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-muted hover:text-ink"
-                  >
-                    <X weight="bold" className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+              <PremiumSelect
+                id="uni-group"
+                label={`Академічна група${loadingGroups ? ' (завантаження…)' : ''}`}
+                value={selectedGroup?.id ?? ''}
+                options={groupOptions}
+                placeholder="Оберіть або введіть назву групи"
+                loading={loadingGroups}
+                errorMessage={groupsError}
+                searchable
+                searchPlaceholder="Введіть назву групи (напр. ФЕП-33с)…"
+                allowCustomValue
+                customValueLabel={(q) => `Вказати групу «${q}»`}
+                sheetSubtitle={
+                  globalSearchMode || !facultyId
+                    ? `Довідник груп ЛНУ (${groups.length})`
+                    : `Підтверджені групи факультету (${groups.length})`
+                }
+                emptyMessage={
+                  facultyId && !globalSearchMode && !facultyHasCatalog
+                    ? 'Для цього факультету підтверджений каталог груп ще неповний.'
+                    : 'Груп за цим запитом не знайдено.'
+                }
+                filterOption={(opt, q) => {
+                  const lower = q.toLocaleLowerCase('uk-UA');
+                  const qNorm = normalizeGroupHomoglyphs(q);
+                  return (
+                    opt.label.toLocaleLowerCase('uk-UA').includes(lower) ||
+                    normalizeGroupHomoglyphs(opt.label).includes(qNorm)
+                  );
+                }}
+                headerAction={
+                  facultyId ? (
+                    <button
+                      type="button"
+                      onClick={() => setGlobalSearchMode((prev) => !prev)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-fg hover:underline"
+                    >
+                      <Globe weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>
+                        {globalSearchMode
+                          ? 'Лише обраний факультет'
+                          : 'Глобальний пошук'}
+                      </span>
+                    </button>
+                  ) : undefined
+                }
+                footerAction={
+                  facultyId && !globalSearchMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setGlobalSearchMode(true)}
+                      className="inline-flex min-h-[38px] w-full items-center justify-center gap-1.5 rounded-xl border border-amber/35 bg-amber-soft px-3 py-1.5 text-xs font-semibold text-amber-fg"
+                    >
+                      <Globe weight="regular" className="h-3.5 w-3.5" />
+                      <span>Шукати серед усіх груп ЛНУ</span>
+                    </button>
+                  ) : undefined
+                }
+                onChange={handleSelectGroupValue}
+              />
 
-              {comboOpen && (
-                <div
-                  id="uni-group-listbox"
-                  role="listbox"
-                  aria-label="Список академічних груп"
-                  className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-60 overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface-elevated p-1 shadow-[0_12px_32px_rgba(0,0,0,0.28)]"
-                >
-                  {loadingGroups ? (
-                    <div className="px-3 py-3 text-xs text-ink-secondary">
-                      Завантаження списку груп…
-                    </div>
-                  ) : filteredGroups.length === 0 ? (
-                    <div className="space-y-2 px-3 py-3 text-xs text-ink-secondary">
-                      <p>
-                        {groupsError
-                          ? groupsError
-                          : facultyId && !globalSearchMode && !facultyHasCatalog
-                            ? 'Для цього факультету підтверджений каталог груп ще неповний.'
-                            : 'Груп за цим запитом не знайдено.'}
-                      </p>
-                      {facultyId && !globalSearchMode && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setGlobalSearchMode(true);
-                            setComboOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-amber/40 bg-amber-soft px-2.5 py-1.5 text-[11px] font-semibold text-amber-fg"
-                        >
-                          <Globe weight="regular" className="h-3.5 w-3.5" />
-                          <span>Шукати серед усіх груп ЛНУ</span>
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
-                        {globalSearchMode || !facultyId
-                          ? `Довідник груп ЛНУ (${filteredGroups.length})`
-                          : `Підтверджені групи факультету (${filteredGroups.length})`}
-                      </div>
-                      {filteredGroups.map((g, i) => {
-                        const isSelected =
-                          selectedGroup?.id === g.id ||
-                          normalizeGroupHomoglyphs(g.name) ===
-                            normalizeGroupHomoglyphs(groupQuery);
-                        return (
-                          <button
-                            key={g.id}
-                            type="button"
-                            role="option"
-                            aria-selected={isSelected}
-                            onClick={() => handleSelectGroupOption(g)}
-                            className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
-                              isSelected || highlightedIndex === i
-                                ? 'bg-amber-soft font-semibold text-amber-fg'
-                                : 'text-ink hover:bg-surface'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <span className="block truncate">{g.name}</span>
-                              {g.programName && (
-                                <span className="block truncate text-[10px] font-normal text-ink-muted">
-                                  {g.programName}
-                                </span>
-                              )}
-                            </div>
-                            {g.course && (
-                              <span className="shrink-0 font-mono text-[10px] text-ink-muted">
-                                {g.course} курс
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </>
-                  )}
-                </div>
-              )}
-
-              {groupsError && !comboOpen && (
-                <p className="mt-1.5 text-[11px] leading-relaxed text-ink-secondary">
-                  {groupsError}
-                </p>
-              )}
-
-              {facultyId && !globalSearchMode && !facultyHasCatalog && !comboOpen && (
+              {facultyId && !globalSearchMode && !facultyHasCatalog && (
                 <p className="mt-1.5 text-[11px] leading-relaxed text-ink-muted">
-                  Для цього факультету підтверджений каталог груп наразі неповний. Ви можете скористатися глобальним пошуком по всіх групах ЛНУ вище.
+                  Для цього факультету підтверджений каталог груп наразі неповний. Скористайтеся глобальним пошуком вище.
                 </p>
               )}
             </div>
@@ -869,7 +682,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
                 type="button"
                 disabled={isActivating}
                 onClick={() => void handleActivate()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-terracotta/40 bg-surface-elevated/80 px-2.5 py-1 text-[11px] font-semibold text-ink hover:border-terracotta disabled:opacity-60"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-terracotta/40 bg-surface-elevated/80 px-3 py-1 text-[11px] font-semibold text-ink hover:border-terracotta disabled:opacity-60"
               >
                 <ArrowsClockwise weight="bold" className="h-3 w-3" aria-hidden="true" />
                 <span>Спробувати ще раз</span>
@@ -917,7 +730,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
             type="button"
             disabled={isActivating}
             onClick={() => void handleActivate()}
-            className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-amber/40 bg-amber px-4 text-xs font-semibold text-[#242522] transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
+            className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-amber/40 bg-amber px-4 text-xs font-semibold text-[#242522] transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-60"
           >
             <ArrowsClockwise
               weight="bold"

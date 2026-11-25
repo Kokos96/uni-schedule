@@ -201,7 +201,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
               <div className="min-w-0">
                 <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
-                  Uni Schedule v4.1.1
+                  Uni Schedule v4.2.0
                 </h3>
                 <p className="mt-0.5 text-xs text-ink-secondary">
                   Розклад занять, відвідуваність, нотатки та дедлайни (PWA)

@@ -68,6 +68,19 @@ function formatDdMmYyyy(date: Date): string {
   return `${dd}.${mm}.${yyyy}`;
 }
 
+async function parseApiJson<T>(res: Response, fallbackMessage: string): Promise<T> {
+  const contentType = res.headers.get('content-type') ?? '';
+  const raw = await res.text();
+  if (!contentType.includes('application/json') && /^\s*</.test(raw)) {
+    throw new Error(fallbackMessage);
+  }
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+}
+
 export class LnuAdapter implements UniversityAdapter {
   public readonly meta: UniversityMeta = {
     id: 'lnu',
@@ -196,7 +209,10 @@ export class LnuAdapter implements UniversityAdapter {
       if (!res.ok) {
         throw new Error(`Сервер API повернув помилку HTTP ${res.status}`);
       }
-      const data = (await res.json()) as { groups?: Group[] };
+      const data = await parseApiJson<{ groups?: Group[] }>(
+        res,
+        'Сервер довідника груп тимчасово недоступний. Спробуйте оновити список пізніше.'
+      );
       const groups = Array.isArray(data.groups) ? data.groups : [];
       if (filter?.includeAll || (!filter?.facultyId && !filter?.programId)) {
         return groups;
@@ -281,14 +297,17 @@ export class LnuAdapter implements UniversityAdapter {
 
       const res = await fetch(`${proxy}/api/schedule?${qs.toString()}`);
       if (!res.ok) {
-        const errPayload = (await res.json().catch(() => null)) as {
+        const errPayload = await parseApiJson<{
           error?: { message?: string };
-        } | null;
+        }>(res, `Сервер API повернув помилку HTTP ${res.status}`).catch(() => null);
         throw new Error(
           errPayload?.error?.message ?? `Сервер API повернув помилку HTTP ${res.status}`
         );
       }
-      const data = (await res.json()) as { schedule: NormalizedSchedule };
+      const data = await parseApiJson<{ schedule: NormalizedSchedule }>(
+        res,
+        'Сервер розкладу повернув некоректну відповідь. Спробуйте пізніше або перевірте підключення.'
+      );
       return data.schedule;
     }
 

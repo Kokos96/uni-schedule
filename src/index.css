@@ -171,11 +171,14 @@
   html {
     background-color: var(--bg-canvas);
     color: var(--text-primary);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     background-color: var(--bg-canvas);
     color: var(--text-primary);
+    min-height: 100dvh;
     margin: 0;
     font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -286,10 +289,12 @@ a,
     height: 0;
   }
 
-  input,
+  /* Prevent iOS Safari automatic input-focus zoom (<16px) even when Tailwind text-xs/text-sm utilities are applied */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]),
   select,
-  textarea {
-    font-size: 16px;
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px !important;
   }
 }
 

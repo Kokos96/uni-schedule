@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { readProfileFromBackend, syncProfileToBackend } from '../services/apiClient';
+import { getStoredDeviceAuth, readProfileFromBackend, syncProfileToBackend } from '../services/apiClient';
 import { ProfileSyncQueue, profileSignature, type ProfileSyncStatus } from '../services/profileSyncQueue';
 import {
   DepartmentType,
@@ -167,12 +167,17 @@ export interface UseSettingsResult {
   profileSyncStatus: ProfileSyncStatus;
   profileSyncError: string | null;
   confirmProfileOverwrite: () => void;
+  isHydratingRemoteProfile: boolean;
 }
 
 export const useSettings = (): UseSettingsResult => {
   const [settings, setSettings] = useState<ResolvedUserSettings>(() => {
     const saved = readStorage<unknown>(SETTINGS_KEY, null);
     return normalizeSettings(saved);
+  });
+  const [isHydratingRemoteProfile, setIsHydratingRemoteProfile] = useState<boolean>(() => {
+    const saved = normalizeSettings(readStorage<unknown>(SETTINGS_KEY, null));
+    return saved.scheduleSourceMode === 'unconfigured' && Boolean(getStoredDeviceAuth()?.syncToken);
   });
   const [storageError, setStorageError] = useState<StorageErrorCode | null>(null);
   const settingsRef = useRef(settings);
@@ -280,6 +285,9 @@ export const useSettings = (): UseSettingsResult => {
         if (!cancelled && settingsRef.current.scheduleSourceMode !== 'unconfigured' && !queue.hasPending) {
           queue.enqueue(settingsRef.current);
         }
+      })
+      .finally(() => {
+        if (!cancelled) setIsHydratingRemoteProfile(false);
       });
     return () => {
       cancelled = true;
@@ -317,5 +325,14 @@ export const useSettings = (): UseSettingsResult => {
     queueRef.current?.confirmLocalIntent();
   }, []);
 
-  return { settings, updateSettings, resetSettings, storageError, profileSyncStatus, profileSyncError, confirmProfileOverwrite };
+  return {
+    settings,
+    updateSettings,
+    resetSettings,
+    storageError,
+    profileSyncStatus,
+    profileSyncError,
+    confirmProfileOverwrite,
+    isHydratingRemoteProfile,
+  };
 };
