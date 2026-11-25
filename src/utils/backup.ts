@@ -15,7 +15,7 @@ import {
 import { DeadlineItem, DeadlinePriority, LessonNote } from '../types/notes';
 import { formatIsoDate, isValidIsoDate, isValidTimeString } from './date';
 
-export const BACKUP_APP_VERSION = '2.0.0';
+export const BACKUP_APP_VERSION = '3.6.0';
 export const BACKUP_SCHEMA_VERSION = 2;
 
 const VALID_ATTENDANCE_STATUSES = new Set<AttendanceStatus>(['present', 'absent', 'excused']);
@@ -68,10 +68,15 @@ function validateAttendanceRecord(
     return null;
   }
 
+  const updatedAt =
+    typeof entry.updatedAt === 'string' && !Number.isNaN(Date.parse(entry.updatedAt))
+      ? entry.updatedAt
+      : undefined;
   return {
     lessonId: lessonId.trim(),
     date,
     status: status as AttendanceStatus,
+    ...(updatedAt ? { updatedAt } : {}),
   };
 }
 
@@ -132,6 +137,33 @@ function validateSettings(raw: unknown, errors: string[]): UserSettings | null {
 
   if (errors.length > 0) return null;
 
+  const scheduleSourceMode =
+    raw.scheduleSourceMode === 'builtin' || raw.scheduleSourceMode === 'live' || raw.scheduleSourceMode === 'manual'
+      ? raw.scheduleSourceMode
+      : undefined;
+  const selectedElectives = Array.isArray(raw.selectedElectives)
+    ? raw.selectedElectives.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : undefined;
+  const selectedTrack =
+    typeof raw.selectedTrack === 'number' && Number.isInteger(raw.selectedTrack) && raw.selectedTrack >= 1 && raw.selectedTrack <= 20
+      ? raw.selectedTrack
+      : undefined;
+  let universityProfile: UserSettings['universityProfile'];
+  if (isPlainObject(raw.universityProfile)) {
+    const up = raw.universityProfile;
+    if (isNonEmptyString(up.universityId) && isNonEmptyString(up.groupId) && isNonEmptyString(up.groupName)) {
+      universityProfile = {
+        universityId: up.universityId.trim(),
+        ...(isNonEmptyString(up.facultyId) ? { facultyId: up.facultyId.trim() } : {}),
+        ...(isNonEmptyString(up.facultyName) ? { facultyName: up.facultyName.trim() } : {}),
+        ...(typeof up.course === 'number' && Number.isInteger(up.course) && up.course >= 1 && up.course <= 6 ? { course: up.course } : {}),
+        groupId: up.groupId.trim(),
+        groupName: up.groupName.trim(),
+        ...(up.subgroup === 1 || up.subgroup === 2 ? { subgroup: up.subgroup } : {}),
+      };
+    }
+  }
+
   return {
     subgroup: subgroup as 1 | 2,
     department: department as DepartmentType,
@@ -144,6 +176,10 @@ function validateSettings(raw: unknown, errors: string[]): UserSettings | null {
       typeof semesterStartDate === 'string' ? semesterStartDate : '2026-09-01',
     desktopScheduleMode:
       (desktopScheduleMode as DesktopScheduleMode | undefined) ?? 'week',
+    ...(scheduleSourceMode ? { scheduleSourceMode } : {}),
+    ...(universityProfile ? { universityProfile } : {}),
+    ...(selectedElectives ? { selectedElectives } : {}),
+    ...(selectedTrack !== undefined ? { selectedTrack } : {}),
   };
 }
 
@@ -495,7 +531,11 @@ export function deduplicateAttendanceRecords(
 ): AttendanceRecord[] {
   const map = new Map<string, AttendanceRecord>();
   for (const record of records) {
-    map.set(`${record.lessonId}::${record.date}`, record);
+    const key = `${record.lessonId}::${record.date}`;
+    const existing = map.get(key);
+    if (!existing || isIncomingTimestampNewer(existing.updatedAt, record.updatedAt)) {
+      map.set(key, record);
+    }
   }
   return Array.from(map.values());
 }

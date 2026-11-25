@@ -9,6 +9,7 @@ export type DepartmentType = 'sp' | 'oit' | 'rks' | 'rkt';
 export type ElectiveType = 'freelance' | 'management' | 'space' | 'both';
 export type ThemeMode = 'dark' | 'light' | 'system';
 export type DesktopScheduleMode = 'day' | 'week';
+export type ScheduleSourceMode = 'unconfigured' | 'builtin' | 'live' | 'manual';
 
 export interface UserSettings {
   // Preserved v1.x required fields
@@ -22,6 +23,8 @@ export interface UserSettings {
   semesterStartDate?: string;
   desktopScheduleMode?: DesktopScheduleMode;
   universityProfile?: StudentSelection;
+  /** Explicit academic schedule choice, independent of cache availability. */
+  scheduleSourceMode?: ScheduleSourceMode;
   /** Selected live DVVS elective keys (e.g. `el_...`) for synced schedules */
   selectedElectives?: string[];
   /** Selected numbered specialization/department track (e.g. 1 or 2) */
@@ -79,5 +82,5 @@ export interface Classroom {
   id: string;
   code: string;
   building: string;
-  floor: number;
+  floor?: number;
 }

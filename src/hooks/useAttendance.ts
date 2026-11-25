@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   enqueueAttendanceMutation,
+  enqueueAttendanceMutations,
   syncAttendanceWithServer,
   toSyncStatus,
 } from '../services/attendanceSync';
@@ -179,16 +180,69 @@ export const useAttendance = (): UseAttendanceResult => {
     [records]
   );
 
-  const replaceRecords = useCallback((nextRecords: readonly AttendanceRecord[]) => {
-    setRecords(sanitizeRecords(nextRecords));
-  }, []);
+  const replaceRecords = useCallback(
+    (nextRecords: readonly AttendanceRecord[]) => {
+      const nowIso = new Date().toISOString();
+      const prev = recordsRef.current;
+      const cleanNext = sanitizeRecords(nextRecords).map((r) => ({
+        lessonId: r.lessonId,
+        date: r.date,
+        status: r.status,
+        updatedAt: r.updatedAt && r.updatedAt > nowIso ? r.updatedAt : nowIso,
+      }));
+      const nextKeys = new Set(cleanNext.map((r) => `${r.lessonId}::${r.date}`));
+      const mutations = [
+        ...prev
+          .filter((r) => !nextKeys.has(`${r.lessonId}::${r.date}`))
+          .map((r) => ({
+            lessonId: r.lessonId,
+            lessonDate: r.date,
+            status: toSyncStatus(null),
+            updatedAt: nowIso,
+          })),
+        ...cleanNext.map((r) => ({
+          lessonId: r.lessonId,
+          lessonDate: r.date,
+          status: toSyncStatus(r.status),
+          updatedAt: r.updatedAt,
+        })),
+      ];
+      setRecords(cleanNext);
+      enqueueAttendanceMutations(mutations);
+      triggerSync();
+    },
+    [triggerSync]
+  );
 
-  const mergeRecords = useCallback((incomingRecords: readonly AttendanceRecord[]) => {
-    setRecords((prev) => {
-      const cleanIncoming = sanitizeRecords(incomingRecords);
-      return deduplicateAttendanceRecords([...prev, ...cleanIncoming]);
-    });
-  }, []);
+  const mergeRecords = useCallback(
+    (incomingRecords: readonly AttendanceRecord[]) => {
+      const nowIso = new Date().toISOString();
+      const prev = recordsRef.current;
+      const cleanIncoming = sanitizeRecords(incomingRecords).map((r) => ({
+        lessonId: r.lessonId,
+        date: r.date,
+        status: r.status,
+        updatedAt: r.updatedAt ?? nowIso,
+      }));
+      const prevMap = new Map(prev.map((r) => [`${r.lessonId}::${r.date}`, r]));
+      const merged = deduplicateAttendanceRecords([...prev, ...cleanIncoming]);
+      const mutations = merged
+        .filter((rec) => {
+          const old = prevMap.get(`${rec.lessonId}::${rec.date}`);
+          return !old || old.status !== rec.status || (rec.updatedAt ?? '') > (old.updatedAt ?? '');
+        })
+        .map((rec) => ({
+          lessonId: rec.lessonId,
+          lessonDate: rec.date,
+          status: toSyncStatus(rec.status),
+          updatedAt: rec.updatedAt ?? nowIso,
+        }));
+      setRecords(merged);
+      enqueueAttendanceMutations(mutations);
+      triggerSync();
+    },
+    [triggerSync]
+  );
 
   const clearRecords = useCallback(() => {
     setRecords([]);

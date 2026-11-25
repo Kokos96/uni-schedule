@@ -104,6 +104,10 @@ export interface ActiveSubscriptionRow {
   elective_course?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
+  revision?: number;
+  schedule_source_type?: 'dated' | 'recurring' | null;
+  covered_from?: string | null;
+  covered_to?: string | null;
 }
 
 export interface ScheduledLessonRow {
@@ -250,9 +254,10 @@ export interface UserAttendanceEntry {
 }
 
 export function computeSummaryCounts(
-  lessons: ReadonlyArray<{ lesson_id: string; lesson_date: string | null }>,
+  lessons: ReadonlyArray<{ lesson_id: string; lesson_date: string | null; day_of_week?: number }>,
   attendance: readonly UserAttendanceEntry[],
-  fallbackDateIso: string
+  fallbackDateIso: string,
+  mondayIso?: string
 ): AttendanceSummaryCounts {
   const statusMap = new Map<string, string>();
   for (const rec of attendance) {
@@ -265,7 +270,11 @@ export function computeSummaryCounts(
   let unmarked = 0;
 
   for (const lesson of lessons) {
-    const dateKey = lesson.lesson_date ?? fallbackDateIso;
+    const dateKey =
+      lesson.lesson_date ??
+      (mondayIso && typeof lesson.day_of_week === 'number' && lesson.day_of_week >= 1 && lesson.day_of_week <= 7
+        ? addDaysToIso(mondayIso, lesson.day_of_week - 1)
+        : fallbackDateIso);
     const status = statusMap.get(`${lesson.lesson_id}:${dateKey}`);
     if (status === 'attended' || status === 'present') {
       attended += 1;
@@ -307,6 +316,7 @@ export function evaluateNotificationsForUser(
   weekSummary?: AttendanceSummaryCounts
 ): CandidateNotification[] {
   const candidates: CandidateNotification[] = [];
+  const scheduleScope = `${row.university_id}:${row.group_id}:s${row.subgroup}`;
 
   // Filter lessons by student's subgroup, track, week parity, and selected DVVS electives
   const weekParity = getWeekParityFromIso(local.isoDate);
@@ -325,7 +335,7 @@ export function evaluateNotificationsForUser(
 
       candidates.push({
         type: 'morning',
-        dedupKey: `${row.sub_id}:morning:${local.isoDate}`,
+        dedupKey: `${row.sub_id}:${scheduleScope}:morning:${local.isoDate}`,
         payload: {
           title: 'Uni Schedule',
           body,
@@ -350,7 +360,7 @@ export function evaluateNotificationsForUser(
         const roomText = lesson.room ? ` · Аудиторія ${lesson.room}` : '';
         candidates.push({
           type: 'before_lesson',
-          dedupKey: `${row.sub_id}:before_lesson:${local.isoDate}:${lesson.lesson_id}@${lesson.start_time}`,
+          dedupKey: `${row.sub_id}:${scheduleScope}:before_lesson:${local.isoDate}:${lesson.lesson_id}@${lesson.start_time}`,
           payload: {
             title: 'Uni Schedule',
             body: `Через ${row.before_lesson_minutes} хв — ${lesson.subject}\n${lesson.start_time}–${lesson.end_time}${roomText}`,
@@ -369,7 +379,7 @@ export function evaluateNotificationsForUser(
       if (isTimeInCronWindow(local.minutesOfDay, remindEndAt)) {
         candidates.push({
           type: 'before_end',
-          dedupKey: `${row.sub_id}:before_end:${local.isoDate}:${lesson.lesson_id}@${lesson.end_time}`,
+          dedupKey: `${row.sub_id}:${scheduleScope}:before_end:${local.isoDate}:${lesson.lesson_id}@${lesson.end_time}`,
           payload: {
             title: 'Uni Schedule',
             body: `До завершення пари ${row.before_end_minutes} хв — ${lesson.subject}\nКінець о ${lesson.end_time}. Не забудь відмітити відвідуваність.`,
@@ -393,7 +403,7 @@ export function evaluateNotificationsForUser(
         computeSummaryCounts(myTodayLessons, [], local.isoDate);
       candidates.push({
         type: 'evening',
-        dedupKey: `${row.sub_id}:evening:${local.isoDate}`,
+        dedupKey: `${row.sub_id}:${scheduleScope}:evening:${local.isoDate}`,
         payload: {
           title: 'Uni Schedule',
           body: `Підсумок дня: ${counts.total} ${pluralizePairs(counts.total)}\n${formatSummaryLine(counts)}`,
@@ -419,7 +429,7 @@ export function evaluateNotificationsForUser(
       };
       candidates.push({
         type: 'friday',
-        dedupKey: `${row.sub_id}:friday:${local.isoDate}`,
+        dedupKey: `${row.sub_id}:${scheduleScope}:friday:${local.isoDate}`,
         payload: {
           title: 'Uni Schedule',
           body: `Тиждень завершено: ${counts.total} ${pluralizePairs(counts.total)}\n${formatSummaryLine(counts)}`,
@@ -502,12 +512,14 @@ export async function runNotificationCron(
             np.before_end_enabled, np.before_end_minutes,
             np.evening_enabled, np.evening_time,
             np.friday_enabled, np.friday_time,
-            sp.elective_course, sp.selected_electives, sp.selected_track
+            sp.elective_course, sp.selected_electives, sp.selected_track,
+            sp.revision, ug.schedule_source_type, ug.covered_from, ug.covered_to
      FROM push_subscriptions ps
      JOIN user_devices ud ON ud.id = ps.device_id AND ud.revoked_at IS NULL
      JOIN student_profiles sp ON sp.user_id = ps.user_id
      JOIN notification_preferences np ON np.user_id = ps.user_id AND np.enabled = 1
-     WHERE ps.fail_count < 10
+     LEFT JOIN university_groups ug ON ug.id = (sp.university_id || ':' || sp.group_id)
+     WHERE ps.fail_count < 10 AND sp.source_mode = 'live' AND sp.revision > 0
      ORDER BY ps.created_at ASC`
   ).all<ActiveSubscriptionRow>();
 
@@ -521,6 +533,13 @@ export async function runNotificationCron(
     try {
       const local = getLocalDateTimeParts(nowUtc, row.timezone);
       const todayParity = getWeekParityFromIso(local.isoDate);
+      if (
+        row.schedule_source_type === 'dated' &&
+        ((row.covered_from && local.isoDate < row.covered_from) ||
+          (row.covered_to && local.isoDate > row.covered_to))
+      ) {
+        return;
+      }
       const groupKey = `${row.university_id}:${row.group_id}`;
       const dayCacheKey = `${groupKey}:${local.isoDate}`;
 
@@ -528,7 +547,7 @@ export async function runNotificationCron(
       if (!todayLessons) {
         const res = await env.DB.prepare(
           `SELECT lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time,
-                  subject, lesson_type, teacher, room, building, subgroup, is_elective, elective_key, week_type, status
+                  subject, lesson_type, teacher, room, building, subgroup, is_elective, elective_key, track_number, week_type, status
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date = ? OR (lesson_date IS NULL AND day_of_week = ?))`
         )
@@ -541,17 +560,19 @@ export async function runNotificationCron(
       let weekLessons: Array<{
         lesson_id: string;
         lesson_date: string | null;
+        day_of_week?: number;
         subgroup: number | null;
         subject: string;
         is_elective?: number;
         elective_key?: string | null;
+        track_number?: number | null;
         week_type?: string | null;
         status?: string;
       }> = [];
       if (local.weekday === 5 && row.friday_enabled === 1) {
         const mondayIso = addDaysToIso(local.isoDate, -4);
         const weekRes = await env.DB.prepare(
-          `SELECT lesson_id, lesson_date, subgroup, subject, is_elective, elective_key, week_type, status
+          `SELECT lesson_id, lesson_date, day_of_week, subgroup, subject, is_elective, elective_key, track_number, week_type, status
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date BETWEEN ? AND ? OR lesson_date IS NULL)`
         )
@@ -559,10 +580,12 @@ export async function runNotificationCron(
           .all<{
             lesson_id: string;
             lesson_date: string | null;
+            day_of_week?: number;
             subgroup: number | null;
             subject: string;
             is_elective?: number;
             elective_key?: string | null;
+            track_number?: number | null;
             week_type?: string | null;
             status?: string;
           }>();
@@ -617,7 +640,8 @@ export async function runNotificationCron(
         weekSummary = computeSummaryCounts(
           weekLessons,
           weekAttRes.results ?? [],
-          local.isoDate
+          local.isoDate,
+          mondayIso
         );
       }
 
@@ -629,6 +653,20 @@ export async function runNotificationCron(
         todaySummary,
         weekSummary
       );
+
+      if (candidates.length > 0 && typeof row.revision === 'number') {
+        const currentProfile = await env.DB.prepare(
+          `SELECT source_mode, revision FROM student_profiles WHERE user_id = ?`
+        )
+          .bind(row.user_id)
+          .first<{ source_mode?: string; revision?: number }>();
+        if (
+          currentProfile &&
+          (currentProfile.source_mode !== 'live' || currentProfile.revision !== row.revision)
+        ) {
+          return;
+        }
+      }
 
       for (const candidate of candidates) {
         stats.attempted += 1;

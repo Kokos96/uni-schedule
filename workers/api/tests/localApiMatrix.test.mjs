@@ -451,9 +451,8 @@ describe('workers/api Real Local Worker HTTP Matrix (20 endpoints x 6 scenarios)
       assert.equal(noAuthGet.status, 401);
 
       const getA = await apiFetch(baseUrl, '/api/profile', { token: tokenA });
-      assert.equal(getA.status, 200);
-      assert.equal(getA.json?.profile?.userId, userIdA);
-      logMatrix('GET', '/api/profile', 'success', getA.status, 'ok');
+      assert.equal(getA.status, 404); // New registration has no invented group.
+      logMatrix('GET', '/api/profile', 'unconfigured', getA.status, getA.json?.error?.code);
 
       const wrongMethod = await apiFetch(baseUrl, '/api/profile', { method: 'POST', token: tokenA });
       assert.equal(wrongMethod.status, 405);
@@ -467,6 +466,8 @@ describe('workers/api Real Local Worker HTTP Matrix (20 endpoints x 6 scenarios)
         method: 'PUT',
         token: tokenA,
         body: {
+          sourceMode: 'live',
+          expectedRevision: 0,
           universityId: 'lnu',
           facultyId: '1005',
           facultyName: "Факультет електроніки та комп'ютерних технологій",
@@ -480,6 +481,9 @@ describe('workers/api Real Local Worker HTTP Matrix (20 endpoints x 6 scenarios)
       });
       assert.equal(putA.status, 200);
       assert.equal(putA.json?.profile?.subgroup, 2);
+      const confirmedA = await apiFetch(baseUrl, '/api/profile', { token: tokenA });
+      assert.equal(confirmedA.status, 200);
+      assert.equal(confirmedA.json?.profile?.userId, userIdA);
       logMatrix('PUT', '/api/profile', 'success', putA.status, 'ok');
 
       const badPut = await apiFetch(baseUrl, '/api/profile', {
@@ -496,6 +500,8 @@ describe('workers/api Real Local Worker HTTP Matrix (20 endpoints x 6 scenarios)
         token: tokenB,
         body: {
           userId: userIdA,
+          sourceMode: 'live',
+          expectedRevision: 0,
           universityId: 'lnu',
           groupId: 'ПМІ-41',
           groupName: 'ПМІ-41',
@@ -507,6 +513,24 @@ describe('workers/api Real Local Worker HTTP Matrix (20 endpoints x 6 scenarios)
       const verifyA = await apiFetch(baseUrl, '/api/profile', { token: tokenA });
       assert.equal(verifyA.json?.profile?.groupName, 'ФЕП-33с');
       logMatrix('PUT', '/api/profile', 'idor_isolated', idorPut.status, 'ok');
+
+      const builtinA = await apiFetch(baseUrl, '/api/profile', {
+        method: 'PUT', token: tokenA,
+        body: { sourceMode: 'builtin', expectedRevision: 1 },
+      });
+      assert.equal(builtinA.status, 200);
+      assert.equal(builtinA.json?.profile?.sourceMode, 'builtin');
+      assert.equal(builtinA.json?.profile?.revision, 2);
+      const staleA = await apiFetch(baseUrl, '/api/profile', {
+        method: 'PUT', token: tokenA,
+        body: { sourceMode: 'live', expectedRevision: 1,
+          universityId: 'lnu', groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' },
+      });
+      assert.equal(staleA.status, 409);
+      assert.equal(staleA.json?.revision, 2);
+      const verifyBuiltinA = await apiFetch(baseUrl, '/api/profile', { token: tokenA });
+      assert.equal(verifyBuiltinA.json?.profile?.sourceMode, 'builtin');
+      logMatrix('PUT', '/api/profile', 'builtin_transition_and_stale_rejection', builtinA.status, 'ok');
 
       const delMethod = await apiFetch(baseUrl, '/api/profile', { method: 'DELETE', token: tokenA });
       assert.equal(delMethod.status, 405);

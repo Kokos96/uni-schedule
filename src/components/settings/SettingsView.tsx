@@ -6,7 +6,7 @@ import {
   Laptop,
 } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS } from '../../constants/profile';
-import { DEFAULT_SETTINGS, normalizeSettings } from '../../hooks/useSettings';
+import { DEFAULT_SETTINGS, normalizeSettings, type UseSettingsResult } from '../../hooks/useSettings';
 import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { AttendanceRecord, UserSettings } from '../../types';
@@ -36,7 +36,10 @@ export interface SettingsViewProps {
   syncStatus?: ScheduleSyncStatus;
   lastSyncedAt?: string | null;
   syncError?: string | null;
-  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  profileSyncStatus?: UseSettingsResult['profileSyncStatus'];
+  profileSyncError?: string | null;
+  onConfirmProfileOverwrite?: () => void;
+  onSyncGroupSchedule?: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
@@ -60,6 +63,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   syncStatus,
   lastSyncedAt,
   syncError,
+  profileSyncStatus = 'idle',
+  profileSyncError,
+  onConfirmProfileOverwrite,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
   isUsingCustomGroup = false,
@@ -79,6 +85,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const departmentLabel =
     DEPARTMENT_OPTIONS.find((d) => d.id === resolved.department)?.label ?? resolved.department;
+  const profileBadge = resolved.scheduleSourceMode === 'builtin'
+    ? `ФЕП-33с · ${departmentLabel}${hasSubgroups ? ` · Підгр. ${resolved.subgroup}` : ''}`
+    : resolved.scheduleSourceMode === 'unconfigured'
+      ? 'Профіль не налаштовано'
+      : resolved.scheduleSourceMode === 'manual'
+        ? `${resolved.universityProfile?.groupName || 'Група не обрана'} · Ручний режим`
+        : `${resolved.universityProfile?.groupName || 'Група не обрана'} · ${syncStatus === 'synced' ? 'Розклад завантажено' : syncStatus === 'syncing' ? 'Синхронізація…' : syncStatus === 'error' ? 'Помилка розкладу' : 'Очікує синхронізації'}${hasSubgroups && isUsingCustomGroup ? ` · Підгр. ${resolved.subgroup}` : ''}`;
 
   const handleResetSettings = () => {
     if (onResetSettings) {
@@ -105,18 +118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <MetaChip variant="amber" mono>
-          {resolved.universityProfile
-            ? resolved.universityProfile.groupName || 'Група не обрана'
-            : 'ФЕП-33с'}{' '}
-          ·{' '}
-          {resolved.universityProfile
-            ? isUsingCustomGroup
-              ? resolved.selectedTrack && availableTracks.some((track) => track.number === resolved.selectedTrack)
-                ? `Потік ${resolved.selectedTrack}`
-                : 'Онлайн'
-              : 'Очікує синхронізації'
-            : departmentLabel}
-          {hasSubgroups ? ` · Підгр. ${resolved.subgroup}` : ''}
+          {profileBadge}
         </MetaChip>
       </div>
 
@@ -129,6 +131,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             syncStatus={syncStatus}
             lastSyncedAt={lastSyncedAt}
             syncError={syncError}
+            profileSyncStatus={profileSyncStatus}
+            profileSyncError={profileSyncError}
+            onConfirmProfileOverwrite={onConfirmProfileOverwrite}
             onSyncGroupSchedule={onSyncGroupSchedule}
             onResetBuiltinSchedule={onResetBuiltinSchedule}
             isUsingCustomGroup={isUsingCustomGroup}
@@ -164,7 +169,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   Скинути параметри профілю
                 </h3>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-ink-secondary">
-                  Повертає кафедру, підгрупу, тему та ціль до стандартних значень без видалення
+                  Повертає вбудований розклад, кафедру, підгрупу, тему та ціль до стандартних значень без видалення
                   відміток чи нотаток.
                 </p>
               </div>
@@ -234,7 +239,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       >
         <div className="space-y-4">
           <p className="text-xs leading-relaxed text-ink-secondary">
-            Буде відновлено стандартні налаштування: кафедра СП, 1-ша підгрупа, темна тема, ціль
+            Буде відновлено вбудований розклад ФЕП-33с і стандартні налаштування: кафедра СП, 1-ша підгрупа, темна тема, ціль
             відвідуваності 80% та дата початку семестру 2026-09-01.
           </p>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

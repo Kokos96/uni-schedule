@@ -152,6 +152,13 @@ def main() -> None:
               if (!localStorage.getItem('uni_schedule_cached_group_v2')) {
                 localStorage.setItem('uni_schedule_cached_group_v2', JSON.stringify(cached));
               }
+              if (!localStorage.getItem('uni_schedule_settings_v2')) {
+                localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({
+                  scheduleSourceMode: 'live',
+                  subgroup: 1,
+                  universityProfile: { universityId: 'lnu', facultyId: '1005', groupId: 'ФЕП-33с', groupName: 'ФЕП-33с', subgroup: 1 }
+                }));
+              }
             })();
             """
             ctx_a.add_init_script(f"localStorage.setItem('uni_schedule_sync_token_v1', {json.dumps(json.dumps(auth_a))});\n{seed_cache}")

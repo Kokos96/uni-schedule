@@ -103,6 +103,9 @@ const AppContent: React.FC = () => {
     updateSettings,
     resetSettings,
     storageError: settingsStorageError,
+    profileSyncStatus,
+    profileSyncError,
+    confirmProfileOverwrite,
   } = useSettings();
   useTheme(settings.theme);
 
@@ -359,6 +362,12 @@ const AppContent: React.FC = () => {
       needsElectiveSelection={needsElectiveSelection}
       onNavigateToSettings={() => handleTabChange('settings')}
       weekGrid={weekGrid}
+      weekAvailability={weekDates.every((date) => scheduleSource.getDateAvailability(date) === 'outside_coverage')
+        ? 'outside_coverage'
+        : weekDates.every((date) => scheduleSource.getDateAvailability(date) === 'not_loaded')
+          ? 'not_loaded'
+          : 'loaded'}
+      sourceMode={settings.scheduleSourceMode}
       teachersMap={scheduleSource.teachersMap}
       classroomsMap={scheduleSource.classroomsMap}
       weekParity={weekParity}
@@ -426,6 +435,7 @@ const AppContent: React.FC = () => {
               onResetToToday={handleResetToToday}
               lessons={selectedDayLessons}
               dateAvailability={scheduleSource.getDateAvailability(selectedDate)}
+              todayAvailability={scheduleSource.getDateAvailability(todayDate)}
               needsElectiveSelection={needsElectiveSelection}
               todayLessons={todayLessons}
               currentPair={currentPair}
@@ -498,6 +508,9 @@ const AppContent: React.FC = () => {
                 syncStatus={scheduleSource.syncStatus}
                 lastSyncedAt={scheduleSource.lastSyncedAt}
                 syncError={scheduleSource.syncError}
+                profileSyncStatus={profileSyncStatus}
+                profileSyncError={profileSyncError}
+                onConfirmProfileOverwrite={confirmProfileOverwrite}
                 onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
                 onResetBuiltinSchedule={scheduleSource.clearCachedSchedule}
                 isUsingCustomGroup={scheduleSource.isUsingCustomGroup}

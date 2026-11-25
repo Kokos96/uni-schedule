@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const SHELL_CACHE = `rozklad-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `rozklad-assets-${CACHE_VERSION}`;
 const ACTIVE_CACHES = new Set([SHELL_CACHE, ASSET_CACHE]);
@@ -69,6 +69,10 @@ async function handleNavigation(request) {
     const networkResponse = await fetch(request);
     if (networkResponse && networkResponse.ok) {
       await shellCache.put(request, networkResponse.clone());
+      const reqPath = new URL(request.url).pathname;
+      if (reqPath === '/' || reqPath === '/index.html') {
+        await shellCache.put('/', networkResponse.clone());
+      }
     }
     return networkResponse;
   } catch {
@@ -171,6 +175,11 @@ self.addEventListener('fetch', (event) => {
 
   // Leave other cross-origin requests untouched
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Never cache API calls in Service Worker
+  if (url.pathname.startsWith('/api/')) {
     return;
   }
 

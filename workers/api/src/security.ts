@@ -196,38 +196,28 @@ export async function checkRateLimit(
   windowSeconds: number
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
   const nowSec = Math.floor(Date.now() / 1000);
-  const existing = await db
-    .prepare(`SELECT count, reset_at FROM rate_limit_buckets WHERE bucket_key = ?`)
-    .bind(bucketKey)
+  const nextResetAt = nowSec + windowSeconds;
+  const row = await db
+    .prepare(
+      `INSERT INTO rate_limit_buckets (bucket_key, count, reset_at)
+       VALUES (?, 1, ?)
+       ON CONFLICT(bucket_key) DO UPDATE SET
+         count = CASE WHEN rate_limit_buckets.reset_at <= ? THEN 1 ELSE rate_limit_buckets.count + 1 END,
+         reset_at = CASE WHEN rate_limit_buckets.reset_at <= ? THEN excluded.reset_at ELSE rate_limit_buckets.reset_at END
+       RETURNING count, reset_at`
+    )
+    .bind(bucketKey, nextResetAt, nowSec, nowSec)
     .first<{ count: number; reset_at: number }>();
 
-  if (!existing || existing.reset_at <= nowSec) {
-    const resetAt = nowSec + windowSeconds;
-    await db
-      .prepare(
-        `INSERT INTO rate_limit_buckets (bucket_key, count, reset_at)
-         VALUES (?, 1, ?)
-         ON CONFLICT(bucket_key) DO UPDATE SET count = 1, reset_at = excluded.reset_at`
-      )
-      .bind(bucketKey, resetAt)
-      .run();
-    return { allowed: true, remaining: Math.max(0, maxRequests - 1), resetAt };
+  const count = row?.count ?? 1;
+  const resetAt = row?.reset_at ?? nextResetAt;
+  if (count > maxRequests) {
+    return { allowed: false, remaining: 0, resetAt };
   }
-
-  if (existing.count >= maxRequests) {
-    return { allowed: false, remaining: 0, resetAt: existing.reset_at };
-  }
-
-  const nextCount = existing.count + 1;
-  await db
-    .prepare(`UPDATE rate_limit_buckets SET count = ? WHERE bucket_key = ?`)
-    .bind(nextCount, bucketKey)
-    .run();
-
   return {
     allowed: true,
-    remaining: Math.max(0, maxRequests - nextCount),
-    resetAt: existing.reset_at,
+    remaining: Math.max(0, maxRequests - count),
+    resetAt,
   };
 }
 

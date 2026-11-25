@@ -1,4 +1,5 @@
 import { LnuAdapter } from '../../../../src/integrations/universities/lnu/lnuAdapter';
+import { normalizeGroupHomoglyphs } from '../../../../src/integrations/universities/lnu/lnuParser';
 import { listUniversities } from '../../../../src/integrations/universities/registry';
 import type {
   NormalizedSchedule,
@@ -127,6 +128,8 @@ export async function handleGetGroups(
   }
 
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+  const queryHomoglyph = query ? normalizeGroupHomoglyphs(query) : '';
+  const facultyFilter = (url.searchParams.get('facultyId') ?? '').trim();
   const courseFilter = courseParam ? Number(courseParam) : undefined;
 
   const groupsTtl = parsePositiveInt(env.GROUPS_CACHE_TTL_SECONDS, 86400);
@@ -227,25 +230,32 @@ export async function handleGetGroups(
   }
 
   const dbGroups = await env.DB.prepare(
-    `SELECT group_code, group_name, course
+    `SELECT group_code, group_name, course, faculty_id
      FROM university_groups
      WHERE university_id = 'lnu'
      ORDER BY group_name ASC`
-  ).all<{ group_code: string; group_name: string; course: number | null }>();
+  ).all<{ group_code: string; group_name: string; course: number | null; faculty_id?: string | null }>();
 
   const filtered = (dbGroups.results ?? [])
     .filter((row) => {
+      if (facultyFilter && facultyFilter !== '0' && row.faculty_id && row.faculty_id !== facultyFilter) {
+        return false;
+      }
       if (courseFilter && row.course !== null && row.course !== courseFilter) {
         return false;
       }
-      if (query && !row.group_name.toLowerCase().includes(query)) {
-        return false;
+      if (query) {
+        const lowerName = row.group_name.toLowerCase();
+        if (!lowerName.includes(query) && !normalizeGroupHomoglyphs(row.group_name).includes(queryHomoglyph)) {
+          return false;
+        }
       }
       return true;
     })
     .map((row) => ({
       id: row.group_code,
       name: row.group_name,
+      ...(row.faculty_id ? { facultyId: row.faculty_id } : {}),
       ...(row.course ? { course: row.course } : {}),
     }));
 
@@ -267,6 +277,7 @@ interface ScheduleEntryRow {
   subgroup: number | null;
   is_elective: number;
   elective_key?: string | null;
+  track_number?: number | null;
   week_type?: string | null;
   group_label?: string | null;
   status: string;
@@ -278,13 +289,13 @@ async function readCachedGroupSchedule(
   groupKey: string,
   groupName: string,
   fetchedAt: string,
-  coverage?: { sourceType?: 'dated' | 'recurring' | null; coveredFrom?: string | null; coveredTo?: string | null }
+  coverage?: { sourceType?: 'dated' | 'recurring' | null; coveredFrom?: string | null; coveredTo?: string | null; facultyId?: string | null }
 ): Promise<NormalizedSchedule | null> {
   const entries = await db
     .prepare(
       `SELECT lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time,
               subject, lesson_type, teacher, room, building, subgroup, is_elective,
-              status, updated_at, elective_key, week_type, group_label
+              status, updated_at, elective_key, track_number, week_type, group_label
        FROM schedule_entries
        WHERE group_id = ?
        ORDER BY lesson_date ASC, pair_number ASC`
@@ -298,6 +309,7 @@ async function readCachedGroupSchedule(
   return {
     universityId: 'lnu',
     universityName: 'ЛНУ ім. Івана Франка',
+    ...(coverage?.facultyId ? { facultyId: coverage.facultyId } : {}),
     groupId: groupName,
     groupName,
     fetchedAt,
@@ -320,6 +332,7 @@ async function readCachedGroupSchedule(
         ...(r.subgroup === 1 || r.subgroup === 2 ? { subgroup: r.subgroup } : {}),
         ...(r.is_elective === 1 ? { isElective: true } : {}),
         ...(r.elective_key ? { electiveKey: r.elective_key } : {}),
+        ...(r.track_number != null ? { trackNumber: r.track_number } : {}),
         ...(r.week_type ? { weekType: r.week_type as ScheduleLesson['weekType'] } : {}),
         ...(r.group_label ? { groupLabel: r.group_label } : {}),
         status: (r.status as ScheduleLesson['status']) ?? 'active',
@@ -359,7 +372,8 @@ export async function handleGetSchedule(
 
   const course =
     courseParam && /^[1-6]$/.test(courseParam) ? Number(courseParam) : undefined;
-  const groupKey = `${universityId}:${groupName}`;
+  let resolvedGroupName = groupName;
+  let groupKey = `${universityId}:${resolvedGroupName}`;
   const cacheTtl = parsePositiveInt(env.SCHEDULE_CACHE_TTL_SECONDS, 21600);
 
   const groupRow = await env.DB.prepare(
@@ -378,24 +392,50 @@ export async function handleGetSchedule(
       covered_to: string | null;
     }>();
 
+  let effectiveGroupRow = groupRow;
+  if (!effectiveGroupRow) {
+    const requestedNorm = normalizeGroupHomoglyphs(groupName);
+    const dirRows = await env.DB.prepare(
+      `SELECT id, faculty_id, group_name, last_synced_at, content_hash,
+              schedule_source_type, covered_from, covered_to
+       FROM university_groups WHERE university_id = ?`
+    ).bind(universityId).all<{
+      id: string;
+      faculty_id?: string | null;
+      group_name: string;
+      last_synced_at: string | null;
+      content_hash: string | null;
+      schedule_source_type: 'dated' | 'recurring' | null;
+      covered_from: string | null;
+      covered_to: string | null;
+    }>();
+    const homoglyphMatch = (dirRows.results ?? []).find(
+      (r) => normalizeGroupHomoglyphs(r.group_name) === requestedNorm
+    );
+    if (homoglyphMatch) {
+      effectiveGroupRow = homoglyphMatch;
+      resolvedGroupName = homoglyphMatch.group_name;
+      groupKey = homoglyphMatch.id;
+    }
+  }
   const requestedFaculty = facultyId && facultyId !== '0' ? facultyId : null;
   const facultyMatches =
     !requestedFaculty ||
-    !groupRow?.faculty_id ||
-    groupRow.faculty_id === requestedFaculty;
-  const cacheCoverage = groupRow ? {
-    sourceType: groupRow.schedule_source_type,
-    coveredFrom: groupRow.covered_from,
-    coveredTo: groupRow.covered_to,
+    !effectiveGroupRow?.faculty_id ||
+    effectiveGroupRow.faculty_id === requestedFaculty;
+  const cacheCoverage = effectiveGroupRow ? {
+    sourceType: effectiveGroupRow.schedule_source_type,
+    coveredFrom: effectiveGroupRow.covered_from,
+    coveredTo: effectiveGroupRow.covered_to,
   } : undefined;
 
   // Serve shared group cache if fresh, faculty-compatible, and not force-refreshed
-  if (!force && groupRow && facultyMatches && isFreshTimestamp(groupRow.last_synced_at, cacheTtl)) {
+  if (!force && effectiveGroupRow && facultyMatches && isFreshTimestamp(effectiveGroupRow.last_synced_at, cacheTtl)) {
     const cached = await readCachedGroupSchedule(
       env.DB,
       groupKey,
-      groupName,
-      groupRow.last_synced_at!,
+      resolvedGroupName,
+      effectiveGroupRow.last_synced_at!,
       cacheCoverage
     );
     if (cached) {
@@ -413,8 +453,8 @@ export async function handleGetSchedule(
       universityId,
       facultyId: facultyId || undefined,
       course,
-      groupId: groupName,
-      groupName,
+      groupId: resolvedGroupName,
+      groupName: resolvedGroupName,
     });
 
     if (fresh.lessons.length === 0) {
@@ -431,12 +471,12 @@ export async function handleGetSchedule(
         .run();
 
       // Preserve existing cached schedule if upstream returned empty
-      if (groupRow?.last_synced_at) {
+      if (effectiveGroupRow?.last_synced_at && facultyMatches) {
         const staleCache = await readCachedGroupSchedule(
           env.DB,
           groupKey,
           groupName,
-          groupRow.last_synced_at,
+          effectiveGroupRow.last_synced_at,
           cacheCoverage
         );
         if (staleCache) {
@@ -460,52 +500,58 @@ export async function handleGetSchedule(
 
     const contentHash = await computeContentHash(fresh.lessons);
 
-    // Publish cache metadata only after schedule rows have been written.
-    const publishGroupMetadata = () => env.DB.prepare(
-      `INSERT INTO university_groups (
-         id, university_id, faculty_id, course, group_code, group_name,
-         content_hash, last_synced_at, created_at,
-         schedule_source_type, covered_from, covered_to
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         faculty_id = COALESCE(excluded.faculty_id, university_groups.faculty_id),
-         course = COALESCE(excluded.course, university_groups.course),
-         content_hash = excluded.content_hash,
-         last_synced_at = excluded.last_synced_at,
-         schedule_source_type = excluded.schedule_source_type,
-         covered_from = excluded.covered_from,
-         covered_to = excluded.covered_to`
+    // A1 (BUG-005): Ensure parent university_groups row exists BEFORE inserting schedule_entries
+    // without overwriting existing content_hash/last_synced_at until publication succeeds.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO university_groups (
+         id, university_id, faculty_id, course, group_code, group_name, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(
         groupKey,
         universityId,
         facultyId !== '0' ? facultyId : null,
         course ?? null,
-        groupName,
-        groupName,
-        contentHash,
-        now,
-        now,
-        fresh.sourceType ?? 'dated',
-        fresh.coveredFrom ?? null,
-        fresh.coveredTo ?? null
+        resolvedGroupName,
+        resolvedGroupName,
+        now
       )
       .run();
 
-    // Only rewrite entries if content actually changed (or first sync)
-    if (groupRow?.content_hash !== contentHash) {
-      const batch: D1PreparedStatement[] = [
-        env.DB.prepare(`DELETE FROM schedule_entries WHERE group_id = ?`).bind(groupKey),
-      ];
+    const publishMetadataStmt = env.DB.prepare(
+      `UPDATE university_groups
+       SET faculty_id = COALESCE(?, faculty_id),
+           course = COALESCE(?, course),
+           content_hash = ?,
+           last_synced_at = ?,
+           schedule_source_type = ?,
+           covered_from = ?,
+           covered_to = ?
+       WHERE id = ?`
+    ).bind(
+      facultyId !== '0' ? facultyId : null,
+      course ?? null,
+      contentHash,
+      now,
+      fresh.sourceType ?? 'dated',
+      fresh.coveredFrom ?? null,
+      fresh.coveredTo ?? null,
+      groupKey
+    );
+
+    // A2 (BUG-006): Staged replacement — insert new rows with updated_at=now first;
+    // only after all inserts succeed, atomically delete stale rows and publish metadata.
+    if (effectiveGroupRow?.content_hash !== contentHash) {
+      const insertStmts: D1PreparedStatement[] = [];
       for (const lesson of fresh.lessons) {
-        batch.push(
+        insertStmts.push(
           env.DB.prepare(
             `INSERT INTO schedule_entries (
                id, group_id, lesson_id, lesson_date, day_of_week, pair_number,
                start_time, end_time, subject, lesson_type, teacher, room,
                building, subgroup, is_elective, status, updated_at,
-               elective_key, week_type, group_label
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               elective_key, track_number, week_type, group_label
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           ).bind(
             crypto.randomUUID(),
             groupKey,
@@ -525,17 +571,32 @@ export async function handleGetSchedule(
             lesson.status ?? 'active',
             now,
             lesson.electiveKey ?? null,
+            lesson.trackNumber ?? null,
             lesson.weekType ?? null,
             lesson.groupLabel ?? null
           )
         );
       }
-      for (let i = 0; i < batch.length; i += 100) {
-        await env.DB.batch(batch.slice(i, i + 100));
+      try {
+        for (let i = 0; i < insertStmts.length; i += 100) {
+          await env.DB.batch(insertStmts.slice(i, i + 100));
+        }
+        await env.DB.batch([
+          env.DB.prepare(
+            `DELETE FROM schedule_entries WHERE group_id = ? AND updated_at != ?`
+          ).bind(groupKey, now),
+          publishMetadataStmt,
+        ]);
+      } catch (writeErr) {
+        // Clean up any partial rows from this failed attempt; preserve prior valid rows
+        await env.DB.prepare(
+          `DELETE FROM schedule_entries WHERE group_id = ? AND updated_at = ?`
+        ).bind(groupKey, now).run().catch(() => {});
+        throw writeErr;
       }
+    } else {
+      await publishMetadataStmt.run();
     }
-
-    await publishGroupMetadata();
 
     await env.DB.prepare(
       `INSERT INTO schedule_sync_logs (id, group_id, status, entries_count, error_message, synced_at)
@@ -559,12 +620,12 @@ export async function handleGetSchedule(
       .bind(crypto.randomUUID(), groupKey, errMsg, now)
       .run();
 
-    if (groupRow?.last_synced_at) {
+    if (effectiveGroupRow?.last_synced_at) {
       const staleCache = await readCachedGroupSchedule(
         env.DB,
         groupKey,
         groupName,
-          groupRow.last_synced_at,
+          effectiveGroupRow.last_synced_at,
           cacheCoverage
       );
       if (staleCache) {

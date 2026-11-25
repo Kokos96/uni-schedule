@@ -10,6 +10,7 @@ import {
   inferCourseFromGroupName,
   parseLnuFacultiesHtml,
   parseLnuGroupsJson,
+  normalizeGroupHomoglyphs,
   parseLnuScheduleHtml,
 } from '../../src/integrations/universities/lnu/lnuParser';
 import {
@@ -266,5 +267,48 @@ describe('integrations/universities/registry', () => {
     assert.ok(faculties.some((f) => f.id === '1024'));
     assert.ok(faculties.some((f) => f.id === '1025'));
     assert.ok(faculties.some((f) => f.id === '1020'));
+  });
+});
+
+describe('Stage B LNU parser & normalizer regressions', () => {
+  it('parses wish_gr_2 practice rows (ПМІ-31с), mandatory language Збірна група (ІНА-34с), cancelled lessons, and rejects malformed times', () => {
+    const html = `
+      <h4>Розклад групи ПМІ-31с з 25.11.2026 по 02.12.2026</h4>
+      <h4>25.11.2026 Середа</h4>
+      <table>
+        <tr><td>1</td><td>08:30<br>09:50</td><td><span class="wish_gr_2">Практика  </span></td></tr>
+        <tr><td>2</td><td>10:10<br>11:30</td><td><span class="p_name">Перша іноземна мова</span> (<span class="p_type_name">П</span>)<span class="gr2_name">Збірна група</span><span class="room_name">111/І</span></td></tr>
+        <tr><td>3</td><td>11:50<br>13:10</td><td><span class="p_name">Алгоритми</span> (<span class="p_type_name">Л</span>)<span class="room_name">111/ІІ</span> <span class="cancelled">Відмінено</span></td></tr>
+        <tr><td>4</td><td>25:99<br>10:00</td><td><span class="p_name">Битий час</span></td></tr>
+      </table>
+    `;
+    const parsed = parseLnuScheduleHtml(html, { groupId: 'ПМІ-31с', groupName: 'ПМІ-31с' });
+    assert.equal(parsed.lessons.length, 3);
+    assert.equal(parsed.lessons[0]?.subject, 'Практика');
+    assert.equal(parsed.lessons[1]?.subject, 'Перша іноземна мова');
+    assert.equal(parsed.lessons[1]?.isElective, undefined);
+    assert.equal(parsed.lessons[2]?.status, 'cancelled');
+    assert.ok(parsed.warnings.some((w) => w.includes('Пропущено некоректних рядків')));
+
+    const bundle = toAppScheduleBundle(parsed);
+    assert.equal(bundle.classrooms.length, 2); // 111/І vs 111/ІІ distinct IDs (BUG-040)
+    assert.equal(bundle.classrooms[0]?.floor, undefined); // no invented floor: 1 (BUG-041)
+  });
+
+  it('returns empty schedule with warning for valid empty LNU form (BUG-021) and rejects wrong group HTML (BUG-016)', () => {
+    const emptyForm = `<html><body><form action="timetable.cgi"><select name="faculty"></select></form><script>setVedP();</script></body></html>`;
+    const emptyParsed = parseLnuScheduleHtml(emptyForm, { groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' });
+    assert.equal(emptyParsed.lessons.length, 0);
+    assert.ok(emptyParsed.warnings.length > 0);
+
+    const wrongGroupHtml = `<h4>Розклад групи ІНА-34с з 25.11.2026 по 02.12.2026</h4><h4>25.11.2026</h4><table></table>`;
+    assert.throws(
+      () => parseLnuScheduleHtml(wrongGroupHtml, { groupId: 'ФЕП-33с', groupName: 'ФЕП-33с' }),
+      /іншої групи/i
+    );
+  });
+
+  it('matches Cyrillic/Latin homoglyphs such as ЕКІ-11с and ЕКІ-11c (BUG-017)', () => {
+    assert.equal(normalizeGroupHomoglyphs('ЕКІ-11с'), normalizeGroupHomoglyphs('ЕКІ-11c'));
   });
 });

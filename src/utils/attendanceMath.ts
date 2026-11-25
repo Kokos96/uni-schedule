@@ -56,8 +56,9 @@ export function filterRecordsBySettings(
   settings: LessonFilterProfile,
   lessonsById: Map<string, Lesson> = lessonsMap
 ): AttendanceRecord[] {
+  const effectiveMap = lessonsById.size > 0 ? lessonsById : lessonsMap;
   return records.filter((record) => {
-    const lesson = lessonsById.get(record.lessonId);
+    const lesson = effectiveMap.get(record.lessonId);
     if (!lesson) return false;
     return filterLessons([lesson], settings).length > 0;
   });
@@ -179,21 +180,24 @@ export function computeAttendanceTarget(
 }
 
 /** Group attendance records by subject name and compute per-subject summaries + targets. */
+export const UNRESOLVED_HISTORICAL_SUBJECT = 'Історичні заняття (поза поточним розкладом)';
+
 export function computeSubjectStats(
   records: readonly AttendanceRecord[],
   lessonsById: Map<string, Lesson> = lessonsMap,
-  goalPercent = 80
+  goalPercent = 80,
+  fallbackLessonsById: Map<string, Lesson> = lessonsMap
 ): SubjectAttendanceStat[] {
   const grouped = new Map<string, AttendanceRecord[]>();
 
   for (const record of records) {
-    const lesson = lessonsById.get(record.lessonId);
-    if (!lesson) continue;
-    const list = grouped.get(lesson.name);
+    const lesson = lessonsById.get(record.lessonId) ?? fallbackLessonsById.get(record.lessonId);
+    const subjectName = lesson ? lesson.name : UNRESOLVED_HISTORICAL_SUBJECT;
+    const list = grouped.get(subjectName);
     if (list) {
       list.push(record);
     } else {
-      grouped.set(lesson.name, [record]);
+      grouped.set(subjectName, [record]);
     }
   }
 

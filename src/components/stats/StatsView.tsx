@@ -38,7 +38,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   scheduleMap,
   onUpdateSettings,
 }) => {
-  const activeScheduleMap = scheduleMap ?? lessonsMap;
+  const activeScheduleMap = scheduleMap && scheduleMap.size > 0 ? scheduleMap : lessonsMap;
   const [filterMode, setFilterMode] = useState<FilterMode>('month');
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [onlyMyLessons, setOnlyMyLessons] = useState<boolean>(true);
@@ -120,6 +120,19 @@ export const StatsView: React.FC<StatsViewProps> = ({
   );
 
   const hiddenByFilterCount = records.length - scopedRecords.length;
+  const unmatchedByScheduleCount = records.filter(
+    (record) => !activeScheduleMap.has(record.lessonId)
+  ).length;
+  const excludedByProfileCount = Math.max(0, hiddenByFilterCount - unmatchedByScheduleCount);
+  const departmentLabelMap: Record<string, string> = {
+    sp: 'СП',
+    oit: 'ОІТ',
+    rks: 'РКС',
+    rkt: 'РКТ',
+  };
+  const profileFilterLabel = resolvedSettings.scheduleSourceMode === 'builtin'
+    ? `${departmentLabelMap[resolvedSettings.department] ?? resolvedSettings.department.toUpperCase()} · ${resolvedSettings.subgroup}-ша підгрупа`
+    : resolvedSettings.universityProfile?.groupName || 'Поточний розклад';
   const periodLabel =
     filterMode === 'month' ? `${selectedMonthTitle} ${selectedYear}` : 'Весь семестр';
 
@@ -190,12 +203,17 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <span>
             Фільтр профілю:{' '}
             <strong className="font-semibold text-ink">
-              {resolvedSettings.department.toUpperCase()} · {resolvedSettings.subgroup}-ша підгрупа
+              {profileFilterLabel}
             </strong>
           </span>
-          {onlyMyLessons && hiddenByFilterCount > 0 && (
+          {onlyMyLessons && unmatchedByScheduleCount > 0 && (
             <span className="text-[11px] text-ink-muted">
-              (приховано {hiddenByFilterCount} записів інших груп)
+              {unmatchedByScheduleCount} відміток не зіставлено з поточним розкладом; вони збережені
+            </span>
+          )}
+          {onlyMyLessons && excludedByProfileCount > 0 && (
+            <span className="text-[11px] text-ink-muted">
+              {excludedByProfileCount} відміток не входять до фільтра профілю
             </span>
           )}
         </div>
@@ -207,7 +225,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           onClick={() => setOnlyMyLessons((prev) => !prev)}
           className="inline-flex items-center gap-2.5 rounded-xl px-1 py-0.5 text-xs font-medium text-ink transition-colors hover:text-amber-fg"
         >
-          <span>Лише мої пари (кафедра/підгрупа)</span>
+          <span>Лише пари поточного профілю</span>
           <span
             aria-hidden="true"
             className={[

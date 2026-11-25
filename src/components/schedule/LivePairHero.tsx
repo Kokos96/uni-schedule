@@ -13,10 +13,12 @@ import {
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
 import { useCurrentPair, type CurrentPairState } from '../../hooks/useCurrentPair';
+import type { ScheduleDateAvailability } from '../../hooks/useScheduleSource';
 import type {
   AttendanceStatus,
   Classroom,
   Lesson,
+  ScheduleSourceMode,
   Teacher,
 } from '../../types';
 import { cn } from '../../utils/cn';
@@ -33,6 +35,9 @@ export interface LivePairHeroProps {
   teachersMap: Map<string, Teacher>;
   classroomsMap: Map<string, Classroom>;
   todayIso: string;
+  todayAvailability?: ScheduleDateAvailability;
+  sourceMode?: ScheduleSourceMode;
+  onNavigateToSettings?: () => void;
   getStatus: (lessonId: string, date: string) => AttendanceStatus | null;
   onToggleAttendance: (
     lessonId: string,
@@ -110,6 +115,9 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
   teachersMap,
   classroomsMap,
   todayIso,
+  todayAvailability = 'loaded',
+  sourceMode,
+  onNavigateToSettings,
   getStatus,
   onToggleAttendance,
   onOpenNotes,
@@ -150,6 +158,33 @@ export const LivePairHero: React.FC<LivePairHeroProps> = ({
     ? getStatus(focusLesson.id, todayIso)
     : null;
   const noteCount = focusLesson ? getNoteCount(noteCountMap, focusLesson.id) : 0;
+
+  if (todayAvailability === 'outside_coverage' || todayAvailability === 'not_loaded') {
+    return (
+      <GlassCard variant="matte" padding="lg" className="space-y-3" role="status">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
+          <StatusDot tone="neutral" size="md" />
+          {sourceMode === 'unconfigured' ? 'Оберіть розклад' : 'Розклад на сьогодні недоступний'}
+        </div>
+        <p className="text-xs leading-relaxed text-ink-secondary">
+          {sourceMode === 'unconfigured'
+            ? 'Оберіть університет і групу в налаштуваннях.'
+            : todayAvailability === 'outside_coverage'
+            ? 'Сьогодні поза завантаженим періодом розкладу.'
+            : 'Розклад обраної групи ще не завантажено.'}
+        </p>
+        {onNavigateToSettings && (
+          <button
+            type="button"
+            onClick={onNavigateToSettings}
+            className="rounded-xl border border-amber/40 bg-amber-soft px-3 py-2 text-xs font-semibold text-amber-fg"
+          >
+            Відкрити налаштування розкладу
+          </button>
+        )}
+      </GlassCard>
+    );
+  }
 
   // 1. In Lesson or Break (Active live timer states)
   if ((status === 'in_lesson' || status === 'break') && focusLesson) {

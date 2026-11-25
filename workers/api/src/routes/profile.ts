@@ -2,6 +2,8 @@ import { errorResponse, jsonResponse, parseJsonBody } from '../security';
 import type { AuthContext, Env } from '../types';
 
 const VALID_ELECTIVES = new Set(['freelance', 'management', 'space', 'both']);
+type SourceMode = 'unconfigured' | 'builtin' | 'live' | 'manual';
+const VALID_SOURCE_MODES = new Set<SourceMode>(['unconfigured', 'builtin', 'live', 'manual']);
 
 function isValidTimeZone(tz: string): boolean {
   try {
@@ -27,6 +29,8 @@ interface ProfileRow {
   department?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
+  source_mode: SourceMode;
+  revision: number;
 }
 
 function parseSelectedElectivesJson(raw: string | null | undefined): string[] {
@@ -50,7 +54,7 @@ export async function handleGetProfile(
   const row = await env.DB.prepare(
     `SELECT user_id, university_id, faculty_id, faculty_name, course,
             group_id, group_name, subgroup, elective_course, timezone, updated_at,
-            department, selected_electives, selected_track
+            department, selected_electives, selected_track, source_mode, revision
      FROM student_profiles
      WHERE user_id = ?`
   )
@@ -75,6 +79,8 @@ export async function handleGetProfile(
         electiveCourse: row.elective_course,
         ...(row.department ? { department: row.department } : {}),
         selectedElectives: parseSelectedElectivesJson(row.selected_electives),
+        sourceMode: row.source_mode,
+        revision: row.revision,
         ...(row.selected_track !== null && row.selected_track !== undefined
           ? { selectedTrack: row.selected_track }
           : {}),
@@ -83,7 +89,8 @@ export async function handleGetProfile(
       },
     },
     200,
-    corsHeaders
+    corsHeaders,
+    { 'Cache-Control': 'no-store' }
   );
 }
 
@@ -99,15 +106,29 @@ export async function handleUpdateProfile(
   }
 
   const body = parsed.data;
-  const universityId =
-    typeof body.universityId === 'string' ? body.universityId.trim() : '';
-  const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
-  const groupName = typeof body.groupName === 'string' ? body.groupName.trim() : '';
+  const sourceMode = body.sourceMode === undefined
+    ? 'live' // Compatibility for pre-hotfix clients that only send a live group.
+    : typeof body.sourceMode === 'string' && VALID_SOURCE_MODES.has(body.sourceMode as SourceMode)
+      ? body.sourceMode as SourceMode
+      : null;
+  if (!sourceMode) {
+    return errorResponse('VALIDATION_ERROR', 'Некоректний режим розкладу', 400, corsHeaders);
+  }
+  const isGroupSource = sourceMode === 'live' || sourceMode === 'manual';
+  const universityId = isGroupSource
+    ? (typeof body.universityId === 'string' ? body.universityId.trim() : '')
+    : 'lnu';
+  const groupId = isGroupSource
+    ? (typeof body.groupId === 'string' ? body.groupId.trim() : '')
+    : `__${sourceMode}__`;
+  const groupName = isGroupSource
+    ? (typeof body.groupName === 'string' ? body.groupName.trim() : '')
+    : sourceMode === 'builtin' ? 'Вбудований ФЕП-33с' : '';
 
   if (!universityId || universityId.length > 32) {
     return errorResponse('VALIDATION_ERROR', 'Некоректний universityId', 400, corsHeaders);
   }
-  if (!groupId || groupId.length > 64 || !groupName || groupName.length > 64) {
+  if (!groupId || groupId.length > 64 || (isGroupSource && !groupName) || groupName.length > 64) {
     return errorResponse('VALIDATION_ERROR', 'Некоректна назва групи', 400, corsHeaders);
   }
 
@@ -229,14 +250,38 @@ export async function handleUpdateProfile(
     selectedTrack = body.selectedTrack;
   }
 
+  const suppliedRevision = body.expectedRevision;
+  const legacyClient = suppliedRevision === undefined && body.sourceMode === undefined;
+  if (!legacyClient && (typeof suppliedRevision !== 'number' || !Number.isInteger(suppliedRevision) || suppliedRevision < 0)) {
+    return errorResponse('REVISION_REQUIRED', 'Потрібна актуальна версія профілю', 409, corsHeaders);
+  }
+  const current = await env.DB.prepare(
+    `SELECT revision, source_mode FROM student_profiles WHERE user_id = ?`
+  ).bind(auth.userId).first<{ revision: number; source_mode: SourceMode }>();
+  // Old installed PWAs can still acknowledge and update a live profile. They cannot
+  // silently replace a newer client's explicit builtin/manual/unconfigured choice.
+  if (legacyClient && current && current.source_mode !== 'live') {
+    return jsonResponse({
+      error: { code: 'PROFILE_CONFLICT', message: 'Оновіть застосунок для зміни режиму розкладу' },
+      revision: current.revision,
+    }, 409, corsHeaders);
+  }
+  const expectedRevision = legacyClient ? (current?.revision ?? 0) : suppliedRevision as number;
+  if ((current?.revision ?? 0) !== expectedRevision) {
+    return jsonResponse({
+      error: { code: 'PROFILE_CONFLICT', message: 'Профіль змінено на іншому пристрої' },
+      revision: current?.revision ?? 0,
+    }, 409, corsHeaders);
+  }
+
   const now = new Date().toISOString();
   const selectedElectivesJson = JSON.stringify(selectedElectives);
-  await env.DB.prepare(
+  const updateResult = await env.DB.prepare(
     `INSERT INTO student_profiles (
        user_id, university_id, faculty_id, faculty_name, course,
        group_id, group_name, subgroup, elective_course, timezone, updated_at,
-       department, selected_electives, selected_track
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       department, selected_electives, selected_track, source_mode, revision
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(user_id) DO UPDATE SET
        university_id = excluded.university_id,
        faculty_id = excluded.faculty_id,
@@ -250,7 +295,10 @@ export async function handleUpdateProfile(
        updated_at = excluded.updated_at,
        department = excluded.department,
        selected_electives = excluded.selected_electives,
-       selected_track = excluded.selected_track`
+       selected_track = excluded.selected_track,
+       source_mode = excluded.source_mode,
+       revision = student_profiles.revision + 1
+     WHERE student_profiles.revision = ?`
   )
     .bind(
       auth.userId,
@@ -266,10 +314,20 @@ export async function handleUpdateProfile(
       now,
       department,
       selectedElectivesJson,
-      selectedTrack
+      selectedTrack,
+      sourceMode,
+      expectedRevision
     )
     .run();
 
+  if (!updateResult.meta.changes) {
+    const latest = await env.DB.prepare(`SELECT revision FROM student_profiles WHERE user_id = ?`)
+      .bind(auth.userId).first<{ revision: number }>();
+    return jsonResponse({
+      error: { code: 'PROFILE_CONFLICT', message: 'Профіль змінено під час синхронізації' },
+      revision: latest?.revision ?? 0,
+    }, 409, corsHeaders);
+  }
   return jsonResponse(
     {
       profile: {
@@ -284,12 +342,15 @@ export async function handleUpdateProfile(
         electiveCourse,
         ...(department ? { department } : {}),
         selectedElectives,
+        sourceMode,
+        revision: expectedRevision + 1,
         ...(selectedTrack !== null ? { selectedTrack } : {}),
         timezone,
         updatedAt: now,
       },
     },
     200,
-    corsHeaders
+    corsHeaders,
+    { 'Cache-Control': 'no-store' }
   );
 }

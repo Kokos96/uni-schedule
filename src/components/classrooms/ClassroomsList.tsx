@@ -234,7 +234,7 @@ export const ClassroomsList: React.FC<ClassroomsListProps> = ({
                           mono
                           icon={<Stack weight="duotone" className="h-3 w-3" />}
                         >
-                          {room.floor} поверх
+                          {room.floor != null ? `${room.floor} поверх` : 'Поверх не вказано'}
                         </MetaChip>
                         <MetaChip variant="neutral" mono>
                           {slots.length}{' '}

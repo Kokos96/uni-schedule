@@ -58,17 +58,19 @@ export const SubjectAttendanceList: React.FC<SubjectAttendanceListProps> = ({
         <GlassCard variant="matte" padding="none">
           <EmptyState
             illustration={<EmptyAttendanceIllustration />}
-            title="Відміток за цей період ще немає"
+            title={onlyMyLessons && hiddenByFilterCount > 0
+              ? 'Немає зіставлених відміток для поточного профілю'
+              : 'Відміток за цей період ще немає'}
             description={
               onlyMyLessons && hiddenByFilterCount > 0
-                ? 'У вибраному періоді немає записів для поточної кафедри/підгрупи. Спробуйте змінити місяць або вимкнути фільтр профілю.'
+                ? 'У вибраному періоді немає записів, що відповідають поточному розкладу та фільтру профілю. Збережені відмітки можна переглянути, вимкнувши фільтр.'
                 : 'Відмічайте статус кожної пари прямо у картці розкладу, щоб бачити статистику за предметами.'
             }
             showUnderline
             action={
               onlyMyLessons && hiddenByFilterCount > 0
                 ? {
-                    label: 'Показати всі пари',
+                    label: 'Показати всі відмітки',
                     onClick: onShowAllLessons,
                   }
                 : undefined

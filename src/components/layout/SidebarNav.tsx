@@ -137,7 +137,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 
         <div className="mt-3">
           <span className="inline-flex items-center rounded-md border border-line bg-surface-elevated/85 px-2 py-0.5 font-mono text-[10.5px] font-semibold tracking-[0.04em] text-ink-secondary">
-            ФЕП-33с · {settings.department.toUpperCase()} · Підгр. {settings.subgroup}
+            {settings.scheduleSourceMode === 'live' && settings.universityProfile?.groupName ? `${settings.universityProfile.groupName} · Підгр. ${settings.subgroup}` : `ФЕП-33с · ${({ sp: 'СП', oit: 'ОІТ', rks: 'РКС', rkt: 'РКТ' } as Record<string, string>)[settings.department] ?? settings.department.toUpperCase()} · Підгр. ${settings.subgroup}`}
           </span>
         </div>
       </div>

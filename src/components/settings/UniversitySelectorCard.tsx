@@ -1,3 +1,4 @@
+import { normalizeGroupHomoglyphs } from '../../integrations/universities/lnu/lnuParser';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowsClockwise,
@@ -7,6 +8,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { UseSettingsResult } from '../../hooks/useSettings';
 import {
   getUniversityAdapter,
   listUniversities,
@@ -28,7 +30,10 @@ export interface UniversitySelectorCardProps {
   syncStatus?: ScheduleSyncStatus;
   lastSyncedAt?: string | null;
   syncError?: string | null;
-  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  profileSyncStatus?: UseSettingsResult['profileSyncStatus'];
+  profileSyncError?: string | null;
+  onConfirmProfileOverwrite?: () => void;
+  onSyncGroupSchedule?: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
 }
 
@@ -38,6 +43,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   syncStatus = 'builtin',
   lastSyncedAt,
   syncError,
+  profileSyncStatus = 'idle',
+  profileSyncError,
+  onConfirmProfileOverwrite,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
 }) => {
@@ -127,7 +135,10 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   const filteredGroups = useMemo(() => {
     const q = groupInput.trim().toLowerCase();
     if (!q) return groups.slice(0, 60);
-    return groups.filter((g) => g.name.toLowerCase().includes(q)).slice(0, 60);
+    const qNorm = normalizeGroupHomoglyphs(q);
+    return groups
+      .filter((g) => g.name.toLowerCase().includes(q) || normalizeGroupHomoglyphs(g.name).includes(qNorm))
+      .slice(0, 60);
   }, [groups, groupInput]);
 
   const handleSync = async () => {
@@ -139,12 +150,13 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
 
     const facultyName = faculties.find((f) => f.id === facultyId)?.name;
     const lowerClean = cleanGroup.toLocaleLowerCase('uk-UA');
+    const normClean = normalizeGroupHomoglyphs(cleanGroup);
     let matchedGroup = groups.find(
-      (g) => g.name.toLocaleLowerCase('uk-UA') === lowerClean
+      (g) => g.name.toLocaleLowerCase('uk-UA') === lowerClean || normalizeGroupHomoglyphs(g.name) === normClean
     );
     if (!matchedGroup && groups.length > 0) {
       const prefixMatches = groups.filter((g) =>
-        g.name.toLocaleLowerCase('uk-UA').startsWith(lowerClean)
+        g.name.toLocaleLowerCase('uk-UA').startsWith(lowerClean) || normalizeGroupHomoglyphs(g.name).startsWith(normClean)
       );
       if (prefixMatches.length === 1) {
         matchedGroup = prefixMatches[0];
@@ -166,29 +178,41 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
       (resolved.universityProfile?.facultyId ?? '') !== (selection.facultyId ?? '') ||
       resolved.universityProfile?.groupId !== selection.groupId;
 
-    onUpdate({
-      universityProfile: selection,
-      ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
-    });
-
     if (adapter?.meta.supportStatus === 'manual_only') {
+      onUpdate({
+        universityProfile: selection,
+        scheduleSourceMode: 'manual',
+        ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+      });
       toast.info('Обрано ручний режим для іншого університету');
       return;
     }
 
     if (onSyncGroupSchedule) {
-      const ok = await onSyncGroupSchedule(selection);
+      const ok = await onSyncGroupSchedule(selection, { force: !groupChanged });
       if (ok) {
+        onUpdate({
+          universityProfile: selection,
+          scheduleSourceMode: 'live',
+          ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+        });
         toast.success(`Розклад групи ${selection.groupName} оновлено`);
       } else {
-        toast.warning('Не вдалося синхронізувати розклад онлайн');
+        toast.warning('Не вдалося завантажити розклад цієї групи — попередній профіль збережено');
       }
+    } else {
+      onUpdate({
+        universityProfile: selection,
+        scheduleSourceMode: 'live',
+        ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+      });
     }
   };
 
   const handleResetBuiltin = () => {
     onUpdate({
       universityProfile: undefined,
+      scheduleSourceMode: 'builtin',
       selectedElectives: undefined,
       selectedTrack: undefined,
     });
@@ -221,7 +245,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
 
         <MetaChip
           variant={
-            syncStatus === 'synced'
+            resolved.scheduleSourceMode === 'unconfigured'
+              ? 'neutral'
+              : syncStatus === 'synced'
               ? 'sage'
               : syncStatus === 'error'
                 ? 'terracotta'
@@ -231,15 +257,21 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           }
           mono
         >
-          {syncStatus === 'synced' && formattedSyncTime
+          {resolved.scheduleSourceMode === 'unconfigured'
+            ? 'Профіль не налаштовано'
+            : resolved.scheduleSourceMode === 'builtin'
+              ? 'Вбудований ФЕП-33с'
+            : syncStatus === 'synced' && formattedSyncTime
             ? `Оновлено ${formattedSyncTime}`
+            : syncStatus === 'synced'
+              ? 'Розклад завантажено'
             : syncStatus === 'syncing'
               ? 'Синхронізація…'
               : syncStatus === 'error'
                 ? 'Помилка джерела'
                 : syncStatus === 'manual'
                   ? 'Ручний режим'
-                  : 'Вбудований ФЕП-33с'}
+                  : 'Очікує синхронізації'}
         </MetaChip>
       </div>
 
@@ -379,6 +411,30 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           </div>
         )}
 
+        {profileSyncStatus !== 'idle' && (
+          <div
+            role={profileSyncStatus === 'error' || profileSyncStatus === 'conflict' ? 'alert' : 'status'}
+            className="rounded-xl border border-line bg-surface-elevated/60 px-3 py-2 text-xs text-ink-secondary"
+          >
+            {profileSyncStatus === 'synced'
+              ? 'Профіль збережено на сервері.'
+              : profileSyncStatus === 'conflict'
+                ? 'Профіль змінився на іншому пристрої. Ваш вибір збережено локально; застосуйте його лише якщо хочете замінити новішу серверну версію.'
+              : profileSyncStatus === 'error'
+                ? `Профіль збережено локально, але серверне підтвердження не отримано. Повторимо спробу автоматично.${profileSyncError ? ` ${profileSyncError}` : ''}`
+                : 'Профіль збережено локально. Очікуємо серверного підтвердження…'}
+            {profileSyncStatus === 'conflict' && onConfirmProfileOverwrite && (
+              <button
+                type="button"
+                onClick={onConfirmProfileOverwrite}
+                className="mt-2 rounded-xl border border-amber/40 bg-amber-soft px-3 py-2 font-semibold text-amber-fg"
+              >
+                Застосувати мій вибір
+              </button>
+            )}
+          </div>
+        )}
+
         {syncStatus === 'synced' && (
           <div className="flex items-center gap-2 rounded-xl border border-sage/35 bg-sage-soft px-3 py-2 text-xs text-sage-fg">
             <CheckCircle weight="duotone" className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -407,7 +463,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
             </span>
           </button>
 
-          {currentProfile && (
+          {resolved.scheduleSourceMode !== 'builtin' && (
             <button
               type="button"
               onClick={handleResetBuiltin}

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { BookOpen, Buildings, Users } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS, ELECTIVE_OPTIONS } from '../../constants/profile';
 import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { UseSettingsResult } from '../../hooks/useSettings';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { ResolvedUserSettings, UserSettings } from '../../types';
 import { StatusDot } from '../ui/Badge';
@@ -61,7 +62,10 @@ export interface ProfileSettingsSectionProps {
   syncStatus?: ScheduleSyncStatus;
   lastSyncedAt?: string | null;
   syncError?: string | null;
-  onSyncGroupSchedule?: (selection: StudentSelection) => Promise<boolean>;
+  profileSyncStatus?: UseSettingsResult['profileSyncStatus'];
+  profileSyncError?: string | null;
+  onConfirmProfileOverwrite?: () => void;
+  onSyncGroupSchedule?: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
@@ -76,6 +80,9 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   syncStatus,
   lastSyncedAt,
   syncError,
+  profileSyncStatus = 'idle',
+  profileSyncError,
+  onConfirmProfileOverwrite,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
   isUsingCustomGroup = false,
@@ -87,8 +94,8 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   const deptRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const electiveRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedElectives = resolved.selectedElectives ?? [];
-  const hasLiveProfile = Boolean(resolved.universityProfile);
-  const showDepartmentSelector = !hasLiveProfile || hasDepartments;
+  const hasLiveProfile = resolved.scheduleSourceMode === 'live' && Boolean(resolved.universityProfile);
+  const showDepartmentSelector = resolved.scheduleSourceMode === 'builtin' || (hasLiveProfile && hasDepartments);
   const showMissingDepartmentsNote =
     hasLiveProfile && isUsingCustomGroup && !showDepartmentSelector;
   const availableElectiveKeys = new Set(availableElectives.map((e) => e.key));
@@ -111,6 +118,9 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
         syncStatus={syncStatus}
         lastSyncedAt={lastSyncedAt}
         syncError={syncError}
+        profileSyncStatus={profileSyncStatus}
+        profileSyncError={profileSyncError}
+        onConfirmProfileOverwrite={onConfirmProfileOverwrite}
         onSyncGroupSchedule={onSyncGroupSchedule}
         onResetBuiltinSchedule={onResetBuiltinSchedule}
       />
@@ -161,7 +171,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
                     >
                       {dept.label}
                     </span>
-                    {!hasLiveProfile && (
+                    {resolved.scheduleSourceMode === 'builtin' && (
                       <span className="mt-0.5 block text-xs leading-snug text-ink-secondary">
                         {dept.sub}
                       </span>
@@ -243,7 +253,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
         </GlassCard>
       )}
 
-      {hasSubgroups && (
+      {(resolved.scheduleSourceMode === 'builtin' || (hasLiveProfile && hasSubgroups)) && (
       <GlassCard variant="glass" padding="lg">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
           <Users weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
@@ -265,7 +275,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
       </GlassCard>
       )}
 
-      <GlassCard variant="glass" padding="lg">
+      {(resolved.scheduleSourceMode === 'builtin' || hasLiveProfile) && <GlassCard variant="glass" padding="lg">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
           <BookOpen weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
           <span>Вибіркові дисципліни (ДВВС)</span>
@@ -395,7 +405,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
             })}
           </div>
         )}
-      </GlassCard>
+      </GlassCard>}
     </>
   );
 };

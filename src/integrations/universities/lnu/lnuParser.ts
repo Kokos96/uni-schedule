@@ -13,6 +13,41 @@ import {
 } from '../normalizers/scheduleNormalizer';
 import { elementText, hasClass, parseHtmlStructure, walkElements, type HtmlElement } from './htmlStructure';
 
+const LATIN_TO_CYRILLIC_MAP: Record<string, string> = {
+  a: 'а', b: 'в', c: 'с', e: 'е', h: 'н', i: 'і', k: 'к', m: 'м',
+  o: 'о', p: 'р', t: 'т', x: 'х', y: 'у',
+};
+
+export function normalizeGroupHomoglyphs(input: string): string {
+  return input
+    .trim()
+    .toLocaleLowerCase('uk-UA')
+    .replace(/[abcehikmoptxy]/g, (ch) => LATIN_TO_CYRILLIC_MAP[ch] ?? ch)
+    .replace(/\s+/g, '');
+}
+
+const MANDATORY_COMBINED_SUBJECT_RE =
+  /^(?:(?:перша|друга|третя)\s+іноземна\s+мова|іноземна\s+мова|фізичн[ае]\s+виховання)(?:\s|$|[.,(])/i;
+
+function isValidTimePair(start: string, end: string): boolean {
+  const parse = (s: string) => {
+    const [h, m] = s.split(':').map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return -1;
+    return h * 60 + m;
+  };
+  const s = parse(start);
+  const e = parse(end);
+  return s >= 0 && e > s;
+}
+
+function isValidEmptyLnuPage(html: string): boolean {
+  return (
+    /name=["']?faculty["']?/i.test(html) ||
+    /setVedP/i.test(html) ||
+    /за\s+обраний\s+період\s+занять\s+не\s+знайдено/i.test(html)
+  );
+}
+
 const NAMED_ENTITIES: Record<string, string> = {
   nbsp: ' ',
   amp: '&',
@@ -112,7 +147,7 @@ function spanText(spans: HtmlElement[], className: string): string {
     .filter(Boolean).join(', ');
 }
 
-function parseSubgroupFromGroupLabel(label: string): {
+function parseSubgroupFromGroupLabel(label: string, subject = ''): {
   subgroup?: 1 | 2;
   isElective?: boolean;
 } {
@@ -121,12 +156,13 @@ function parseSubgroupFromGroupLabel(label: string): {
   if (/підгр\.\s*1\b/.test(lower)) subgroup = 1;
   else if (/підгр\.\s*2\b/.test(lower)) subgroup = 2;
 
-  const isElective =
-    lower.includes('збірна') ||
+  const explicitElective =
     lower.includes('дввс') ||
-    lower.includes('вибірков')
-      ? true
-      : undefined;
+    lower.includes('вибірков') ||
+    /\bвиб\./.test(lower);
+  const combinedElective =
+    lower.includes('збірна') && !MANDATORY_COMBINED_SUBJECT_RE.test(subject.trim());
+  const isElective = explicitElective || combinedElective ? true : undefined;
 
   return { subgroup, isElective };
 }
@@ -174,7 +210,18 @@ export function parseLnuScheduleHtml(
         const isRangeTitle =
           /^розклад\s+(?:групи|викладача|занять)/i.test(headerText) ||
           /\bз\s+\d{2}\.\d{2}\.\d{4}\s+по\s+\d{2}\.\d{2}\.\d{4}\b/i.test(headerText);
-        if (!isRangeTitle) {
+        if (isRangeTitle) {
+          const groupMatch = headerText.match(/розклад\s+групи\s+([^\s,]+)/i);
+          if (groupMatch?.[1] && selection.groupName) {
+            const returnedNorm = normalizeGroupHomoglyphs(groupMatch[1]);
+            const expectedNorm = normalizeGroupHomoglyphs(selection.groupName);
+            if (returnedNorm && expectedNorm && returnedNorm !== expectedNorm) {
+              throw new Error(
+                `Сервер ЛНУ повернув розклад для іншої групи (${groupMatch[1]}) замість ${selection.groupName}`
+              );
+            }
+          }
+        } else {
           const dateMatch = headerText.match(/(\d{2}\.\d{2}\.\d{4})/);
           if (dateMatch?.[1]) {
             const iso = parseDdMmYyyyToIso(dateMatch[1]);
@@ -203,6 +250,7 @@ export function parseLnuScheduleHtml(
         if (!timeMatches || timeMatches.length < 2) { malformedRows += 1; continue; }
         const startTime = timeMatches[0]!;
         const endTime = timeMatches[1]!;
+        if (!isValidTimePair(startTime, endTime)) { malformedRows += 1; continue; }
 
         const detailSpans = cells.slice(2).flatMap(spansIn);
         if (detailSpans.length === 0) continue;
@@ -211,18 +259,27 @@ export function parseLnuScheduleHtml(
           if (hasClass(span, 'p_name')) blocks.push([]);
           if (blocks.length > 0) blocks[blocks.length - 1]!.push(span);
         }
+        if (blocks.length === 0) {
+          const wishText = spanText(detailSpans, 'wish_gr_2');
+          if (wishText) blocks.push(detailSpans);
+        }
         for (const block of blocks) {
-          const subject = spanText(block, 'p_name');
+          const subject = spanText(block, 'p_name') || spanText(block, 'wish_gr_2');
           if (!subject) { malformedRows += 1; continue; }
 
-          const lessonType = spanText(block, 'p_type_name') || 'Л';
+          const isWishOnly = !spanText(block, 'p_name');
+          const lessonType = spanText(block, 'p_type_name') || (isWishOnly ? 'П' : 'Л');
           const teacher = spanText(block, 't_name') || undefined;
           const groupLabel = spanText(block, 'gr2_name');
           const rawRoom = spanText(block, 'room_name');
           const roomInfo = rawRoom ? parseRoomCodeAndBuilding(rawRoom) : undefined;
-          const { subgroup, isElective } = parseSubgroupFromGroupLabel(groupLabel);
+          const { subgroup, isElective } = parseSubgroupFromGroupLabel(groupLabel, subject);
           const electiveKey = isElective ? `el_${stableSlug(subject)}` : undefined;
           const dayOfWeek = extractDayOfWeekFromIso(currentIsoDate);
+          const blockText = block.map((s) => decodeHtmlEntities(elementText(s))).join(' ').toLowerCase();
+          const isCancelled =
+            block.some((s) => hasClass(s, 'cancelled') || hasClass(s, 'canceled')) ||
+            /\b(?:відмінено|скасовано)\b/i.test(blockText);
 
           const dedupeKey = [currentIsoDate, pairNumber, subject, lessonType, subgroup, groupLabel, teacher, rawRoom].join('|');
           if (seen.has(dedupeKey)) continue;
@@ -252,7 +309,7 @@ export function parseLnuScheduleHtml(
             subgroup,
             isElective,
             ...(electiveKey ? { electiveKey } : {}),
-            status: 'active',
+            status: isCancelled ? 'cancelled' : 'active',
             universityId: 'lnu',
             updatedAt: fetchedAt,
           });
@@ -267,7 +324,11 @@ export function parseLnuScheduleHtml(
   visitScheduleNodes(document);
 
   if (!foundAnyDateHeader) {
-    throw new Error('У відповіді ЛНУ не знайдено дат розкладу; структура сторінки невідома');
+    if (isValidEmptyLnuPage(html)) {
+      warnings.push('За обраний період занять за розкладом не знайдено.');
+    } else {
+      throw new Error('У відповіді ЛНУ не знайдено дат розкладу; структура сторінки невідома');
+    }
   }
   if (malformedRows > 0) warnings.push(`Пропущено некоректних рядків розкладу: ${malformedRows}`);
 

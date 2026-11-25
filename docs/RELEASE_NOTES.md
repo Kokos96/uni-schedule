@@ -1,5 +1,14 @@
 # Release Notes — Uni Schedule `v3.5.1`
 
+## v3.6.0 (2026-11-25) — Complete Stabilization
+
+- **Stage A:** Усунуто FK `502` для нових груп (`INSERT OR IGNORE`), атомарна staged-публікація розкладу, `source_mode` + `revision` (міграція `0007`), мультигруповий кеш `v3`, `force=1` для ручного оновлення.
+- **Stage B:** Нормалізація гомогліфів (`ЕКІ-11с` ↔ `ЕКІ-11c`), `wish_gr_2` практика (`ПМІ-31с`), мовні `Збірна група` (`ІНА-34с`), валідація групи в HTML, порожня форма ЛНУ без `502`, корпус в ID аудиторії та опційний `floor`.
+- **Stage C:** Збереження всіх історичних записів відвідуваності (158+ кейс), черга синку для `replaceRecords`/`mergeRecords`, збереження `updatedAt` і профілю в бекапі, детермінований merge, серіалізація синку.
+- **Stage D:** `resolveTokenPepper` у `handleRotateToken`, `covered_from`/`covered_to` guard, `scheduleScope` у `dedupKey`, коректні дати у п'ятничному зведенні, mid-tick перевірка `revision`.
+- **Stage E:** SW `v9` + bypass `/api/`, українські кафедри в UI, атомарний D1 rate-limit, D1 check у `/api/health`.
+- Деталі: [docs/releases/v3.6.0.md](releases/v3.6.0.md).
+
 Детальний опис див. у [`docs/releases/v3.5.1.md`](./releases/v3.5.1.md): автопідстановка префікса групи (`ІНА-34` → `ІНА-34с`), банер вибору ДВВС при порожньому `selectedElectives`, та збереження вбудованого розкладу на першому запуску.
 
 ---

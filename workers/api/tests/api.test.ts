@@ -97,6 +97,19 @@ class MockD1Database {
         } else if (normalized.startsWith('SELECT id, device_name, created_at, last_seen_at, revoked_at FROM user_devices')) {
           const userId = bound[0] as string;
           results = Array.from(db.user_devices.values()).filter((d) => d.user_id === userId);
+        } else if (normalized === 'SELECT 1 AS ok') {
+          results = [{ ok: 1 }];
+        } else if (normalized.startsWith('INSERT INTO rate_limit_buckets') && normalized.includes('RETURNING count, reset_at')) {
+          const [bucket_key, next_reset_at, now_sec] = bound as [string, number, number];
+          const existing = db.rate_limit_buckets.get(bucket_key);
+          if (!existing || existing.reset_at <= now_sec) {
+            const next = { count: 1, reset_at: next_reset_at };
+            db.rate_limit_buckets.set(bucket_key, next);
+            results = [next];
+          } else {
+            existing.count += 1;
+            results = [{ count: existing.count, reset_at: existing.reset_at }];
+          }
         } else if (normalized.startsWith('SELECT count, reset_at FROM rate_limit_buckets')) {
           const key = bound[0] as string;
           const bucket = db.rate_limit_buckets.get(key);
@@ -105,6 +118,12 @@ class MockD1Database {
           const userId = bound[0] as string;
           const prof = db.student_profiles.get(userId);
           if (prof) results = [prof];
+        } else if (normalized.startsWith('SELECT revision, source_mode FROM student_profiles WHERE user_id = ?')) {
+          const prof = db.student_profiles.get(bound[0] as string);
+          if (prof) results = [{ revision: prof.revision ?? 0, source_mode: prof.source_mode ?? 'live' }];
+        } else if (normalized.startsWith('SELECT revision FROM student_profiles WHERE user_id = ?')) {
+          const prof = db.student_profiles.get(bound[0] as string);
+          if (prof) results = [{ revision: prof.revision ?? 0 }];
         } else if (normalized.startsWith('SELECT id FROM universities WHERE id = ?')) {
           const id = bound[0] as string;
           const uni = db.universities.get(id);
@@ -135,7 +154,7 @@ class MockD1Database {
             return !acc || c > acc ? c : acc;
           }, null);
           results = [{ newest_at: newest, total: rows.length }];
-        } else if (normalized.startsWith('SELECT group_code, group_name, course FROM university_groups')) {
+        } else if ((normalized.startsWith('SELECT group_code, group_name, course') || normalized.startsWith('SELECT id, faculty_id, group_name, last_synced_at'))) {
           results = Array.from(db.university_groups.values()).filter((g) => g.university_id === 'lnu');
         } else if (normalized.startsWith('SELECT id, faculty_id, last_synced_at, content_hash, schedule_source_type, covered_from, covered_to FROM university_groups WHERE id = ?')) {
           const id = bound[0] as string;
@@ -187,23 +206,9 @@ class MockD1Database {
             changes = 1;
           }
         } else if (normalized.startsWith('INSERT INTO student_profiles')) {
-          if (bound.length === 2) {
-            const [user_id, updated_at] = bound as [string, string];
-            db.student_profiles.set(user_id, {
-              user_id,
-              university_id: 'lnu',
-              faculty_id: '1005',
-              faculty_name: "Факультет електроніки та комп'ютерних технологій",
-              course: 3,
-              group_id: 'ФЕП-33с',
-              group_name: 'ФЕП-33с',
-              subgroup: 1,
-              elective_course: 'freelance',
-              timezone: 'Europe/Kyiv',
-              updated_at,
-            });
-          } else {
-            const [user_id, university_id, faculty_id, faculty_name, course, group_id, group_name, subgroup, elective_course, timezone, updated_at] = bound;
+          const [user_id, university_id, faculty_id, faculty_name, course, group_id, group_name, subgroup, elective_course, timezone, updated_at, department, selected_electives, selected_track, source_mode, expected_revision] = bound;
+          const previous = db.student_profiles.get(user_id as string);
+          if (!previous || previous.revision === expected_revision) {
             db.student_profiles.set(user_id as string, {
               user_id,
               university_id,
@@ -216,9 +221,14 @@ class MockD1Database {
               elective_course,
               timezone,
               updated_at,
+              department,
+              selected_electives,
+              selected_track,
+              source_mode,
+              revision: (previous?.revision as number ?? 0) + 1,
             });
+            changes = 1;
           }
-          changes = 1;
         } else if (normalized.startsWith('INSERT INTO rate_limit_buckets')) {
           const [bucket_key, reset_at] = bound as [string, number];
           db.rate_limit_buckets.set(bucket_key, { count: 1, reset_at });
@@ -228,6 +238,32 @@ class MockD1Database {
           const existing = db.rate_limit_buckets.get(bucket_key);
           if (existing) {
             existing.count = count;
+            changes = 1;
+          }
+        } else if (normalized.startsWith('INSERT OR IGNORE INTO university_groups')) {
+          const [id, university_id, faculty_id, course, group_code, group_name, created_at] = bound;
+          if (!db.university_groups.has(id as string)) {
+            db.university_groups.set(id as string, {
+              id, university_id, faculty_id, course, group_code, group_name,
+              content_hash: null, last_synced_at: null, created_at,
+              schedule_source_type: null, covered_from: null, covered_to: null,
+            });
+            changes = 1;
+          }
+        } else if (normalized.startsWith('UPDATE university_groups SET faculty_id')) {
+          const [faculty_id, course, content_hash, last_synced_at, schedule_source_type, covered_from, covered_to, id] = bound;
+          const prev = db.university_groups.get(id as string);
+          if (prev) {
+            db.university_groups.set(id as string, {
+              ...prev,
+              faculty_id: faculty_id ?? prev.faculty_id,
+              course: course ?? prev.course,
+              content_hash,
+              last_synced_at,
+              schedule_source_type,
+              covered_from,
+              covered_to,
+            });
             changes = 1;
           }
         } else if (normalized.startsWith('INSERT INTO university_groups')) {
@@ -263,6 +299,22 @@ class MockD1Database {
             });
           }
           changes = 1;
+        } else if (normalized.startsWith('DELETE FROM schedule_entries WHERE group_id = ? AND updated_at != ?')) {
+          const [groupKey, keepUpdatedAt] = bound as [string, string];
+          for (const [k, v] of db.schedule_entries.entries()) {
+            if (v.group_id === groupKey && v.updated_at !== keepUpdatedAt) {
+              db.schedule_entries.delete(k);
+              changes += 1;
+            }
+          }
+        } else if (normalized.startsWith('DELETE FROM schedule_entries WHERE group_id = ? AND updated_at = ?')) {
+          const [groupKey, dropUpdatedAt] = bound as [string, string];
+          for (const [k, v] of db.schedule_entries.entries()) {
+            if (v.group_id === groupKey && v.updated_at === dropUpdatedAt) {
+              db.schedule_entries.delete(k);
+              changes += 1;
+            }
+          }
         } else if (normalized.startsWith('DELETE FROM schedule_entries WHERE group_id = ?')) {
           const groupKey = bound[0] as string;
           for (const [k, v] of db.schedule_entries.entries()) {
@@ -272,7 +324,7 @@ class MockD1Database {
             }
           }
         } else if (normalized.startsWith('INSERT INTO schedule_entries')) {
-          const [id, group_id, lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time, subject, lesson_type, teacher, room, building, subgroup, is_elective, status, updated_at] = bound;
+          const [id, group_id, lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time, subject, lesson_type, teacher, room, building, subgroup, is_elective, status, updated_at, elective_key = null, track_number = null, week_type = null, group_label = null] = bound;
           db.schedule_entries.set(id as string, {
             id,
             group_id,
@@ -290,6 +342,10 @@ class MockD1Database {
             subgroup,
             is_elective,
             status,
+            elective_key,
+            week_type,
+            group_label,
+            track_number,
             updated_at,
           });
           changes = 1;
@@ -520,7 +576,7 @@ describe('workers/api Stage 3 endpoints', () => {
       }),
       env
     );
-    assert.equal(newTokenTry.status, 200);
+    assert.equal(newTokenTry.status, 404); // Registration no longer invents an academic profile.
   });
 
   it('validates and isolates student profile updates', async () => {
@@ -555,6 +611,8 @@ describe('workers/api Stage 3 endpoints', () => {
           groupName: 'ПМІ-31',
           subgroup: 2,
           timezone: 'Europe/Kyiv',
+          sourceMode: 'live',
+          expectedRevision: 0,
         }),
       }),
       env
@@ -563,6 +621,46 @@ describe('workers/api Stage 3 endpoints', () => {
     const updated = (await validUpdate.json()) as { profile: { groupName: string; subgroup: number } };
     assert.equal(updated.profile.groupName, 'ПМІ-31');
     assert.equal(updated.profile.subgroup, 2);
+  });
+
+  it('acknowledges built-in transitions and rejects stale profile writes', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+    const reg = await worker.fetch(
+      new Request('https://api.test/api/auth/register', { method: 'POST', body: '{}' }), env
+    );
+    const { syncToken } = (await reg.json()) as { syncToken: string };
+    const put = (body: Record<string, unknown>) => worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
+        body: JSON.stringify(body),
+      }), env
+    );
+
+    const live = await put({ sourceMode: 'live', universityId: 'lnu',
+      groupId: 'ІН-31', groupName: 'ІН-31', expectedRevision: 0 });
+    assert.equal(live.status, 200);
+    const liveBody = await live.json() as { profile: { revision: number } };
+    assert.equal(liveBody.profile.revision, 1);
+
+    const builtin = await put({ sourceMode: 'builtin', expectedRevision: 1 });
+    assert.equal(builtin.status, 200);
+    const builtinBody = await builtin.json() as { profile: { sourceMode: string; revision: number } };
+    assert.equal(builtinBody.profile.sourceMode, 'builtin');
+    assert.equal(builtinBody.profile.revision, 2);
+
+    const stale = await put({ sourceMode: 'live', universityId: 'lnu',
+      groupId: 'ІН-31', groupName: 'ІН-31', expectedRevision: 1 });
+    assert.equal(stale.status, 409);
+    const conflict = await stale.json() as { revision: number };
+    assert.equal(conflict.revision, 2);
+    const current = await worker.fetch(new Request('https://api.test/api/profile', {
+      headers: { Authorization: `Bearer ${syncToken}` },
+    }), env);
+    const currentBody = await current.json() as { profile: { sourceMode: string; revision: number } };
+    assert.equal(currentBody.profile.sourceMode, 'builtin');
+    assert.equal(currentBody.profile.revision, 2);
   });
 
   it('caches group schedule in D1 across users and preserves cache on upstream errors', async () => {

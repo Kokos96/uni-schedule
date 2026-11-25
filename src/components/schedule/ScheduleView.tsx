@@ -62,6 +62,7 @@ export interface ScheduleViewProps {
   onResetToToday: () => void;
   lessons: Lesson[];
   dateAvailability?: ScheduleDateAvailability;
+  todayAvailability?: ScheduleDateAvailability;
   needsElectiveSelection?: boolean;
   todayLessons?: Lesson[];
   currentPair: CurrentPairState;
@@ -108,6 +109,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onResetToToday,
   lessons,
   dateAvailability = 'loaded',
+  todayAvailability = 'loaded',
   needsElectiveSelection = false,
   todayLessons,
   currentPair,
@@ -247,7 +249,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
         <GlassCard variant="matte" padding="none">
           <EmptyState
             illustration={
-              isWeekend ? (
+              !unavailable && isWeekend ? (
                 <WeekendIllustration size={80} />
               ) : (
                 <FreeDayIllustration size={80} />
@@ -256,7 +258,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             showUnderline
             title={
               unavailable
-                ? 'Розклад недоступний'
+                ? settings.scheduleSourceMode === 'unconfigured' ? 'Оберіть розклад' : 'Розклад недоступний'
                 : needsElectiveSelection && !isWeekend
                   ? 'Потрібно обрати ДВВС'
                   : isWeekend
@@ -264,7 +266,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     : 'Пар немає'
             }
             description={
-              dateAvailability === 'outside_coverage'
+              settings.scheduleSourceMode === 'unconfigured'
+                ? 'Оберіть університет, факультет і групу в налаштуваннях, щоб завантажити розклад.'
+                : dateAvailability === 'outside_coverage'
                 ? 'Ця дата поза завантаженим періодом. Оновіть розклад групи в налаштуваннях.'
                 : dateAvailability === 'not_loaded'
                   ? 'Розклад обраної групи ще не завантажено. Відкрийте налаштування та синхронізуйте його.'
@@ -275,7 +279,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
             }
             action={
-              needsElectiveSelection && !unavailable && onNavigateToSettings
+              unavailable && onNavigateToSettings
+                ? {
+                    label: 'Відкрити налаштування розкладу',
+                    onClick: onNavigateToSettings,
+                  }
+                : needsElectiveSelection && onNavigateToSettings
                 ? {
                     label: 'Обрати ДВВС в Опціях',
                     onClick: onNavigateToSettings,
@@ -467,6 +476,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               teachersMap={teachersMap}
               classroomsMap={classroomsMap}
               todayIso={todayIso}
+              todayAvailability={todayAvailability}
+              sourceMode={settings.scheduleSourceMode}
+              onNavigateToSettings={onNavigateToSettings}
               getStatus={getAttendanceStatus}
               onToggleAttendance={onToggleAttendance}
               onOpenNotes={onOpenNotes}
@@ -523,6 +535,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     teachersMap={teachersMap}
                     classroomsMap={classroomsMap}
                     todayIso={todayIso}
+                    todayAvailability={todayAvailability}
+                    sourceMode={settings.scheduleSourceMode}
+                    onNavigateToSettings={onNavigateToSettings}
                     getStatus={getAttendanceStatus}
                     onToggleAttendance={onToggleAttendance}
                     onOpenNotes={onOpenNotes}

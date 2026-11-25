@@ -55,8 +55,16 @@ export default {
 
     try {
       if (path === '/api/health' && request.method === 'GET') {
+        try {
+          const ping = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
+          if (ping?.ok !== 1) {
+            return errorResponse('DB_UNAVAILABLE', 'База даних недоступна', 503, corsHeaders);
+          }
+        } catch {
+          return errorResponse('DB_UNAVAILABLE', 'База даних недоступна', 503, corsHeaders);
+        }
         return jsonResponse(
-          { ok: true, service: 'uni-schedule-api', stage: 3 },
+          { ok: true, db: 'ok', service: 'uni-schedule-api', stage: 3, version: '3.6.0' },
           200,
           corsHeaders
         );

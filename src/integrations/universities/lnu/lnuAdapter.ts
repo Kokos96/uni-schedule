@@ -227,7 +227,8 @@ export class LnuAdapter implements UniversityAdapter {
   }
 
   public async fetchSchedule(
-    selection: StudentSelection
+    selection: StudentSelection,
+    options?: { force?: boolean }
   ): Promise<NormalizedSchedule> {
     const proxy = this.proxyBaseUrl;
     if (proxy) {
@@ -237,6 +238,7 @@ export class LnuAdapter implements UniversityAdapter {
       });
       if (selection.facultyId) qs.set('facultyId', selection.facultyId);
       if (selection.course) qs.set('course', String(selection.course));
+      if (options?.force) qs.set('force', '1');
 
       const res = await fetch(`${proxy}/api/schedule?${qs.toString()}`);
       if (!res.ok) {

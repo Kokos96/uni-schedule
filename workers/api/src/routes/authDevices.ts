@@ -39,12 +39,6 @@ export async function handleRegisterUser(
       `INSERT INTO user_devices (id, user_id, device_name, token_hash, created_at, last_seen_at, revoked_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL)`
     ).bind(deviceId, userId, deviceName, tokenHash, now, now),
-    env.DB.prepare(
-      `INSERT INTO student_profiles (
-         user_id, university_id, faculty_id, faculty_name, course,
-         group_id, group_name, subgroup, elective_course, timezone, updated_at
-       ) VALUES (?, 'lnu', '1005', 'Факультет електроніки та комп''ютерних технологій', 3, 'ФЕП-33с', 'ФЕП-33с', 1, 'freelance', 'Europe/Kyiv', ?)`
-    ).bind(userId, now),
   ]);
 
   return jsonResponse(
@@ -133,7 +127,7 @@ export async function handleRotateToken(
   corsHeaders: Record<string, string>
 ): Promise<Response> {
   const nextToken = generateSyncToken();
-  const nextHash = await hashSyncToken(nextToken, env.TOKEN_PEPPER ?? '');
+  const nextHash = await hashSyncToken(nextToken, resolveTokenPepper(env));
   const now = new Date().toISOString();
 
   const res = await env.DB.prepare(

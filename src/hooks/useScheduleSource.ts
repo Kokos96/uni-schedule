@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUniversityAdapter } from '../integrations/universities/registry';
 import { toAppScheduleBundle } from '../integrations/universities/normalizers/scheduleNormalizer';
 import type {
@@ -27,34 +27,13 @@ import {
   teachersData,
   teachersMap as defaultTeachersMap,
 } from '../utils/schedule';
-import { readStorage, writeStorage } from '../utils/storage';
-
-const CACHED_GROUP_SCHEDULE_KEY = 'uni_schedule_cached_group_v2';
-const LEGACY_GROUP_SCHEDULE_KEY = 'uni_schedule_cached_group_v1';
-
-function isValidCachedSchedule(value: unknown): value is NormalizedSchedule {
-  if (!value || typeof value !== 'object') return false;
-  const schedule = value as Partial<NormalizedSchedule>;
-  return (
-    typeof schedule.universityId === 'string' &&
-    schedule.universityId.length > 0 &&
-    typeof schedule.groupId === 'string' &&
-    schedule.groupId.length > 0 &&
-    typeof schedule.fetchedAt === 'string' &&
-    schedule.fetchedAt.length > 0 &&
-    (schedule.facultyId === undefined || typeof schedule.facultyId === 'string') &&
-    Array.isArray(schedule.lessons) &&
-    schedule.lessons.length > 0 &&
-    schedule.lessons.every(
-      (lesson) =>
-        Boolean(lesson) &&
-        typeof lesson === 'object' &&
-        typeof lesson.subject === 'string' &&
-        typeof lesson.startTime === 'string'
-    ) &&
-    Array.isArray(schedule.warnings)
-  );
-}
+import {
+  clearCachedSchedules,
+  readCachedSchedule,
+  scheduleIdentity,
+  shouldRefreshSchedule,
+  writeCachedSchedule,
+} from './scheduleCache';
 
 function isCacheMatchingProfile(
   cachedSchedule: NormalizedSchedule | null,
@@ -67,18 +46,6 @@ function isCacheMatchingProfile(
     (cachedSchedule.facultyId ?? '') === (profile.facultyId ?? '') &&
     cachedSchedule.lessons.length > 0
   );
-}
-
-function readCachedSchedule(): NormalizedSchedule | null {
-  const current = readStorage<unknown>(CACHED_GROUP_SCHEDULE_KEY, null);
-  if (current && typeof current === 'object') {
-    const envelope = current as { schemaVersion?: unknown; schedule?: unknown };
-    if (envelope.schemaVersion === 2 && isValidCachedSchedule(envelope.schedule)) {
-      return envelope.schedule;
-    }
-  }
-  const legacy = readStorage<unknown>(LEGACY_GROUP_SCHEDULE_KEY, null);
-  return isValidCachedSchedule(legacy) ? legacy : null;
 }
 
 export type ScheduleSyncStatus = 'builtin' | 'idle' | 'syncing' | 'synced' | 'error' | 'manual';
@@ -102,47 +69,36 @@ export interface ScheduleSourceState {
   syncWarnings: string[];
   getLessonsForDate: (date: Date, parity: WeekParity) => Lesson[];
   getDateAvailability: (date: Date) => ScheduleDateAvailability;
-  syncGroupSchedule: (selection: StudentSelection) => Promise<boolean>;
+  syncGroupSchedule: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   clearCachedSchedule: () => void;
 }
 
 export function useScheduleSource(
   settings: ResolvedUserSettings
 ): ScheduleSourceState {
+  const mode = settings.scheduleSourceMode;
+  const isBuiltin = mode === 'builtin';
+  const profile = mode === 'live' ? settings.universityProfile : undefined;
   const [cachedSchedule, setCachedSchedule] = useState<NormalizedSchedule | null>(
-    readCachedSchedule
+    () => readCachedSchedule(profile)
   );
-  const profile = settings.universityProfile;
   const hasMatchingCache = isCacheMatchingProfile(cachedSchedule, profile);
+  const sourceKey = `${mode}:${profile ? scheduleIdentity(profile) : ''}`;
+  const activeSourceRef = useRef(sourceKey);
+  const requestSeqRef = useRef(0);
+  const inFlightRef = useRef<{ key: string; promise: Promise<boolean> } | null>(null);
+  if (activeSourceRef.current !== sourceKey) {
+    activeSourceRef.current = sourceKey;
+    requestSeqRef.current += 1;
+    inFlightRef.current = null;
+  }
 
   const [syncStatus, setSyncStatus] = useState<ScheduleSyncStatus>(() => {
-    if (!profile) return 'builtin';
-    const adapter = getUniversityAdapter(profile.universityId);
-    if (adapter?.meta.supportStatus === 'manual_only') return 'manual';
+    if (isBuiltin) return 'builtin';
+    if (mode === 'manual') return 'manual';
     return hasMatchingCache ? 'synced' : 'idle';
   });
   const [syncError, setSyncError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!profile) {
-      setSyncStatus('builtin');
-      setSyncError(null);
-      return;
-    }
-    const adapter = getUniversityAdapter(profile.universityId);
-    if (adapter?.meta.supportStatus === 'manual_only') {
-      setSyncStatus('manual');
-      setSyncError(null);
-      return;
-    }
-    setSyncStatus(hasMatchingCache ? 'synced' : 'idle');
-    setSyncError(null);
-  }, [
-    profile?.universityId,
-    profile?.facultyId,
-    profile?.groupId,
-    hasMatchingCache,
-  ]);
 
   const bundle = useMemo(() => {
     if (!hasMatchingCache || !cachedSchedule) {
@@ -151,21 +107,21 @@ export function useScheduleSource(
     return toAppScheduleBundle(cachedSchedule);
   }, [hasMatchingCache, cachedSchedule]);
 
-  const schedule = bundle ? bundle.schedule : profile ? [] : scheduleData;
-  const teachers = bundle ? bundle.teachers : profile ? [] : teachersData;
-  const classrooms = bundle ? bundle.classrooms : profile ? [] : classroomsData;
+  const schedule = bundle ? bundle.schedule : isBuiltin ? scheduleData : [];
+  const teachers = bundle ? bundle.teachers : isBuiltin ? teachersData : [];
+  const classrooms = bundle ? bundle.classrooms : isBuiltin ? classroomsData : [];
 
   const scheduleMap = useMemo(
-    () => (bundle ? createLessonsMap(bundle.schedule) : profile ? new Map() : defaultLessonsMap),
-    [bundle, profile]
+    () => (bundle ? createLessonsMap(bundle.schedule) : isBuiltin ? defaultLessonsMap : new Map()),
+    [bundle, isBuiltin]
   );
   const teachersMap = useMemo(
-    () => (bundle ? createTeachersMap(bundle.teachers) : profile ? new Map() : defaultTeachersMap),
-    [bundle, profile]
+    () => (bundle ? createTeachersMap(bundle.teachers) : isBuiltin ? defaultTeachersMap : new Map()),
+    [bundle, isBuiltin]
   );
   const classroomsMap = useMemo(
-    () => (bundle ? createClassroomsMap(bundle.classrooms) : profile ? new Map() : defaultClassroomsMap),
-    [bundle, profile]
+    () => (bundle ? createClassroomsMap(bundle.classrooms) : isBuiltin ? defaultClassroomsMap : new Map()),
+    [bundle, isBuiltin]
   );
 
   const availableElectives = useMemo(() => {
@@ -215,15 +171,15 @@ export function useScheduleSource(
         return filterLessons(getDayLessons(dayNum, bundle.schedule), settings, parity);
       }
 
-      if (profile) return [];
+      if (!isBuiltin) return [];
       const dayNum = getScheduleDayNumber(date);
       return filterLessons(getDayLessons(dayNum, scheduleData), settings, parity);
     },
-    [bundle, cachedSchedule, profile, settings]
+    [bundle, cachedSchedule, isBuiltin, settings]
   );
 
   const getDateAvailability = useCallback((date: Date): ScheduleDateAvailability => {
-    if (!profile) return 'loaded';
+    if (isBuiltin) return 'loaded';
     if (!bundle || !cachedSchedule) return 'not_loaded';
     const iso = formatIsoDate(date);
     if (cachedSchedule.sourceType === 'dated' || Object.keys(bundle.datedLessonsByIso).length > 0) {
@@ -234,61 +190,115 @@ export function useScheduleSource(
       return bundle.datedLessonsByIso[iso]?.length ? 'loaded' : 'free_day';
     }
     return 'loaded';
-  }, [profile, bundle, cachedSchedule]);
+  }, [isBuiltin, bundle, cachedSchedule]);
 
   const syncGroupSchedule = useCallback(
-    async (selection: StudentSelection): Promise<boolean> => {
+    async (selection: StudentSelection, options?: { force?: boolean }): Promise<boolean> => {
+      const key = `live:${scheduleIdentity(selection)}`;
+      const existing = inFlightRef.current;
+      if (!options?.force && existing?.key === key) return existing.promise;
+      activeSourceRef.current = key;
+      const requestSeq = ++requestSeqRef.current;
+      const isCurrent = () => activeSourceRef.current === key && requestSeqRef.current === requestSeq;
       const adapter = getUniversityAdapter(selection.universityId);
       if (!adapter) {
-        setSyncStatus('error');
-        setSyncError(`Невідомий адаптер університету: ${selection.universityId}`);
+        if (isCurrent()) {
+          setSyncStatus('error');
+          setSyncError(`Невідомий адаптер університету: ${selection.universityId}`);
+        }
         return false;
       }
 
       if (adapter.meta.supportStatus === 'manual_only') {
-        setSyncStatus('manual');
-        setSyncError(adapter.meta.sourceNote);
+        if (isCurrent()) {
+          setSyncStatus('manual');
+          setSyncError(adapter.meta.sourceNote);
+        }
         return false;
       }
 
       setSyncStatus('syncing');
       setSyncError(null);
 
-      try {
-        const normalized = await adapter.fetchSchedule(selection);
-        if (selection.facultyId && !normalized.facultyId) {
-          normalized.facultyId = selection.facultyId;
-        }
-        if (normalized.lessons.length === 0) {
-          setSyncStatus('error');
+      const promise = (async () => {
+        try {
+          const received = await adapter.fetchSchedule(selection, options);
+          if (!isCurrent()) return false;
+          const normalized: NormalizedSchedule = {
+            ...received,
+            ...(selection.facultyId && !received.facultyId ? { facultyId: selection.facultyId } : {}),
+          };
+          if (scheduleIdentity(normalized) !== scheduleIdentity(selection) ||
+              normalized.lessons.length === 0) {
+            setSyncStatus('error');
+            setSyncError(normalized.warnings[0] ?? 'Сервер повернув порожній або чужий розклад.');
+            return false;
+          }
+          setCachedSchedule(normalized);
+          const persisted = writeCachedSchedule(normalized);
+          setSyncStatus('synced');
           setSyncError(
-            normalized.warnings[0] ??
-              'Розклад для цієї групи на обраний період порожній.'
+            persisted
+              ? null
+              : 'Розклад завантажено, але локальне сховище переповнене — офлайн-кеш може не зберегтися.'
           );
+          return true;
+        } catch (err) {
+          if (!isCurrent()) return false;
+          const message = err instanceof Error
+            ? err.message : 'Не вдалося завантажити розклад університету.';
+          setSyncStatus('error');
+          setSyncError(message);
           return false;
         }
-        setCachedSchedule(normalized);
-        writeStorage(CACHED_GROUP_SCHEDULE_KEY, { schemaVersion: 2, schedule: normalized });
-        setSyncStatus('synced');
-        setSyncError(null);
-        return true;
-      } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'Не вдалося завантажити розклад університету.';
-        setSyncStatus('error');
-        setSyncError(message);
-        return false;
-      }
+      })();
+      inFlightRef.current = { key, promise };
+      void promise.then(() => {
+        if (inFlightRef.current?.promise === promise) inFlightRef.current = null;
+      });
+      return promise;
     },
     []
   );
 
+  useEffect(() => {
+    if (mode === 'builtin') {
+      setCachedSchedule(null);
+      setSyncStatus('builtin');
+      setSyncError(null);
+      return;
+    }
+    if (mode !== 'live' || !profile) {
+      setCachedSchedule(null);
+      setSyncStatus(mode === 'manual' ? 'manual' : 'idle');
+      setSyncError(null);
+      return;
+    }
+    const restored = readCachedSchedule(profile);
+    setCachedSchedule(restored);
+    if (inFlightRef.current?.key !== sourceKey) setSyncStatus(restored ? 'synced' : 'idle');
+    setSyncError(null);
+    const adapter = getUniversityAdapter(profile.universityId);
+    if (adapter?.meta.supportStatus !== 'live') return;
+    const refreshIfNeeded = () => {
+      if (activeSourceRef.current !== sourceKey) return;
+      if (shouldRefreshSchedule(readCachedSchedule(profile), formatIsoDate(new Date()))) {
+        void syncGroupSchedule(profile);
+      }
+    };
+    if (typeof window !== 'undefined') window.addEventListener('online', refreshIfNeeded);
+    if (typeof navigator === 'undefined' || navigator.onLine) refreshIfNeeded();
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('online', refreshIfNeeded);
+    };
+  }, [sourceKey, syncGroupSchedule]);
+
   const clearCachedSchedule = useCallback(() => {
+    activeSourceRef.current = 'builtin:';
+    requestSeqRef.current += 1;
+    inFlightRef.current = null;
     setCachedSchedule(null);
-    writeStorage(CACHED_GROUP_SCHEDULE_KEY, null);
-    writeStorage(LEGACY_GROUP_SCHEDULE_KEY, null);
+    clearCachedSchedules();
     setSyncStatus('builtin');
     setSyncError(null);
   }, []);
@@ -303,7 +313,7 @@ export function useScheduleSource(
     datedLessonsByIso: bundle ? bundle.datedLessonsByIso : null,
     availableElectives,
     availableTracks,
-    hasSubgroups: !profile || Boolean(hasMatchingCache && cachedSchedule?.lessons.some((lesson) => lesson.subgroup !== undefined)),
+    hasSubgroups: isBuiltin || Boolean(hasMatchingCache && cachedSchedule?.lessons.some((lesson) => lesson.subgroup !== undefined)),
     isUsingCustomGroup: Boolean(bundle),
     syncStatus,
     lastSyncedAt: hasMatchingCache ? (cachedSchedule?.fetchedAt ?? null) : null,

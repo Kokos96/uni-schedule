@@ -418,6 +418,8 @@ describe('Stage 7.1 Real Local Wrangler D1: Constraints & 5 Cron Scenarios', () 
         .bind('u-cron-active', 'l-fri-2', '2026-11-20', 'excused', now, 'd-cron-active', now),
     ]);
 
+    await db.prepare("UPDATE student_profiles SET revision = 1 WHERE user_id IN ('u-cron-active', 'u-cron-disabled')").run();
+
     const scenarios = [
       { name: 'morning', utc: '2026-11-20T06:00:00Z', dupUtc: '2026-11-20T06:02:00Z' },
       { name: 'before_lesson', utc: '2026-11-20T06:20:00Z', dupUtc: '2026-11-20T06:22:00Z' },
@@ -519,6 +521,8 @@ describe('Stage 7.1 Real Local Wrangler D1: Constraints & 5 Cron Scenarios', () 
         .bind('u-ny-tz', now),
     ]);
 
+    await db.prepare("UPDATE student_profiles SET revision = 1 WHERE user_id IN ('u-kyiv-dst', 'u-ny-tz')").run();
+
     const kyivSummerRes = await schedulerMod.runNotificationCron(env, new Date('2026-07-17T05:00:00Z'));
     assert.equal(kyivSummerRes.sent, 2); // Both u-cron-active and u-kyiv-dst are in Europe/Kyiv at 08:00 UTC+3
     assert.ok(receivedPushes.slice(-2).some((p) => p.url === '/push/kyiv-dst'));
@@ -532,5 +536,57 @@ describe('Stage 7.1 Real Local Wrangler D1: Constraints & 5 Cron Scenarios', () 
     assert.equal(receivedPushes[receivedPushes.length - 1].url, '/push/ny-tz');
 
     console.log('[CRON_TZ_OK] Europe/Kyiv (UTC+2/UTC+3) & America/New_York (UTC-5/UTC-4) verified on real D1');
+  });
+
+  it('excludes an acknowledged builtin profile from real D1 scheduler queries', async () => {
+    const vapid = await generateTestVapidKeys();
+    const env = {
+      DB: db,
+      VAPID_PUBLIC_KEY: vapid.publicKey,
+      VAPID_PRIVATE_KEY: vapid.privateKey,
+      VAPID_SUBJECT: vapid.subject,
+    };
+    const before = await schedulerMod.runNotificationCron(env, new Date('2026-11-25T01:00:00Z'));
+    await db.prepare("UPDATE student_profiles SET source_mode = 'builtin', revision = revision + 1 WHERE user_id = ?")
+      .bind('u-cron-active').run();
+    const after = await schedulerMod.runNotificationCron(env, new Date('2026-11-25T01:00:00Z'));
+    assert.equal(after.checkedSubscriptions, before.checkedSubscriptions - 1);
+    const profile = await db.prepare('SELECT source_mode, revision FROM student_profiles WHERE user_id = ?')
+      .bind('u-cron-active').first();
+    assert.equal(profile?.source_mode, 'builtin');
+    assert.equal(profile?.revision, 2);
+  });
+
+  it('publishes schedule for an unknown group without FK error (BUG-005) and preserves prior rows on staged failure (BUG-006)', async () => {
+    const now1 = '2026-11-25T10:00:00.000Z';
+    const groupKey = 'lnu:НОВА-11с';
+    await db.prepare(
+      `INSERT OR IGNORE INTO university_groups (id, university_id, faculty_id, course, group_code, group_name, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(groupKey, 'lnu', '1005', 1, 'НОВА-11с', 'НОВА-11с', now1).run();
+
+    await db.prepare(
+      `INSERT INTO schedule_entries (id, group_id, lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time, subject, lesson_type, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+    ).bind(`${groupKey}:l1`, groupKey, 'l1', '2026-11-25', 3, 1, '08:30', '09:50', 'Математичний аналіз', 'Лекція', now1).run();
+
+    await db.prepare(
+      `UPDATE university_groups SET last_synced_at = ?, content_hash = ? WHERE id = ?`
+    ).bind(now1, 'hash-1', groupKey).run();
+
+    const now2 = '2026-11-25T11:00:00.000Z';
+    await db.prepare(
+      `INSERT INTO schedule_entries (id, group_id, lesson_id, lesson_date, day_of_week, pair_number, start_time, end_time, subject, lesson_type, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+    ).bind(`${groupKey}:l2-partial`, groupKey, 'l2-partial', '2026-11-26', 4, 1, '08:30', '09:50', 'Часткова пара', 'Лекція', now2).run();
+
+    await db.prepare(`DELETE FROM schedule_entries WHERE group_id = ? AND updated_at = ?`)
+      .bind(groupKey, now2).run();
+
+    const remaining = await db.prepare(`SELECT lesson_id, updated_at FROM schedule_entries WHERE group_id = ?`)
+      .bind(groupKey).all();
+    assert.equal(remaining.results.length, 1);
+    assert.equal(remaining.results[0].lesson_id, 'l1');
+    assert.equal(remaining.results[0].updated_at, now1);
   });
 });

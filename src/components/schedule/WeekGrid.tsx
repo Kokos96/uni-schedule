@@ -14,6 +14,7 @@ import type {
   Classroom,
   Lesson,
   LessonType,
+  ScheduleSourceMode,
   Teacher,
 } from '../../types';
 import {
@@ -24,6 +25,7 @@ import {
   parseIsoDate,
 } from '../../utils/date';
 import type { WeekGridData } from '../../utils/schedule';
+import type { ScheduleDateAvailability } from '../../hooks/useScheduleSource';
 import { cn } from '../../utils/cn';
 import { LessonTypeBadge, MetaChip, StatusDot, type StatusDotTone } from '../ui/Badge';
 import { FreeDayIllustration } from '../ui/EditorialOrnaments';
@@ -33,6 +35,8 @@ import { ModalDrawer } from '../ui/ModalDrawer';
 
 export interface WeekGridProps {
   weekGrid: WeekGridData;
+  weekAvailability?: ScheduleDateAvailability;
+  sourceMode?: ScheduleSourceMode;
   teachersMap: Map<string, Teacher>;
   classroomsMap: Map<string, Classroom>;
   selectedIso: string;
@@ -129,6 +133,8 @@ function formatFullDateUa(isoDate: string, fallbackDayNumber?: number): string {
 
 export const WeekGrid: React.FC<WeekGridProps> = ({
   weekGrid,
+  weekAvailability = 'loaded',
+  sourceMode,
   teachersMap,
   classroomsMap,
   selectedIso,
@@ -154,16 +160,26 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
     return (
       <GlassCard variant="matte" padding="lg">
         <EmptyState
-          title={needsElectiveSelection ? 'Потрібно обрати ДВВС' : 'На цей тиждень пар немає'}
+          title={weekAvailability === 'outside_coverage' || weekAvailability === 'not_loaded'
+            ? sourceMode === 'unconfigured' ? 'Оберіть розклад' : 'Розклад недоступний'
+            : needsElectiveSelection ? 'Потрібно обрати ДВВС' : 'На цей тиждень пар немає'}
           description={
-            needsElectiveSelection
+            sourceMode === 'unconfigured'
+              ? 'Оберіть університет і групу в налаштуваннях.'
+              : weekAvailability === 'outside_coverage'
+              ? 'Цей тиждень поза завантаженим періодом. Оновіть розклад групи в налаштуваннях.'
+              : weekAvailability === 'not_loaded'
+                ? 'Розклад обраної групи ще не завантажено.'
+            : needsElectiveSelection
               ? 'У завантаженому розкладі знайдено вибіркові дисципліни (ДВВС), але жодна ще не обрана.'
               : 'Оберіть інший тиждень або перевірте налаштування підгрупи та кафедри.'
           }
           illustration={<FreeDayIllustration size={72} />}
           showUnderline
           action={
-            needsElectiveSelection && onNavigateToSettings
+            (weekAvailability === 'outside_coverage' || weekAvailability === 'not_loaded') && onNavigateToSettings
+              ? { label: 'Відкрити налаштування розкладу', onClick: onNavigateToSettings }
+              : needsElectiveSelection && onNavigateToSettings
               ? {
                   label: 'Обрати ДВВС в Опціях',
                   onClick: onNavigateToSettings,
@@ -544,7 +560,7 @@ export const WeekGrid: React.FC<WeekGridProps> = ({
                     </span>
                     {activeClassroom && (
                       <span className="text-xs text-ink-secondary">
-                        {activeClassroom.building}, {activeClassroom.floor} пов.
+                        {activeClassroom.building}{activeClassroom.floor != null ? `, ${activeClassroom.floor} пов.` : ''}
                       </span>
                     )}
                   </div>

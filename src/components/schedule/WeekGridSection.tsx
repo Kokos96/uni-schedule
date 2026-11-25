@@ -4,9 +4,10 @@ import {
   CaretLeft,
   CaretRight,
 } from '@phosphor-icons/react';
-import type { AttendanceStatus, Classroom, Lesson, Teacher, WeekParity } from '../../types';
+import type { AttendanceStatus, Classroom, Lesson, ScheduleSourceMode, Teacher, WeekParity } from '../../types';
 import { formatIsoDate, formatShortDateUa } from '../../utils/date';
 import type { WeekGridData } from '../../utils/schedule';
+import type { ScheduleDateAvailability } from '../../hooks/useScheduleSource';
 import { GlassCard } from '../ui/GlassCard';
 
 const WeekGrid = lazy(() =>
@@ -18,6 +19,8 @@ const WeekGrid = lazy(() =>
 export interface WeekGridSectionProps {
   weekDates: readonly Date[];
   weekGrid: WeekGridData;
+  weekAvailability?: ScheduleDateAvailability;
+  sourceMode?: ScheduleSourceMode;
   teachersMap: Map<string, Teacher>;
   classroomsMap: Map<string, Classroom>;
   weekParity: WeekParity;
@@ -39,6 +42,8 @@ export interface WeekGridSectionProps {
 export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
   weekDates,
   weekGrid,
+  weekAvailability = 'loaded',
+  sourceMode,
   teachersMap,
   classroomsMap,
   weekParity,
@@ -131,6 +136,8 @@ export const WeekGridSection: React.FC<WeekGridSectionProps> = ({
       >
         <WeekGrid
           weekGrid={weekGrid}
+          weekAvailability={weekAvailability}
+          sourceMode={sourceMode}
           needsElectiveSelection={needsElectiveSelection}
           onNavigateToSettings={onNavigateToSettings}
           teachersMap={teachersMap}

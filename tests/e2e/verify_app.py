@@ -224,6 +224,7 @@ def test_all_viewports(browser: Browser, base_url: str, failures: list[str]) -> 
 def test_schedule_attendance_notes(browser: Browser, base_url: str, failures: list[str]) -> None:
     print("2a) Checking Schedule (Day/Week + WeekGrid modal Escape), Attendance & Notes persistence...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -304,6 +305,7 @@ def test_schedule_attendance_notes(browser: Browser, base_url: str, failures: li
 def test_deadlines_flow(browser: Browser, base_url: str, failures: list[str]) -> None:
     print("2b) Checking Deadlines create, toggle complete, delete + persistence...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -359,6 +361,7 @@ def test_deadlines_flow(browser: Browser, base_url: str, failures: list[str]) ->
 def test_directory_flow(browser: Browser, base_url: str, failures: list[str]) -> None:
     print("2c) Checking Directory (Teachers/Classrooms switch + search filter)...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -395,6 +398,7 @@ def test_directory_flow(browser: Browser, base_url: str, failures: list[str]) ->
 def test_stats_flow(browser: Browser, base_url: str, failures: list[str]) -> None:
     print("2d) Checking Stats (attendance % update + goal calculator)...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -452,6 +456,7 @@ def test_settings_and_backup_flow(browser: Browser, base_url: str, failures: lis
         accept_downloads=True,
         permissions=["clipboard-read", "clipboard-write"],
     )
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -526,7 +531,7 @@ def test_settings_and_backup_flow(browser: Browser, base_url: str, failures: lis
         paste_box = page.locator('textarea[placeholder*="schemaVersion"]')
         paste_box.fill("{invalid-json")
         page.get_by_role("button", name="Перевірити JSON").click()
-        alert = page.locator('div[role="alert"]').first
+        alert = page.locator('div[role="alert"]', has_text="JSON").first
         expect(alert).to_be_visible()
         expect(alert).to_contain_text("JSON")
 
@@ -555,6 +560,7 @@ def test_settings_and_backup_flow(browser: Browser, base_url: str, failures: lis
 def test_pwa_and_reduced_motion(browser: Browser, base_url: str, failures: list[str]) -> None:
     print("3) Checking PWA assets (/manifest.json, icons, Service Worker, /offline.html) & reduced-motion...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     page = context.new_page()
     diag = Diagnostics()
     diag.attach(page)
@@ -612,6 +618,7 @@ def test_cached_live_schedule_labels(browser: Browser, base_url: str, failures: 
     """Synthetic cache fixture: verify source metadata survives view switches and reload."""
     print("2f) Checking cached live schedule labels through Day → Week → Day...")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
+    context.add_init_script("if (!localStorage.getItem('uni_schedule_settings_v2')) localStorage.setItem('uni_schedule_settings_v2', JSON.stringify({scheduleSourceMode:'builtin'}));")
     try:
         context.add_init_script("""
             const today = new Date();

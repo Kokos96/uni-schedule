@@ -66,6 +66,15 @@ export function enqueueAttendanceMutation(mutation: AttendanceMutation): void {
   writeStorage(ATTENDANCE_QUEUE_KEY, next);
 }
 
+export function enqueueAttendanceMutations(mutations: readonly AttendanceMutation[]): void {
+  if (mutations.length === 0) return;
+  let next = readPendingQueue();
+  for (const mutation of mutations) {
+    next = coalesceMutation(next, mutation);
+  }
+  writeStorage(ATTENDANCE_QUEUE_KEY, next);
+}
+
 /**
  * Merges local records with remote server records using Last-Write-Wins (`updatedAt`)
  * while protecting any un-synced offline mutations in `pendingQueue`.
@@ -135,7 +144,24 @@ export function mergeAttendanceWithRemote(
   return merged;
 }
 
-export async function syncAttendanceWithServer(
+let activeAttendanceSyncPromise: Promise<{ synced: boolean; records: AttendanceRecord[] }> | null = null;
+
+export function syncAttendanceWithServer(
+  localRecords: readonly AttendanceRecord[]
+): Promise<{ synced: boolean; records: AttendanceRecord[] }> {
+  if (activeAttendanceSyncPromise) {
+    return activeAttendanceSyncPromise.then(() => runAttendanceSync(localRecords));
+  }
+  const run = runAttendanceSync(localRecords);
+  activeAttendanceSyncPromise = run;
+  return run.finally(() => {
+    if (activeAttendanceSyncPromise === run) {
+      activeAttendanceSyncPromise = null;
+    }
+  });
+}
+
+async function runAttendanceSync(
   localRecords: readonly AttendanceRecord[]
 ): Promise<{ synced: boolean; records: AttendanceRecord[] }> {
   const apiBaseUrl = getApiBaseUrl();

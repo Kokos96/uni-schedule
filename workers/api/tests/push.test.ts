@@ -103,7 +103,7 @@ class MockPushD1 {
             const dev = db.user_devices.get(sub.device_id as string);
             const prof = db.student_profiles.get(sub.user_id as string);
             const pref = db.notification_preferences.get(sub.user_id as string);
-            if (dev && dev.revoked_at === null && prof && pref && pref.enabled === 1) {
+            if (dev && dev.revoked_at === null && prof?.source_mode === 'live' && Number(prof.revision) > 0 && pref && pref.enabled === 1) {
               results.push({
                 sub_id: sub.id,
                 user_id: sub.user_id,
@@ -423,7 +423,11 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
       new Request('https://api.test/api/auth/register', { method: 'POST', body: '{"deviceName":"Phone"}' }),
       env
     );
-    const { syncToken: token1 } = (await reg1.json()) as { syncToken: string };
+    const { syncToken: token1, userId } = (await reg1.json()) as { syncToken: string; userId: string };
+    db.student_profiles.set(userId, {
+      user_id: userId, university_id: 'lnu', group_id: 'ФЕП-33с',
+      subgroup: 1, timezone: 'Europe/Kyiv', source_mode: 'live', revision: 1,
+    });
 
     const link2 = await worker.fetch(
       new Request('https://api.test/api/devices/link', {
@@ -483,6 +487,9 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
       // Run Cron again 2 minutes later -> atomic dedup_key prevents duplicate send!
       const tick2 = await runNotificationCron(env, new Date('2026-11-20T06:02:00Z'));
       assert.equal(tick2.sent, 0);
+      db.student_profiles.get(userId)!.source_mode = 'builtin';
+      const builtinTick = await runNotificationCron(env, new Date('2026-11-20T06:05:00Z'));
+      assert.equal(builtinTick.checkedSubscriptions, 0);
       assert.equal(tick2.deduplicated, 1);
     } finally {
       globalThis.fetch = origFetch;

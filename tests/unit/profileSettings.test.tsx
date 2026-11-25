@@ -23,6 +23,7 @@ function renderProfile(options: {
       React.createElement(ProfileSettingsSection, {
         resolved: {
           ...DEFAULT_SETTINGS,
+          scheduleSourceMode: options.groupId ? 'live' : 'builtin',
           ...(options.selectedElectives ? { selectedElectives: options.selectedElectives } : {}),
           ...(options.groupId
             ? {
@@ -45,6 +46,17 @@ function renderProfile(options: {
 }
 
 describe('academic profile controls', () => {
+  it('does not imply the built-in group on an unconfigured first launch', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(ToastProvider, null, React.createElement(SettingsView, {
+        settings: { ...DEFAULT_SETTINGS },
+        onUpdate: () => {},
+      }))
+    );
+    assert.match(html, /Профіль не налаштовано/);
+    assert.doesNotMatch(html, /Вибір кафедри/);
+  });
+
   it('shows department choices for builtin schedule', () => {
     const html = renderProfile({});
     assert.match(html, /Вибір кафедри/);
@@ -117,7 +129,7 @@ describe('academic profile controls', () => {
         ToastProvider,
         null,
         React.createElement(SettingsView, {
-          settings: { ...DEFAULT_SETTINGS },
+          settings: { ...DEFAULT_SETTINGS, scheduleSourceMode: 'builtin' },
           onUpdate: () => {},
         })
       )

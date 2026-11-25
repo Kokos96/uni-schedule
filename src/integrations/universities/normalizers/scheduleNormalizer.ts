@@ -129,13 +129,13 @@ export function toAppScheduleBundle(
     let classroomId = '';
     if (rawRoom) {
       const roomInfo = parseRoomCodeAndBuilding(rawRoom);
-      classroomId = `c_${stableSlug(roomInfo.code)}`;
+      const building = item.building || roomInfo.building;
+      classroomId = `c_${stableSlug(`${roomInfo.code}|${building}`)}`;
       if (!classroomsById.has(classroomId)) {
         classroomsById.set(classroomId, {
           id: classroomId,
           code: roomInfo.code,
-          building: item.building || roomInfo.building,
-          floor: 1,
+          building,
         });
       }
     }

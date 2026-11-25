@@ -119,5 +119,5 @@ export interface UniversityAdapter {
     course?: number;
   }): Promise<Group[]>;
   getSubgroups?(groupId: string): Promise<Subgroup[]>;
-  fetchSchedule(selection: StudentSelection): Promise<NormalizedSchedule>;
+  fetchSchedule(selection: StudentSelection, options?: { force?: boolean }): Promise<NormalizedSchedule>;
 }
