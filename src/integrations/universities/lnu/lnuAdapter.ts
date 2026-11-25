@@ -1,10 +1,15 @@
 import { getApiBaseUrl } from '../../../services/apiClient';
+import {
+  getVerifiedLnuPrograms,
+  resolveVerifiedLnuGroupMetadata,
+} from '../../../data/lnuAcademicCatalog';
 import { addDays, formatIsoDate } from '../../../utils/date';
 import type {
   Course,
   Faculty,
   Group,
   NormalizedSchedule,
+  Program,
   StudentSelection,
   Subgroup,
   UniversityAdapter,
@@ -72,7 +77,7 @@ export class LnuAdapter implements UniversityAdapter {
     supportStatus: 'live',
     capabilities: {
       hasFaculties: true,
-      hasPrograms: false,
+      hasPrograms: true,
       hasCourses: true,
       hasGroups: true,
       hasSubgroups: true,
@@ -156,6 +161,10 @@ export class LnuAdapter implements UniversityAdapter {
     return LNU_DEFAULT_FACULTIES;
   }
 
+  public async getPrograms(facultyId: string): Promise<Program[]> {
+    return getVerifiedLnuPrograms(facultyId);
+  }
+
   public async getCourses(): Promise<Course[]> {
     return LNU_COURSES;
   }
@@ -163,7 +172,9 @@ export class LnuAdapter implements UniversityAdapter {
   public async getGroups(
     filter?: {
       facultyId?: string;
+      programId?: string;
       course?: number;
+      includeAll?: boolean;
     },
     options?: {
       ttlMs?: number;
@@ -173,7 +184,12 @@ export class LnuAdapter implements UniversityAdapter {
     const proxy = this.proxyBaseUrl;
     if (proxy) {
       const qs = new URLSearchParams();
-      if (filter?.facultyId) qs.set('facultyId', filter.facultyId);
+      if (filter?.includeAll) {
+        qs.set('includeAll', '1');
+      } else {
+        if (filter?.facultyId) qs.set('facultyId', filter.facultyId);
+        if (filter?.programId) qs.set('programId', filter.programId);
+      }
       if (filter?.course) qs.set('course', String(filter.course));
       const querySuffix = qs.toString() ? `?${qs.toString()}` : '';
       const res = await fetch(`${proxy}/api/universities/lnu/groups${querySuffix}`);
@@ -182,10 +198,15 @@ export class LnuAdapter implements UniversityAdapter {
       }
       const data = (await res.json()) as { groups?: Group[] };
       const groups = Array.isArray(data.groups) ? data.groups : [];
-      if (!filter?.facultyId) return groups;
-      return groups.filter(
-        (g) => !g.facultyId || g.facultyId === filter.facultyId
-      );
+      if (filter?.includeAll || (!filter?.facultyId && !filter?.programId)) {
+        return groups;
+      }
+      return groups.filter((g) => {
+        if (filter?.facultyId && g.facultyId !== filter.facultyId) return false;
+        if (filter?.programId && g.programId !== filter.programId) return false;
+        if (filter?.course && g.course !== filter.course) return false;
+        return true;
+      });
     }
 
     if (this.isBrowserWithoutProxy) {
@@ -204,18 +225,35 @@ export class LnuAdapter implements UniversityAdapter {
         throw new Error(`Сервер ЛНУ повернув помилку HTTP ${res.status}`);
       }
       const text = decodeCp1251(await res.arrayBuffer());
+      const parsed = parseLnuGroupsJson(text).map((g) => {
+        const verified = resolveVerifiedLnuGroupMetadata(g.name);
+        return verified
+          ? {
+              ...g,
+              facultyId: verified.facultyId,
+              facultyVerified: true,
+              programId: verified.programId,
+              programName: verified.programName,
+            }
+          : g;
+      });
       this.cachedGroups = {
-        items: parseLnuGroupsJson(text),
+        items: parsed,
         fetchedAt: Date.now(),
       };
     }
 
     const groups = this.cachedGroups!.items;
     return groups.filter((g) => {
-      if (filter?.facultyId && g.facultyId && g.facultyId !== filter.facultyId) {
-        return false;
+      if (!filter?.includeAll) {
+        if (filter?.facultyId && g.facultyId !== filter.facultyId) {
+          return false;
+        }
+        if (filter?.programId && g.programId !== filter.programId) {
+          return false;
+        }
       }
-      if (filter?.course && g.course !== undefined && g.course !== filter.course) {
+      if (filter?.course && g.course !== filter.course) {
         return false;
       }
       return true;
@@ -237,12 +275,18 @@ export class LnuAdapter implements UniversityAdapter {
         group: selection.groupName,
       });
       if (selection.facultyId) qs.set('facultyId', selection.facultyId);
+      if (selection.programId) qs.set('programId', selection.programId);
       if (selection.course) qs.set('course', String(selection.course));
       if (options?.force) qs.set('force', '1');
 
       const res = await fetch(`${proxy}/api/schedule?${qs.toString()}`);
       if (!res.ok) {
-        throw new Error(`Сервер API повернув помилку HTTP ${res.status}`);
+        const errPayload = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        throw new Error(
+          errPayload?.error?.message ?? `Сервер API повернув помилку HTTP ${res.status}`
+        );
       }
       const data = (await res.json()) as { schedule: NormalizedSchedule };
       return data.schedule;

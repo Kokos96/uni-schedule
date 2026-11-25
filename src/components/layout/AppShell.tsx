@@ -82,11 +82,18 @@ export const AppShell: React.FC<AppShellProps> = ({
 
         <motion.main
           id="main-content"
-          initial={reducedMotion ? false : { opacity: 0, y: 10 }}
-          animate={{ opacity: launchRevealed ? 1 : 0, y: launchRevealed ? 0 : 10 }}
-          transition={reducedMotion ? { duration: 0.05 } : { duration: 0.46, ease: [0.22, 1, 0.36, 1] }}
+          aria-hidden={!launchRevealed || undefined}
+          initial={reducedMotion ? false : { opacity: 0, y: 16, scale: 0.985 }}
+          animate={{
+            opacity: launchRevealed ? 1 : 0,
+            y: launchRevealed ? 0 : 16,
+            scale: launchRevealed ? 1 : 0.985,
+          }}
+          transition={reducedMotion ? { duration: 0.05 } : { duration: 0.54, ease: [0.22, 1, 0.36, 1] }}
           tabIndex={-1}
-          className="relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pt-6 lg:pb-10 focus:outline-none"
+          className={`relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pt-6 lg:pb-10 focus:outline-none ${
+            launchRevealed ? '' : 'pointer-events-none'
+          }`}
         >
           <h1 className="sr-only">{resolvedTitle}</h1>
 

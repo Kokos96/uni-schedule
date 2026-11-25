@@ -1,5 +1,14 @@
+import {
+  getVerifiedLnuPrograms,
+  hasVerifiedLnuCatalogForFaculty,
+  resolveVerifiedLnuGroupMetadata,
+  validateLnuAcademicSelection,
+} from '../../../../src/data/lnuAcademicCatalog';
 import { LnuAdapter } from '../../../../src/integrations/universities/lnu/lnuAdapter';
-import { normalizeGroupHomoglyphs } from '../../../../src/integrations/universities/lnu/lnuParser';
+import {
+  inferCourseFromGroupName,
+  normalizeGroupHomoglyphs,
+} from '../../../../src/integrations/universities/lnu/lnuParser';
 import { listUniversities } from '../../../../src/integrations/universities/registry';
 import type {
   NormalizedSchedule,
@@ -130,6 +139,7 @@ export async function handleGetGroups(
   const query = (url.searchParams.get('q') ?? '').trim().toLowerCase();
   const queryHomoglyph = query ? normalizeGroupHomoglyphs(query) : '';
   const facultyFilter = (url.searchParams.get('facultyId') ?? '').trim();
+  const programFilter = (url.searchParams.get('programId') ?? '').trim();
   const courseFilter = courseParam ? Number(courseParam) : undefined;
 
   const groupsTtl = parsePositiveInt(env.GROUPS_CACHE_TTL_SECONDS, 86400);
@@ -185,16 +195,26 @@ export async function handleGetGroups(
         }
       } else {
         const capped = upstreamGroups.slice(0, 5000);
-        const statements = capped.map((g) =>
-          env.DB.prepare(
+        const statements = capped.map((g) => {
+          const verified = resolveVerifiedLnuGroupMetadata(g.name);
+          const inferredCourse = g.course ?? inferCourseFromGroupName(g.name) ?? null;
+          return env.DB.prepare(
             `INSERT INTO university_groups (
                id, university_id, faculty_id, course, group_code, group_name, created_at
-             ) VALUES (?, 'lnu', NULL, ?, ?, ?, ?)
+             ) VALUES (?, 'lnu', ?, ?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
+               faculty_id = COALESCE(excluded.faculty_id, university_groups.faculty_id),
                course = COALESCE(excluded.course, university_groups.course),
                group_name = excluded.group_name`
-          ).bind(`lnu:${g.name}`, g.course ?? null, g.name, g.name, now)
-        );
+          ).bind(
+            `lnu:${g.name}`,
+            verified?.facultyId ?? null,
+            inferredCourse,
+            g.name,
+            g.name,
+            now
+          );
+        });
 
         // Batch in chunks of 100 statements for D1 limits
         for (let i = 0; i < statements.length; i += 100) {
@@ -238,14 +258,35 @@ export async function handleGetGroups(
 
   const includeAll = url.searchParams.get('includeAll') === '1';
   const activeFaculty = !includeAll && facultyFilter && facultyFilter !== '0' ? facultyFilter : null;
+  const activeProgram = !includeAll && programFilter ? programFilter : null;
 
   const filtered = (dbGroups.results ?? [])
-    .filter((row) => {
-      if (activeFaculty && row.faculty_id && row.faculty_id !== activeFaculty) {
-        return false;
+    .map((row) => {
+      const verified = resolveVerifiedLnuGroupMetadata(row.group_name);
+      const effectiveCourse = row.course ?? inferCourseFromGroupName(row.group_name) ?? null;
+      return {
+        row,
+        verified,
+        effectiveCourse,
+      };
+    })
+    .filter(({ row, verified, effectiveCourse }) => {
+      // Strict verified academic hierarchy filtering:
+      // Never include unknown/unverified groups in faculty-scoped or program-scoped results.
+      if (activeFaculty) {
+        if (!verified || verified.facultyId !== activeFaculty) {
+          return false;
+        }
       }
-      if (courseFilter && row.course !== null && row.course !== courseFilter) {
-        return false;
+      if (activeProgram) {
+        if (!verified || verified.programId !== activeProgram) {
+          return false;
+        }
+      }
+      if (courseFilter) {
+        if (effectiveCourse !== courseFilter) {
+          return false;
+        }
       }
       if (query) {
         const lowerName = row.group_name.toLowerCase();
@@ -255,33 +296,30 @@ export async function handleGetGroups(
       }
       return true;
     })
-    .map((row) => {
-      const facultyVerified = Boolean(activeFaculty && row.faculty_id && row.faculty_id === activeFaculty);
-      return {
-        id: row.group_code,
-        name: row.group_name,
-        ...(row.faculty_id ? { facultyId: row.faculty_id } : {}),
-        ...(activeFaculty ? { facultyVerified } : {}),
-        ...(row.course ? { course: row.course } : {}),
-      };
-    })
-    .sort((a, b) => {
-      const av = a.facultyVerified ? 0 : 1;
-      const bv = b.facultyVerified ? 0 : 1;
-      if (av !== bv) return av - bv;
-      return a.name.localeCompare(b.name, 'uk');
-    });
+    .map(({ row, verified, effectiveCourse }) => ({
+      id: row.group_code,
+      name: row.group_name,
+      ...(verified ? { facultyId: verified.facultyId, facultyVerified: true } : { facultyVerified: false }),
+      ...(verified ? { programId: verified.programId, programName: verified.programName } : {}),
+      ...(effectiveCourse ? { course: effectiveCourse } : {}),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'uk'));
 
-  const verifiedCount = activeFaculty ? filtered.filter((g) => g.facultyVerified).length : 0;
-  const unverifiedCount = activeFaculty ? filtered.length - verifiedCount : filtered.length;
+  const verifiedCount = filtered.filter((g) => g.facultyVerified).length;
+  const unverifiedCount = filtered.length - verifiedCount;
+  const programs = activeFaculty ? getVerifiedLnuPrograms(activeFaculty) : [];
 
   return jsonResponse(
     {
       groups: filtered,
+      programs,
       meta: {
         facultyId: activeFaculty,
+        programId: activeProgram,
+        includeAll,
         verifiedCount,
         unverifiedCount,
+        hasVerifiedCatalog: activeFaculty ? hasVerifiedLnuCatalogForFaculty(activeFaculty) : true,
         upstreamFacultyDiscoverySupported: false,
       },
     },
@@ -380,6 +418,7 @@ export async function handleGetSchedule(
   const universityId = (url.searchParams.get('universityId') ?? 'lnu').trim();
   const groupName = (url.searchParams.get('group') ?? url.searchParams.get('groupId') ?? '').trim();
   const facultyId = (url.searchParams.get('facultyId') ?? '0').trim();
+  const programId = (url.searchParams.get('programId') ?? '').trim();
   const courseParam = url.searchParams.get('course');
   const force = url.searchParams.get('force') === '1';
 
@@ -446,16 +485,35 @@ export async function handleGetSchedule(
       groupKey = homoglyphMatch.id;
     }
   }
+
   const requestedFaculty = facultyId && facultyId !== '0' ? facultyId : null;
+  const requestedProgram = programId || null;
+  const academicCheck = validateLnuAcademicSelection({
+    groupName: resolvedGroupName,
+    facultyId: requestedFaculty,
+    programId: requestedProgram,
+  });
+  if (!academicCheck.ok) {
+    return errorResponse('ACADEMIC_MISMATCH', academicCheck.reason, 400, corsHeaders);
+  }
+
+  const verifiedMeta = academicCheck.verified;
+  const verifiedFacultyId = verifiedMeta?.facultyId ?? null;
+  const inferredCourse = inferCourseFromGroupName(resolvedGroupName) ?? null;
+
   const facultyMatches =
     !requestedFaculty ||
-    !effectiveGroupRow?.faculty_id ||
-    effectiveGroupRow.faculty_id === requestedFaculty;
-  const cacheCoverage = effectiveGroupRow ? {
-    sourceType: effectiveGroupRow.schedule_source_type,
-    coveredFrom: effectiveGroupRow.covered_from,
-    coveredTo: effectiveGroupRow.covered_to,
-  } : undefined;
+    !verifiedFacultyId ||
+    verifiedFacultyId === requestedFaculty;
+
+  const cacheCoverage = effectiveGroupRow
+    ? {
+        sourceType: effectiveGroupRow.schedule_source_type,
+        coveredFrom: effectiveGroupRow.covered_from,
+        coveredTo: effectiveGroupRow.covered_to,
+        facultyId: verifiedFacultyId,
+      }
+    : undefined;
 
   // Serve shared group cache if fresh, faculty-compatible, and not force-refreshed
   if (!force && effectiveGroupRow && facultyMatches && isFreshTimestamp(effectiveGroupRow.last_synced_at, cacheTtl)) {
@@ -477,13 +535,21 @@ export async function handleGetSchedule(
 
   const now = new Date().toISOString();
   try {
-    const fresh = await lnuAdapter.fetchSchedule({
+    const rawFresh = await lnuAdapter.fetchSchedule({
       universityId,
-      facultyId: facultyId || undefined,
-      course,
+      facultyId: verifiedFacultyId ?? undefined,
+      course: inferredCourse ?? course,
       groupId: resolvedGroupName,
       groupName: resolvedGroupName,
     });
+    // Ensure fresh response carries ONLY verified faculty identity (matching cached responses).
+    const fresh: NormalizedSchedule = {
+      ...rawFresh,
+      ...(verifiedFacultyId ? { facultyId: verifiedFacultyId } : { facultyId: undefined }),
+    };
+    if (!verifiedFacultyId) {
+      delete fresh.facultyId;
+    }
 
     if (fresh.lessons.length === 0) {
       await env.DB.prepare(
@@ -503,7 +569,7 @@ export async function handleGetSchedule(
         const staleCache = await readCachedGroupSchedule(
           env.DB,
           groupKey,
-          groupName,
+          resolvedGroupName,
           effectiveGroupRow.last_synced_at,
           cacheCoverage
         );
@@ -528,8 +594,8 @@ export async function handleGetSchedule(
 
     const contentHash = await computeContentHash(fresh.lessons);
 
-    // A1 (BUG-005): Ensure parent university_groups row exists BEFORE inserting schedule_entries
-    // without overwriting existing content_hash/last_synced_at until publication succeeds.
+    // Ensure parent university_groups row exists BEFORE inserting schedule_entries.
+    // Never write untrusted user-supplied facultyId or course into university_groups.
     await env.DB.prepare(
       `INSERT OR IGNORE INTO university_groups (
          id, university_id, faculty_id, course, group_code, group_name, created_at
@@ -538,8 +604,8 @@ export async function handleGetSchedule(
       .bind(
         groupKey,
         universityId,
-        facultyId !== '0' ? facultyId : null,
-        course ?? null,
+        verifiedFacultyId,
+        inferredCourse,
         resolvedGroupName,
         resolvedGroupName,
         now
@@ -557,8 +623,8 @@ export async function handleGetSchedule(
            covered_to = ?
        WHERE id = ?`
     ).bind(
-      facultyId !== '0' ? facultyId : null,
-      course ?? null,
+      verifiedFacultyId,
+      inferredCourse,
       contentHash,
       now,
       fresh.sourceType ?? 'dated',
@@ -648,13 +714,13 @@ export async function handleGetSchedule(
       .bind(crypto.randomUUID(), groupKey, errMsg, now)
       .run();
 
-    if (effectiveGroupRow?.last_synced_at) {
+    if (effectiveGroupRow?.last_synced_at && facultyMatches) {
       const staleCache = await readCachedGroupSchedule(
         env.DB,
         groupKey,
-        groupName,
-          effectiveGroupRow.last_synced_at,
-          cacheCoverage
+        resolvedGroupName,
+        effectiveGroupRow.last_synced_at,
+        cacheCoverage
       );
       if (staleCache) {
         staleCache.warnings.push(

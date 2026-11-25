@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { BookOpen, Buildings, Users } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS, ELECTIVE_OPTIONS } from '../../constants/profile';
-import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { ScheduleActivationResult, ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { UseSettingsResult } from '../../hooks/useSettings';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { ResolvedUserSettings, UserSettings } from '../../types';
@@ -65,6 +65,10 @@ export interface ProfileSettingsSectionProps {
   profileSyncStatus?: UseSettingsResult['profileSyncStatus'];
   profileSyncError?: string | null;
   onConfirmProfileOverwrite?: () => void;
+  onActivateGroupSchedule?: (
+    selection: StudentSelection,
+    options?: { force?: boolean }
+  ) => Promise<ScheduleActivationResult>;
   onSyncGroupSchedule?: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
   isUsingCustomGroup?: boolean;
@@ -83,6 +87,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   profileSyncStatus = 'idle',
   profileSyncError,
   onConfirmProfileOverwrite,
+  onActivateGroupSchedule,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
   isUsingCustomGroup = false,
@@ -121,6 +126,7 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
         profileSyncStatus={profileSyncStatus}
         profileSyncError={profileSyncError}
         onConfirmProfileOverwrite={onConfirmProfileOverwrite}
+        onActivateGroupSchedule={onActivateGroupSchedule}
         onSyncGroupSchedule={onSyncGroupSchedule}
         onResetBuiltinSchedule={onResetBuiltinSchedule}
       />

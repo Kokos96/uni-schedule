@@ -30,6 +30,8 @@ import {
 } from '../utils/schedule';
 import {
   clearCachedSchedules,
+  isConfirmedEmptySchedule,
+  isScheduleCompatibleWithProfile,
   readCachedSchedule,
   scheduleIdentity,
   shouldRefreshSchedule,
@@ -42,15 +44,20 @@ function isCacheMatchingProfile(
 ): boolean {
   if (!profile || !cachedSchedule) return false;
   return (
-    cachedSchedule.universityId === profile.universityId &&
-    cachedSchedule.groupId === profile.groupId &&
-    (cachedSchedule.facultyId ?? '') === (profile.facultyId ?? '') &&
-    cachedSchedule.lessons.length > 0
+    isScheduleCompatibleWithProfile(cachedSchedule, profile) &&
+    (cachedSchedule.lessons.length > 0 || isConfirmedEmptySchedule(cachedSchedule))
   );
 }
 
 export type ScheduleSyncStatus = 'builtin' | 'idle' | 'syncing' | 'synced' | 'error' | 'manual';
 export type ScheduleDateAvailability = 'loaded' | 'free_day' | 'outside_coverage' | 'not_loaded';
+
+export interface ScheduleActivationResult {
+  ok: boolean;
+  schedule?: NormalizedSchedule;
+  error?: string;
+  cancelled?: boolean;
+}
 
 export interface ScheduleSourceState {
   schedule: ScheduleDay[];
@@ -71,7 +78,14 @@ export interface ScheduleSourceState {
   syncWarnings: string[];
   getLessonsForDate: (date: Date, parity: WeekParity) => Lesson[];
   getDateAvailability: (date: Date) => ScheduleDateAvailability;
-  syncGroupSchedule: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
+  activateGroupSchedule: (
+    selection: StudentSelection,
+    options?: { force?: boolean; background?: boolean }
+  ) => Promise<ScheduleActivationResult>;
+  syncGroupSchedule: (
+    selection: StudentSelection,
+    options?: { force?: boolean; background?: boolean }
+  ) => Promise<boolean>;
   clearCachedSchedule: () => void;
 }
 
@@ -85,15 +99,30 @@ export function useScheduleSource(
     () => readCachedSchedule(profile)
   );
   const hasMatchingCache = isCacheMatchingProfile(cachedSchedule, profile);
-  const sourceKey = `${mode}:${profile ? scheduleIdentity(profile) : ''}`;
-  const activeSourceRef = useRef(sourceKey);
-  const requestSeqRef = useRef(0);
-  const inFlightRef = useRef<{ key: string; promise: Promise<boolean> } | null>(null);
-  if (activeSourceRef.current !== sourceKey) {
-    activeSourceRef.current = sourceKey;
-    requestSeqRef.current += 1;
-    inFlightRef.current = null;
-  }
+  const committedSourceKey = `${mode}:${profile ? scheduleIdentity(profile) : ''}`;
+
+  // Request generation counter incremented ONLY by explicit user transitions,
+  // cancellation, or mode teardown — never by ordinary React renders.
+  const requestGenRef = useRef(0);
+  const activeActivationRef = useRef<{
+    key: string;
+    gen: number;
+    promise: Promise<ScheduleActivationResult>;
+  } | null>(null);
+  const backgroundRefreshRef = useRef<{
+    key: string;
+    gen: number;
+    promise: Promise<ScheduleActivationResult>;
+  } | null>(null);
+  const committedKeyRef = useRef(committedSourceKey);
+  const unmountedRef = useRef(false);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
 
   const [syncStatus, setSyncStatus] = useState<ScheduleSyncStatus>(() => {
     if (isBuiltin) return 'builtin';
@@ -194,83 +223,169 @@ export function useScheduleSource(
     return 'loaded';
   }, [isBuiltin, bundle, cachedSchedule]);
 
-  const syncGroupSchedule = useCallback(
-    async (selection: StudentSelection, options?: { force?: boolean }): Promise<boolean> => {
+  const activateGroupSchedule = useCallback(
+    async (
+      selection: StudentSelection,
+      options?: { force?: boolean; background?: boolean }
+    ): Promise<ScheduleActivationResult> => {
+      const isBackground = Boolean(options?.background);
       const key = `live:${scheduleIdentity(selection)}`;
-      const existing = inFlightRef.current;
-      if (!options?.force && existing?.key === key) return existing.promise;
-      activeSourceRef.current = key;
-      const requestSeq = ++requestSeqRef.current;
-      const isCurrent = () => activeSourceRef.current === key && requestSeqRef.current === requestSeq;
+
+      // Never allow an automatic background refresh to override an active user-initiated activation.
+      if (isBackground && activeActivationRef.current) {
+        return { ok: false, cancelled: true };
+      }
+
+      const existingFlight = isBackground ? backgroundRefreshRef.current : activeActivationRef.current;
+      if (!options?.force && existingFlight?.key === key) {
+        return existingFlight.promise;
+      }
+
+      const gen = ++requestGenRef.current;
+      const isCurrent = () => !unmountedRef.current && requestGenRef.current === gen;
+
       const adapter = getUniversityAdapter(selection.universityId);
       if (!adapter) {
-        if (isCurrent()) {
+        const error = `Невідомий адаптер університету: ${selection.universityId}`;
+        if (isCurrent() && !isBackground) {
           setSyncStatus('error');
-          setSyncError(`Невідомий адаптер університету: ${selection.universityId}`);
+          setSyncError(error);
         }
-        return false;
+        return { ok: false, error };
       }
 
       if (adapter.meta.supportStatus === 'manual_only') {
-        if (isCurrent()) {
+        const error = adapter.meta.sourceNote;
+        if (isCurrent() && !isBackground) {
           setSyncStatus('manual');
-          setSyncError(adapter.meta.sourceNote);
+          setSyncError(error);
         }
-        return false;
+        return { ok: false, error };
       }
 
-      setSyncStatus('syncing');
-      setSyncError(null);
+      // Fast path for non-forced user activation if a fresh valid local cache already exists
+      // and the client is offline.
+      if (!options?.force && typeof navigator !== 'undefined' && !navigator.onLine) {
+        const localHit = readCachedSchedule(selection);
+        if (localHit && isScheduleCompatibleWithProfile(localHit, selection)) {
+          if (isCurrent()) {
+            setCachedSchedule(localHit);
+            setSyncStatus('synced');
+            setSyncError(null);
+          }
+          return { ok: true, schedule: localHit };
+        }
+      }
 
-      const promise = (async () => {
+      if (!isBackground) {
+        setSyncStatus('syncing');
+        setSyncError(null);
+      }
+
+      const promise: Promise<ScheduleActivationResult> = (async () => {
         try {
           const received = await adapter.fetchSchedule(selection, options);
-          if (!isCurrent()) return false;
-          const normalized: NormalizedSchedule = {
-            ...received,
-            ...(selection.facultyId && !received.facultyId ? { facultyId: selection.facultyId } : {}),
-          };
-          if (scheduleIdentity(normalized) !== scheduleIdentity(selection) ||
-              normalized.lessons.length === 0) {
-            setSyncStatus('error');
-            setSyncError(normalized.warnings[0] ?? 'Сервер повернув порожній або чужий розклад.');
-            return false;
+          if (!isCurrent()) {
+            return { ok: false, cancelled: true };
           }
-          setCachedSchedule(normalized);
-          const persisted = writeCachedSchedule(normalized);
+          // Never blindly attach selection.facultyId to a response missing verified faculty metadata.
+          if (!isScheduleCompatibleWithProfile(received, selection)) {
+            const error =
+              received.warnings[0] ??
+              'Сервер повернув розклад іншої групи або несумісного факультету.';
+            if (!isBackground) {
+              setSyncStatus('error');
+              setSyncError(error);
+            }
+            return { ok: false, error };
+          }
+          const isValidData =
+            received.lessons.length > 0 || isConfirmedEmptySchedule(received);
+          if (!isValidData) {
+            const error =
+              received.warnings[0] ??
+              'Сервер повернув порожній або некоректний розклад без підтвердженого періоду.';
+            if (!isBackground) {
+              setSyncStatus('error');
+              setSyncError(error);
+            }
+            return { ok: false, error };
+          }
+
+          const persisted = writeCachedSchedule(received);
+          setCachedSchedule(received);
           setSyncStatus('synced');
           setSyncError(
             persisted
               ? null
               : 'Розклад завантажено, але локальне сховище переповнене — офлайн-кеш може не зберегтися.'
           );
-          return true;
+          return { ok: true, schedule: received };
         } catch (err) {
-          if (!isCurrent()) return false;
-          const message = err instanceof Error
-            ? err.message : 'Не вдалося завантажити розклад університету.';
-          setSyncStatus('error');
-          setSyncError(message);
-          return false;
+          if (!isCurrent()) {
+            return { ok: false, cancelled: true };
+          }
+          const message =
+            err instanceof Error
+              ? err.message
+              : 'Не вдалося завантажити розклад університету.';
+          if (!isBackground) {
+            setSyncStatus('error');
+            setSyncError(message);
+          }
+          return { ok: false, error: message };
         }
       })();
-      inFlightRef.current = { key, promise };
-      void promise.then(() => {
-        if (inFlightRef.current?.promise === promise) inFlightRef.current = null;
-      });
+
+      if (isBackground) {
+        backgroundRefreshRef.current = { key, gen, promise };
+        void promise.then(() => {
+          if (backgroundRefreshRef.current?.promise === promise) {
+            backgroundRefreshRef.current = null;
+          }
+        });
+      } else {
+        activeActivationRef.current = { key, gen, promise };
+        void promise.then(() => {
+          if (activeActivationRef.current?.promise === promise) {
+            activeActivationRef.current = null;
+          }
+        });
+      }
+
       return promise;
     },
     []
   );
 
+  const syncGroupSchedule = useCallback(
+    async (
+      selection: StudentSelection,
+      options?: { force?: boolean; background?: boolean }
+    ): Promise<boolean> => {
+      const result = await activateGroupSchedule(selection, options);
+      return result.ok;
+    },
+    [activateGroupSchedule]
+  );
+
   useEffect(() => {
+    committedKeyRef.current = committedSourceKey;
     if (mode === 'builtin') {
+      requestGenRef.current += 1;
+      activeActivationRef.current = null;
+      backgroundRefreshRef.current = null;
       setCachedSchedule(null);
       setSyncStatus('builtin');
       setSyncError(null);
       return;
     }
     if (mode !== 'live' || !profile) {
+      if (mode === 'manual') {
+        requestGenRef.current += 1;
+        activeActivationRef.current = null;
+      }
+      backgroundRefreshRef.current = null;
       setCachedSchedule(null);
       setSyncStatus(mode === 'manual' ? 'manual' : 'idle');
       setSyncError(null);
@@ -278,14 +393,17 @@ export function useScheduleSource(
     }
     const restored = readCachedSchedule(profile);
     setCachedSchedule(restored);
-    if (inFlightRef.current?.key !== sourceKey) setSyncStatus(restored ? 'synced' : 'idle');
-    setSyncError(null);
+    if (!activeActivationRef.current) {
+      setSyncStatus(restored ? 'synced' : 'idle');
+      setSyncError(null);
+    }
     const adapter = getUniversityAdapter(profile.universityId);
     if (adapter?.meta.supportStatus !== 'live') return;
     const refreshIfNeeded = () => {
-      if (activeSourceRef.current !== sourceKey) return;
+      if (committedKeyRef.current !== committedSourceKey) return;
+      if (activeActivationRef.current) return;
       if (shouldRefreshSchedule(readCachedSchedule(profile), formatIsoDate(new Date()))) {
-        void syncGroupSchedule(profile);
+        void activateGroupSchedule(profile, { background: true });
       }
     };
     if (typeof window !== 'undefined') window.addEventListener('online', refreshIfNeeded);
@@ -293,12 +411,12 @@ export function useScheduleSource(
     return () => {
       if (typeof window !== 'undefined') window.removeEventListener('online', refreshIfNeeded);
     };
-  }, [sourceKey, syncGroupSchedule]);
+  }, [committedSourceKey, mode, activateGroupSchedule]);
 
   const clearCachedSchedule = useCallback(() => {
-    activeSourceRef.current = 'builtin:';
-    requestSeqRef.current += 1;
-    inFlightRef.current = null;
+    requestGenRef.current += 1;
+    activeActivationRef.current = null;
+    backgroundRefreshRef.current = null;
     setCachedSchedule(null);
     clearCachedSchedules();
     setSyncStatus('builtin');
@@ -323,6 +441,7 @@ export function useScheduleSource(
     syncWarnings: hasMatchingCache ? (cachedSchedule?.warnings ?? []) : [],
     getLessonsForDate,
     getDateAvailability,
+    activateGroupSchedule,
     syncGroupSchedule,
     hasDepartments: isBuiltin || hasDepartmentSupportForGroup(profile?.universityId, profile?.groupId),
     clearCachedSchedule,

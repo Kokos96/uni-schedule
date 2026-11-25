@@ -1,3 +1,4 @@
+import { validateLnuAcademicSelection } from '../../../../src/data/lnuAcademicCatalog';
 import { errorResponse, jsonResponse, parseJsonBody } from '../security';
 import type { AuthContext, Env } from '../types';
 
@@ -164,6 +165,16 @@ export async function handleUpdateProfile(
       return errorResponse('VALIDATION_ERROR', 'Некоректна назва факультету', 400, corsHeaders);
     }
     facultyName = trimmed;
+  }
+
+  if (sourceMode === 'live' && universityId === 'lnu' && facultyId) {
+    const academicCheck = validateLnuAcademicSelection({
+      groupName: groupName || groupId,
+      facultyId,
+    });
+    if (!academicCheck.ok) {
+      return errorResponse('ACADEMIC_MISMATCH', academicCheck.reason, 400, corsHeaders);
+    }
   }
 
   let course: number | null = null;

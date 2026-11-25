@@ -279,6 +279,19 @@ class MockD1Database {
               group_name,
               created_at: prev.created_at ?? created_at,
             });
+          } else if (bound.length === 6) {
+            const [id, faculty_id, course, group_code, group_name, created_at] = bound;
+            const prev = db.university_groups.get(id as string) ?? {};
+            db.university_groups.set(id as string, {
+              ...prev,
+              id,
+              university_id: 'lnu',
+              faculty_id: faculty_id ?? prev.faculty_id ?? null,
+              course: course ?? prev.course ?? null,
+              group_code,
+              group_name,
+              created_at: prev.created_at ?? created_at,
+            });
           } else {
             const [id, university_id, faculty_id, course, group_code, group_name, content_hash, last_synced_at, created_at, schedule_source_type, covered_from, covered_to] = bound;
             const prev = db.university_groups.get(id as string) ?? {};

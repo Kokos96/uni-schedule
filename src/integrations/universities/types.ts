@@ -28,6 +28,8 @@ export interface Group {
   name: string;
   facultyId?: string;
   facultyVerified?: boolean;
+  programId?: string;
+  programName?: string;
   course?: number;
   externalId?: string;
 }
@@ -43,6 +45,7 @@ export interface StudentSelection {
   facultyId?: string;
   facultyName?: string;
   programId?: string;
+  programName?: string;
   course?: number;
   groupId: string;
   groupName: string;
@@ -118,6 +121,7 @@ export interface UniversityAdapter {
     facultyId?: string;
     programId?: string;
     course?: number;
+    includeAll?: boolean;
   }): Promise<Group[]>;
   getSubgroups?(groupId: string): Promise<Subgroup[]>;
   fetchSchedule(selection: StudentSelection, options?: { force?: boolean }): Promise<NormalizedSchedule>;

@@ -1,4 +1,5 @@
 import type { NormalizedSchedule, StudentSelection } from '../integrations/universities/types';
+import { normalizeGroupHomoglyphs } from '../integrations/universities/lnu/lnuParser';
 import { readStorage, removeStorage, writeStorage } from '../utils/storage';
 
 const CACHE_KEY = 'uni_schedule_cached_group_v3';
@@ -12,7 +13,38 @@ function isIsoDate(value: unknown): value is string {
 }
 
 export function scheduleIdentity(profile: Pick<StudentSelection, 'universityId' | 'facultyId' | 'groupId'>): string {
-  return JSON.stringify([profile.universityId.trim(), profile.facultyId?.trim() ?? '', profile.groupId.trim()]);
+  return JSON.stringify([
+    profile.universityId.trim(),
+    profile.facultyId?.trim() ?? '',
+    normalizeGroupHomoglyphs(profile.groupId),
+  ]);
+}
+
+export function isConfirmedEmptySchedule(schedule: Partial<NormalizedSchedule>): boolean {
+  return (
+    Array.isArray(schedule.lessons) &&
+    schedule.lessons.length === 0 &&
+    schedule.sourceType === 'dated' &&
+    isIsoDate(schedule.coveredFrom) &&
+    isIsoDate(schedule.coveredTo) &&
+    schedule.coveredFrom <= schedule.coveredTo
+  );
+}
+
+export function isScheduleCompatibleWithProfile(
+  schedule: Pick<NormalizedSchedule, 'universityId' | 'facultyId' | 'groupId'>,
+  profile: Pick<StudentSelection, 'universityId' | 'facultyId' | 'groupId'>
+): boolean {
+  if (schedule.universityId.trim() !== profile.universityId.trim()) return false;
+  if (normalizeGroupHomoglyphs(schedule.groupId) !== normalizeGroupHomoglyphs(profile.groupId)) {
+    return false;
+  }
+  const schedFaculty = schedule.facultyId?.trim() ?? '';
+  const profFaculty = profile.facultyId?.trim() ?? '';
+  if (schedFaculty && profFaculty && schedFaculty !== profFaculty) {
+    return false;
+  }
+  return true;
 }
 
 export function isValidCachedSchedule(value: unknown): value is NormalizedSchedule {
@@ -22,8 +54,8 @@ export function isValidCachedSchedule(value: unknown): value is NormalizedSchedu
       typeof schedule.universityId !== 'string' || typeof schedule.groupId !== 'string' ||
       (schedule.facultyId !== undefined && typeof schedule.facultyId !== 'string') ||
       typeof schedule.fetchedAt !== 'string' || Number.isNaN(Date.parse(schedule.fetchedAt)) ||
-      !Array.isArray(schedule.warnings) || !Array.isArray(schedule.lessons) ||
-      schedule.lessons.length === 0) return false;
+      !Array.isArray(schedule.warnings) || !Array.isArray(schedule.lessons)) return false;
+  if (schedule.lessons.length === 0 && !isConfirmedEmptySchedule(schedule)) return false;
   if (schedule.sourceType !== undefined && schedule.sourceType !== 'dated' && schedule.sourceType !== 'recurring') return false;
   if (schedule.coveredFrom !== undefined && !isIsoDate(schedule.coveredFrom)) return false;
   if (schedule.coveredTo !== undefined && !isIsoDate(schedule.coveredTo)) return false;
@@ -41,23 +73,40 @@ function readEntries(): Record<string, NormalizedSchedule> {
   if (envelope.schemaVersion !== 3 || !envelope.entries || typeof envelope.entries !== 'object') return {};
   const entries: Record<string, NormalizedSchedule> = {};
   for (const [key, schedule] of Object.entries(envelope.entries)) {
-    if (isValidCachedSchedule(schedule) && key === scheduleIdentity(schedule)) entries[key] = schedule;
+    if (isValidCachedSchedule(schedule)) {
+      const canonicalKey = scheduleIdentity(schedule);
+      if (key === canonicalKey || isScheduleCompatibleWithProfile(schedule, schedule)) {
+        entries[canonicalKey] = schedule;
+      }
+    }
   }
   return entries;
 }
 
 export function readCachedSchedule(profile: StudentSelection | undefined): NormalizedSchedule | null {
   if (!profile) return null;
-  const key = scheduleIdentity(profile);
-  const current = readEntries()[key];
+  const entries = readEntries();
+  const exactKey = scheduleIdentity(profile);
+  const current = entries[exactKey];
   if (current) return current;
+  // If profile has a facultyId, allow matching an unverified (faculty-less) cache entry for the same group,
+  // but never match a cache entry belonging to a different faculty.
+  if (profile.facultyId?.trim()) {
+    const unscopedKey = scheduleIdentity({
+      universityId: profile.universityId,
+      facultyId: undefined,
+      groupId: profile.groupId,
+    });
+    const unscoped = entries[unscopedKey];
+    if (unscoped && !unscoped.facultyId) return unscoped;
+  }
   for (const legacyKey of LEGACY_KEYS) {
     const value = readStorage<unknown>(legacyKey, null);
     const candidate = legacyKey.endsWith('_v2') && value && typeof value === 'object'
       ? (value as { schemaVersion?: unknown; schedule?: unknown }).schemaVersion === 2
         ? (value as { schedule?: unknown }).schedule : null
       : value;
-    if (isValidCachedSchedule(candidate) && scheduleIdentity(candidate) === key) {
+    if (isValidCachedSchedule(candidate) && isScheduleCompatibleWithProfile(candidate, profile)) {
       // Existing dated entries remain available offline; unknown coverage stays unknown.
       const migrated: NormalizedSchedule = {
         ...candidate,

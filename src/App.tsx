@@ -428,7 +428,7 @@ const AppContent: React.FC = () => {
     <>
       <AppSplash phase={launchPhase} onPhaseChange={setLaunchPhase} />
       <AppShell
-        launchRevealed={launchPhase !== 'intro'}
+        launchRevealed={launchPhase === 'morph' || launchPhase === 'content' || launchPhase === 'done'}
         currentTab={activeTab}
         onTabChange={handleTabChange}
         settings={settings}
@@ -457,6 +457,7 @@ const AppContent: React.FC = () => {
             currentTab={activeTab}
             onTabChange={handleTabChange}
             deadlinesBadgeCount={deadlinesBadgeCount}
+            visible={launchPhase === 'content' || launchPhase === 'done'}
           />
         }
       >
@@ -471,6 +472,7 @@ const AppContent: React.FC = () => {
               profileSyncStatus={profileSyncStatus}
               profileSyncError={profileSyncError}
               onConfirmProfileOverwrite={confirmProfileOverwrite}
+              onActivateGroupSchedule={scheduleSource.activateGroupSchedule}
               onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
             />
           )}
@@ -562,6 +564,7 @@ const AppContent: React.FC = () => {
                 profileSyncStatus={profileSyncStatus}
                 profileSyncError={profileSyncError}
                 onConfirmProfileOverwrite={confirmProfileOverwrite}
+                onActivateGroupSchedule={scheduleSource.activateGroupSchedule}
                 onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
                 onResetBuiltinSchedule={scheduleSource.clearCachedSchedule}
                 isUsingCustomGroup={scheduleSource.isUsingCustomGroup}

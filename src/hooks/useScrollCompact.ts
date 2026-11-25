@@ -9,19 +9,22 @@ export interface ScrollCompactOptions {
 }
 
 export function useScrollCompact({
-  topThreshold = 20,
-  compactThreshold = 48,
-  downDelta = 6,
-  upDelta = 12,
+  topThreshold = 24,
+  compactThreshold = 56,
+  downDelta = 8,
+  upDelta = 14,
   resetKey,
 }: ScrollCompactOptions = {}): boolean {
   const [isCompact, setIsCompact] = useState(false);
   const lastYRef = useRef(0);
   const rafRef = useRef<number | null>(null);
+  const suppressUntilRef = useRef(0);
 
   useEffect(() => {
     setIsCompact(false);
     lastYRef.current = typeof window !== 'undefined' ? Math.max(0, window.scrollY) : 0;
+    // Ignore programmatic scroll reset events right after tab switches to avoid flicker.
+    suppressUntilRef.current = typeof performance !== 'undefined' ? performance.now() + 180 : 0;
   }, [resetKey]);
 
   useEffect(() => {
@@ -29,14 +32,32 @@ export function useScrollCompact({
 
     const evaluate = () => {
       rafRef.current = null;
-      const y = Math.max(0, window.scrollY);
-      const delta = y - lastYRef.current;
+      const now = typeof performance !== 'undefined' ? performance.now() : 0;
+      const rawY = window.scrollY;
+      // Guard against iOS rubber-band overscroll at top or bottom.
+      const maxScroll = Math.max(
+        0,
+        document.documentElement.scrollHeight - window.innerHeight
+      );
+      const y = Math.max(0, Math.min(rawY, maxScroll));
 
-      if (y <= topThreshold) {
+      if (now < suppressUntilRef.current) {
+        lastYRef.current = y;
+        return;
+      }
+
+      if (rawY <= topThreshold) {
         setIsCompact((prev) => (prev ? false : prev));
         lastYRef.current = y;
         return;
       }
+
+      // Ignore bottom rubber-band bounce oscillations
+      if (maxScroll > 0 && rawY > maxScroll) {
+        return;
+      }
+
+      const delta = y - lastYRef.current;
 
       if (delta >= downDelta && y >= compactThreshold) {
         setIsCompact((prev) => (prev ? prev : true));

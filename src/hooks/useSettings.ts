@@ -97,6 +97,12 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
       groupName: rawUni.groupName.trim(),
       ...(typeof rawUni.facultyId === 'string' ? { facultyId: rawUni.facultyId } : {}),
       ...(typeof rawUni.facultyName === 'string' ? { facultyName: rawUni.facultyName } : {}),
+      ...(typeof rawUni.programId === 'string' && rawUni.programId.trim()
+        ? { programId: rawUni.programId.trim() }
+        : {}),
+      ...(typeof rawUni.programName === 'string' && rawUni.programName.trim()
+        ? { programName: rawUni.programName.trim() }
+        : {}),
       ...(typeof rawUni.course === 'number' && Number.isFinite(rawUni.course)
         ? { course: rawUni.course }
         : {}),

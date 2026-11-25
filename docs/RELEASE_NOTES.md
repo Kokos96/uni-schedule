@@ -1,4 +1,12 @@
-# Release Notes — Uni Schedule `v3.5.1`
+# Release Notes — Uni Schedule
+
+## v4.1.1 (2026-11-25) — Academic Reliability & Premium Launch Experience
+
+- **Stage A:** Усунуто циклічну інвалідацію запитів у `useScheduleSource`, розділено активний і очікуваний профілі, стабілізовано чернетку `UniversitySelectorCard`, додано підтримку підтверджених порожніх розкладів.
+- **Stage B:** Впроваджено перевірений академічний каталог ЛНУ (`lnuAcademicCatalog.ts`), сувору серверну й клієнтську фільтрацію по факультету/спеціальності, окремий режим глобального пошуку, захист метаданих D1 та міграцію `0008_academic_catalog_metadata.sql`.
+- **Stage C:** Повний редизайн 2.5s запуску (`AppSplash` Brand-to-Interface Morph, 124px логотип, 30px словознак, виправлений життєвий цикл без передчасного завершення, синхронізація з `AppShell` та `BottomNav`).
+- **Stage D:** Нова геометрична модель `BottomNav` на єдиному `compactProgress` без `ResizeObserver`, точна 5-колонкова прив'язка індикатора та вдосконалений `useScrollCompact`.
+- Service Worker оновлено до `v12`. Деталі: [docs/releases/v4.1.1.md](releases/v4.1.1.md).
 
 ## v4.1.0 (2026-11-25) — Premium Motion & Native Interaction
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { GraduationCap } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS } from '../../constants/profile';
-import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { ScheduleActivationResult, ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { UseSettingsResult } from '../../hooks/useSettings';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { ResolvedUserSettings, UserSettings } from '../../types';
@@ -22,6 +22,10 @@ export interface FirstLaunchOnboardingProps {
   profileSyncStatus: UseSettingsResult['profileSyncStatus'];
   profileSyncError: string | null;
   onConfirmProfileOverwrite: () => void;
+  onActivateGroupSchedule?: (
+    selection: StudentSelection,
+    options?: { force?: boolean }
+  ) => Promise<ScheduleActivationResult>;
   onSyncGroupSchedule: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
 }
 
@@ -34,6 +38,7 @@ export const FirstLaunchOnboarding: React.FC<FirstLaunchOnboardingProps> = ({
   profileSyncStatus,
   profileSyncError,
   onConfirmProfileOverwrite,
+  onActivateGroupSchedule,
   onSyncGroupSchedule,
 }) => {
   return (
@@ -59,6 +64,7 @@ export const FirstLaunchOnboarding: React.FC<FirstLaunchOnboardingProps> = ({
         profileSyncStatus={profileSyncStatus}
         profileSyncError={profileSyncError}
         onConfirmProfileOverwrite={onConfirmProfileOverwrite}
+        onActivateGroupSchedule={onActivateGroupSchedule}
         onSyncGroupSchedule={onSyncGroupSchedule}
       />
 

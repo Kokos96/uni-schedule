@@ -7,7 +7,7 @@ import {
 } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS } from '../../constants/profile';
 import { DEFAULT_SETTINGS, normalizeSettings, type UseSettingsResult } from '../../hooks/useSettings';
-import type { ScheduleSyncStatus } from '../../hooks/useScheduleSource';
+import type { ScheduleActivationResult, ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { AttendanceRecord, UserSettings } from '../../types';
 import type { UniScheduleBackupData } from '../../types/backup';
@@ -39,6 +39,10 @@ export interface SettingsViewProps {
   profileSyncStatus?: UseSettingsResult['profileSyncStatus'];
   profileSyncError?: string | null;
   onConfirmProfileOverwrite?: () => void;
+  onActivateGroupSchedule?: (
+    selection: StudentSelection,
+    options?: { force?: boolean }
+  ) => Promise<ScheduleActivationResult>;
   onSyncGroupSchedule?: (selection: StudentSelection, options?: { force?: boolean }) => Promise<boolean>;
   onResetBuiltinSchedule?: () => void;
   isUsingCustomGroup?: boolean;
@@ -66,6 +70,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   profileSyncStatus = 'idle',
   profileSyncError,
   onConfirmProfileOverwrite,
+  onActivateGroupSchedule,
   onSyncGroupSchedule,
   onResetBuiltinSchedule,
   isUsingCustomGroup = false,
@@ -134,6 +139,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             profileSyncStatus={profileSyncStatus}
             profileSyncError={profileSyncError}
             onConfirmProfileOverwrite={onConfirmProfileOverwrite}
+            onActivateGroupSchedule={onActivateGroupSchedule}
             onSyncGroupSchedule={onSyncGroupSchedule}
             onResetBuiltinSchedule={onResetBuiltinSchedule}
             isUsingCustomGroup={isUsingCustomGroup}
@@ -195,7 +201,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
               <div className="min-w-0">
                 <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
-                  Uni Schedule v4.1.0
+                  Uni Schedule v4.1.1
                 </h3>
                 <p className="mt-0.5 text-xs text-ink-secondary">
                   Розклад занять, відвідуваність, нотатки та дедлайни (PWA)
