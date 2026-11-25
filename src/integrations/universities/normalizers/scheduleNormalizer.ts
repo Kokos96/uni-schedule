@@ -7,6 +7,7 @@ import type {
   WeekType,
 } from '../../../types';
 import { DAY_NAMES_UA_FULL, parseIsoDate } from '../../../utils/date';
+import { resolveDepartmentsForLesson } from '../../../data/academicProgramRegistry';
 import type { NormalizedSchedule, ScheduleLesson } from '../types';
 
 /**
@@ -162,6 +163,10 @@ export function toAppScheduleBundle(
       classroomId,
       weekType: item.weekType ?? 'both',
       ...(item.subgroup ? { subgroup: item.subgroup } : {}),
+      ...(() => {
+        const depts = resolveDepartmentsForLesson(normalized.universityId, normalized.groupId, item.subject);
+        return depts ? { departments: depts } : {};
+      })(),
       ...(item.isElective ? { isElective: true } : {}),
       ...(item.electiveKey ? { electiveKey: item.electiveKey } : {}),
       ...(item.trackNumber !== undefined ? { trackNumber: item.trackNumber } : {}),

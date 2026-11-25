@@ -1,5 +1,13 @@
 # Release Notes — Uni Schedule `v3.5.1`
 
+## v4.0.0 (2026-11-25) — Native Mobile Experience & Academic Profiles
+
+- **Stage A–C:** Плаваюча капсула `BottomNav` зі спільним індикатором `layoutId="mobileNavIndicator"` (без glassmorphism), анімований запуск `AppSplash`, приховані мобільні скролбари та захист від випадкового зуму.
+- **Stage D–E:** Видалено публічний «Вбудований ФЕП-33с» із безпечною авто-міграцією legacy-користувачів; додано data-driven реєстр кафедр (`СП`/`ОІТ`/`РКС`/`РКТ`) для живих груп `ФЕП-31с`–`ФЕП-34с` (включно з Push).
+- **Stage F–G:** Доступний пошуковий `combobox` груп із чесним розділенням підтверджених/непідтверджених груп факультету та онбординг при першому запуску (`FirstLaunchOnboarding`).
+- Service Worker оновлено до `v10`; нових міграцій D1 не потрібно.
+- Деталі: [docs/releases/v4.0.0.md](releases/v4.0.0.md).
+
 ## v3.6.0 (2026-11-25) — Complete Stabilization
 
 - **Stage A:** Усунуто FK `502` для нових груп (`INSERT OR IGNORE`), атомарна staged-публікація розкладу, `source_mode` + `revision` (міграція `0007`), мультигруповий кеш `v3`, `force=1` для ручного оновлення.

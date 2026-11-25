@@ -27,6 +27,7 @@ export interface Group {
   id: string;
   name: string;
   facultyId?: string;
+  facultyVerified?: boolean;
   course?: number;
   externalId?: string;
 }

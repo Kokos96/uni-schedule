@@ -1,3 +1,4 @@
+import { resolveDepartmentsForLesson } from '../../../../src/data/academicProgramRegistry';
 import { sendWebPushWithRetry, type PushPayload, type VapidConfig } from './webPush';
 import type { Env } from '../types';
 
@@ -101,6 +102,7 @@ export interface ActiveSubscriptionRow {
   evening_time: string;
   friday_enabled: number;
   friday_time: string;
+  department?: string | null;
   elective_course?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
@@ -183,11 +185,17 @@ function matchesStudentLessonProfile(
     lesson_date?: string | null;
     status?: string;
   },
-  row: Pick<ActiveSubscriptionRow, 'subgroup' | 'elective_course' | 'selected_electives' | 'selected_track'>,
+  row: Pick<ActiveSubscriptionRow, 'university_id' | 'group_id' | 'department' | 'subgroup' | 'elective_course' | 'selected_electives' | 'selected_track'>,
   weekParity?: 'numerator' | 'denominator'
 ): boolean {
   if (lesson.subgroup !== null && lesson.subgroup !== row.subgroup) {
     return false;
+  }
+  if (row.department) {
+    const lessonDepts = resolveDepartmentsForLesson(row.university_id, row.group_id, lesson.subject);
+    if (lessonDepts && !lessonDepts.includes(row.department as 'sp' | 'oit' | 'rks' | 'rkt')) {
+      return false;
+    }
   }
   if (lesson.status === 'cancelled') return false;
   if (
@@ -512,7 +520,7 @@ export async function runNotificationCron(
             np.before_end_enabled, np.before_end_minutes,
             np.evening_enabled, np.evening_time,
             np.friday_enabled, np.friday_time,
-            sp.elective_course, sp.selected_electives, sp.selected_track,
+            sp.department, sp.elective_course, sp.selected_electives, sp.selected_track,
             sp.revision, ug.schedule_source_type, ug.covered_from, ug.covered_to
      FROM push_subscriptions ps
      JOIN user_devices ud ON ud.id = ps.device_id AND ud.revoked_at IS NULL

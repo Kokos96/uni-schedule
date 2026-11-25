@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Розклад занять групи ФЕП-33с — швидкий доступ до пар, таймера та змін онлайн і офлайн" />
+    <meta name="description" content="Uni Schedule — університетський розклад занять, відвідуваність, дедлайни та сповіщення онлайн і офлайн" />
     <meta name="theme-color" content="#242522" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F2F0EB" media="(prefers-color-scheme: light)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -43,12 +43,20 @@
         }
       })();
     </script>
-    <title>Розклад ФЕП-33с</title>
+    <title>Uni Schedule — Розклад занять</title>
   </head>
   <body class="bg-canvas text-ink font-sans antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      (function () {
+        var isStandalone =
+          (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+          window.navigator.standalone === true;
+        if (isStandalone) {
+          document.addEventListener('gesturestart', function (e) { e.preventDefault(); }, { passive: false });
+        }
+      })();
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker

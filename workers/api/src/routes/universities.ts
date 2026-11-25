@@ -236,9 +236,12 @@ export async function handleGetGroups(
      ORDER BY group_name ASC`
   ).all<{ group_code: string; group_name: string; course: number | null; faculty_id?: string | null }>();
 
+  const includeAll = url.searchParams.get('includeAll') === '1';
+  const activeFaculty = !includeAll && facultyFilter && facultyFilter !== '0' ? facultyFilter : null;
+
   const filtered = (dbGroups.results ?? [])
     .filter((row) => {
-      if (facultyFilter && facultyFilter !== '0' && row.faculty_id && row.faculty_id !== facultyFilter) {
+      if (activeFaculty && row.faculty_id && row.faculty_id !== activeFaculty) {
         return false;
       }
       if (courseFilter && row.course !== null && row.course !== courseFilter) {
@@ -252,14 +255,39 @@ export async function handleGetGroups(
       }
       return true;
     })
-    .map((row) => ({
-      id: row.group_code,
-      name: row.group_name,
-      ...(row.faculty_id ? { facultyId: row.faculty_id } : {}),
-      ...(row.course ? { course: row.course } : {}),
-    }));
+    .map((row) => {
+      const facultyVerified = Boolean(activeFaculty && row.faculty_id && row.faculty_id === activeFaculty);
+      return {
+        id: row.group_code,
+        name: row.group_name,
+        ...(row.faculty_id ? { facultyId: row.faculty_id } : {}),
+        ...(activeFaculty ? { facultyVerified } : {}),
+        ...(row.course ? { course: row.course } : {}),
+      };
+    })
+    .sort((a, b) => {
+      const av = a.facultyVerified ? 0 : 1;
+      const bv = b.facultyVerified ? 0 : 1;
+      if (av !== bv) return av - bv;
+      return a.name.localeCompare(b.name, 'uk');
+    });
 
-  return jsonResponse({ groups: filtered }, 200, corsHeaders);
+  const verifiedCount = activeFaculty ? filtered.filter((g) => g.facultyVerified).length : 0;
+  const unverifiedCount = activeFaculty ? filtered.length - verifiedCount : filtered.length;
+
+  return jsonResponse(
+    {
+      groups: filtered,
+      meta: {
+        facultyId: activeFaculty,
+        verifiedCount,
+        unverifiedCount,
+        upstreamFacultyDiscoverySupported: false,
+      },
+    },
+    200,
+    corsHeaders
+  );
 }
 
 interface ScheduleEntryRow {

@@ -136,7 +136,7 @@ describe('academic profile controls', () => {
     );
     assert.match(builtinHtml, /Усі факультети/);
     assert.match(builtinHtml, /Усі курси/);
-    assert.match(builtinHtml, /Введіть назву групи/);
+    assert.match(builtinHtml, /введіть назву групи/i);
     assert.doesNotMatch(builtinHtml, /value="ФЕП-33с"/);
     assert.match(builtinHtml, /ФЕП-33с · СП/);
     assert.doesNotMatch(builtinHtml, /ФЕП-33с · SP/);

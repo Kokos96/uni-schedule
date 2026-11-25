@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { LayoutGroup, motion } from 'framer-motion';
 import {
   Calendar,
   ChartBar,
@@ -9,7 +9,6 @@ import {
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
 import {
-  MOTION_SPRINGS,
   resolveTransition,
   useAppReducedMotion,
 } from '../../lib/motion';
@@ -21,6 +20,7 @@ export interface BottomNavProps {
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
   deadlinesBadgeCount?: number;
+  enterDelay?: number;
 }
 
 interface NavTabItem {
@@ -37,91 +37,97 @@ const NAV_TABS: readonly NavTabItem[] = [
   { id: 'settings', label: 'Опції', icon: Gear },
 ] as const;
 
+const CAPSULE_SPRING = {
+  type: 'spring' as const,
+  stiffness: 420,
+  damping: 30,
+  mass: 0.8,
+};
+
 export const BottomNav: React.FC<BottomNavProps> = ({
   currentTab,
   onTabChange,
   deadlinesBadgeCount = 0,
+  enterDelay = 0.38,
 }) => {
   const reducedMotion = useAppReducedMotion();
-  const indicatorTransition = resolveTransition(MOTION_SPRINGS.snappy, reducedMotion);
+  const indicatorTransition = resolveTransition(CAPSULE_SPRING, reducedMotion);
 
   const hasDeadlinesBadge = deadlinesBadgeCount > 0;
   const formattedBadgeCount =
     deadlinesBadgeCount > 99 ? '99+' : String(deadlinesBadgeCount);
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 lg:hidden glass-strong border-x-0 border-b-0 border-t border-line-glass pb-safe">
-      <nav
-        aria-label="Мобільна навігація"
-        className="mx-auto flex h-14 max-w-lg items-center justify-between gap-0.5 px-1.5 xs:px-2"
-      >
-        {NAV_TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = currentTab === tab.id;
-          const showBadge = tab.id === 'deadlines' && hasDeadlinesBadge;
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-[4%] pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.375rem))] lg:hidden">
+      <LayoutGroup id="mobile-bottom-nav">
+        <motion.nav
+          aria-label="Мобільна навігація"
+          initial={reducedMotion ? false : { opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={
+            reducedMotion
+              ? { duration: 0.01 }
+              : { duration: 0.32, delay: enterDelay, ease: [0.22, 1, 0.36, 1] }
+          }
+          className="pointer-events-auto flex h-[58px] w-full max-w-[400px] items-center justify-between gap-1 rounded-full border border-line bg-surface-elevated px-2 shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
+        >
+          {NAV_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = currentTab === tab.id;
+            const showBadge = tab.id === 'deadlines' && hasDeadlinesBadge;
+            const accessibleLabel = showBadge
+              ? `${tab.label} (${deadlinesBadgeCount} активних)`
+              : tab.label;
 
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onTabChange(tab.id)}
-              aria-current={isActive ? 'page' : undefined}
-              className={cn(
-                'group relative flex min-h-[46px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 transition-colors select-none',
-                isActive
-                  ? 'text-amber-fg'
-                  : 'text-ink-secondary hover:text-ink'
-              )}
-            >
-              {isActive && (
-                <motion.span
-                  layoutId="mobileNavIndicator"
-                  transition={indicatorTransition}
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0.5 inset-y-0.5 rounded-xl border border-amber/30 bg-amber-soft shadow-[inset_0_1px_0_rgba(216,139,69,0.2)]"
-                >
-                  <span className="absolute top-0 left-1/2 h-[2.5px] w-6 -translate-x-1/2 rounded-full bg-amber" />
-                </motion.span>
-              )}
-
-              <span className="relative z-10 flex items-center justify-center">
-                <Icon
-                  className="h-[19px] w-[19px] shrink-0 transition-colors"
-                  weight={isActive ? 'duotone' : 'regular'}
-                  aria-hidden
-                />
-                {showBadge && (
-                  <span
-                    aria-hidden
-                    style={{
-                      backgroundColor: 'var(--status-absent-bg)',
-                      color: 'var(--status-absent-fg)',
-                    }}
-                    className="absolute -top-1.5 -right-2.5 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-mono text-[9px] font-bold leading-none tabular-nums ring-2 ring-[var(--bg-surface)]"
-                  >
-                    {formattedBadgeCount}
-                  </span>
-                )}
-              </span>
-
-              <span
+            return (
+              <motion.button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                whileTap={reducedMotion ? undefined : { scale: 0.92 }}
+                aria-label={accessibleLabel}
+                title={tab.label}
+                aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'relative z-10 max-w-full truncate whitespace-nowrap text-[10px] xs:text-[11px] leading-tight tracking-[-0.01em] transition-colors',
-                  isActive ? 'font-semibold' : 'font-medium'
+                  'group relative flex h-11 min-h-[44px] min-w-[44px] flex-1 items-center justify-center rounded-full transition-colors select-none touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/60',
+                  isActive
+                    ? 'text-amber-fg'
+                    : 'text-ink-secondary hover:text-ink'
                 )}
               >
-                {tab.label}
-              </span>
+                {isActive && (
+                  <motion.span
+                    layoutId="mobileNavIndicator"
+                    transition={indicatorTransition}
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-1 inset-y-0.5 rounded-full border border-amber/25 bg-amber-soft"
+                  />
+                )}
 
-              {showBadge && (
-                <span className="sr-only">
-                  ({deadlinesBadgeCount} активних)
+                <span className="relative z-10 flex items-center justify-center">
+                  <Icon
+                    className="h-[25px] w-[25px] shrink-0 transition-colors"
+                    weight={isActive ? 'fill' : 'regular'}
+                    aria-hidden
+                  />
+                  {showBadge && (
+                    <span
+                      aria-hidden
+                      style={{
+                        backgroundColor: 'var(--status-absent-bg)',
+                        color: 'var(--status-absent-fg)',
+                      }}
+                      className="absolute -top-1.5 -right-2.5 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 font-mono text-[9px] font-bold leading-none tabular-nums ring-2 ring-[var(--bg-surface-elevated)]"
+                    >
+                      {formattedBadgeCount}
+                    </span>
+                  )}
                 </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+              </motion.button>
+            );
+          })}
+        </motion.nav>
+      </LayoutGroup>
     </div>
   );
 };

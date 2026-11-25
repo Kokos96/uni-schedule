@@ -253,3 +253,51 @@
     animation: none !important;
   }
 }
+
+/* v4.0.0 Native Mobile Scroll & Zoom Hardening */
+html,
+body {
+  overflow-x: clip;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+}
+
+@media (max-width: 1023px) {
+  html,
+  body,
+  #main-content {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  #main-content::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

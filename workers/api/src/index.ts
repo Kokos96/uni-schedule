@@ -64,7 +64,7 @@ export default {
           return errorResponse('DB_UNAVAILABLE', 'База даних недоступна', 503, corsHeaders);
         }
         return jsonResponse(
-          { ok: true, db: 'ok', service: 'uni-schedule-api', stage: 3, version: '3.6.0' },
+          { ok: true, db: 'ok', service: 'uni-schedule-api', stage: 3, version: '4.0.0' },
           200,
           corsHeaders
         );

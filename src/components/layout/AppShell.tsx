@@ -1,4 +1,6 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { useAppReducedMotion } from '../../lib/motion';
 import { Desktop, Moon, Sun, type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import type { ResolvedUserSettings, ThemeMode } from '../../types';
 import { SidebarNav, type TabType } from './SidebarNav';
@@ -46,6 +48,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   bottomNav,
   children,
 }) => {
+  const reducedMotion = useAppReducedMotion();
   const resolvedTitle = pageTitle ?? DEFAULT_TAB_TITLES[currentTab];
   const themeMeta = THEME_META[settings.theme];
   const ThemeIcon = themeMeta.Icon;
@@ -75,10 +78,13 @@ export const AppShell: React.FC<AppShellProps> = ({
       <div className="lg:pl-64 xl:pl-[272px] min-h-screen flex flex-col">
         {banner}
 
-        <main
+        <motion.main
           id="main-content"
+          initial={reducedMotion ? false : { opacity: 0.92, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion ? { duration: 0.01 } : { duration: 0.34, delay: 0.24, ease: [0.22, 1, 0.36, 1] }}
           tabIndex={-1}
-          className="relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-28 lg:pt-6 lg:pb-10 focus:outline-none"
+          className="relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pt-6 lg:pb-10 focus:outline-none"
         >
           <h1 className="sr-only">{resolvedTitle}</h1>
 
@@ -97,7 +103,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </div>
 
           {children}
-        </main>
+        </motion.main>
       </div>
 
       {/* Mobile / Tablet Bottom Dock Slot */}

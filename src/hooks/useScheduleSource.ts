@@ -1,3 +1,4 @@
+import { hasDepartmentSupportForGroup } from '../data/academicProgramRegistry';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getUniversityAdapter } from '../integrations/universities/registry';
 import { toAppScheduleBundle } from '../integrations/universities/normalizers/scheduleNormalizer';
@@ -62,6 +63,7 @@ export interface ScheduleSourceState {
   availableElectives: Array<{ key: string; subject: string }>;
   availableTracks: Array<{ number: number; subjects: string[] }>;
   hasSubgroups: boolean;
+  hasDepartments: boolean;
   isUsingCustomGroup: boolean;
   syncStatus: ScheduleSyncStatus;
   lastSyncedAt: string | null;
@@ -322,6 +324,7 @@ export function useScheduleSource(
     getLessonsForDate,
     getDateAvailability,
     syncGroupSchedule,
+    hasDepartments: isBuiltin || hasDepartmentSupportForGroup(profile?.universityId, profile?.groupId),
     clearCachedSchedule,
   };
 }

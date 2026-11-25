@@ -1,5 +1,5 @@
 import { normalizeGroupHomoglyphs } from '../../integrations/universities/lnu/lnuParser';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowsClockwise,
   CheckCircle,
@@ -47,7 +47,6 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   profileSyncError,
   onConfirmProfileOverwrite,
   onSyncGroupSchedule,
-  onResetBuiltinSchedule,
 }) => {
   const { toast } = useToast();
   const universities = useMemo(() => listUniversities(), []);
@@ -61,6 +60,11 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
+  const [comboOpen, setComboOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [searchAllFaculties, setSearchAllFaculties] = useState(false);
+  const comboContainerRef = useRef<HTMLDivElement | null>(null);
+  const groupsReqSeqRef = useRef(0);
 
   const [facultyId, setFacultyId] = useState<string>(
     currentProfile?.facultyId ?? ''
@@ -101,11 +105,12 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
         setLoadingGroups(true);
         setGroupsError(null);
         try {
+          const seq = ++groupsReqSeqRef.current;
           const groupList = await adapter.getGroups({
-            facultyId: facultyId || undefined,
+            facultyId: searchAllFaculties ? undefined : (facultyId || undefined),
             course: courseNum,
           });
-          if (!cancelled) {
+          if (!cancelled && groupsReqSeqRef.current === seq) {
             setGroups(groupList);
           }
         } catch (err) {
@@ -130,16 +135,39 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [adapter, facultyId, courseNum]);
+  }, [adapter, facultyId, courseNum, searchAllFaculties]);
 
   const filteredGroups = useMemo(() => {
     const q = groupInput.trim().toLowerCase();
-    if (!q) return groups.slice(0, 60);
-    const qNorm = normalizeGroupHomoglyphs(q);
-    return groups
-      .filter((g) => g.name.toLowerCase().includes(q) || normalizeGroupHomoglyphs(g.name).includes(qNorm))
-      .slice(0, 60);
+    const qNorm = q ? normalizeGroupHomoglyphs(q) : '';
+    const list = q
+      ? groups.filter((g) => g.name.toLowerCase().includes(q) || normalizeGroupHomoglyphs(g.name).includes(qNorm))
+      : groups;
+    return list.slice(0, 120);
   }, [groups, groupInput]);
+
+  const verifiedGroups = useMemo(
+    () => (facultyId && !searchAllFaculties ? filteredGroups.filter((g) => g.facultyVerified) : []),
+    [filteredGroups, facultyId, searchAllFaculties]
+  );
+  const unverifiedGroups = useMemo(
+    () => (facultyId && !searchAllFaculties ? filteredGroups.filter((g) => !g.facultyVerified) : filteredGroups),
+    [filteredGroups, facultyId, searchAllFaculties]
+  );
+  const orderedVisibleGroups = useMemo(
+    () => [...verifiedGroups, ...unverifiedGroups],
+    [verifiedGroups, unverifiedGroups]
+  );
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (comboContainerRef.current && !comboContainerRef.current.contains(event.target as Node)) {
+        setComboOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, []);
 
   const handleSync = async () => {
     const cleanGroup = groupInput.trim();
@@ -209,22 +237,6 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
     }
   };
 
-  const handleResetBuiltin = () => {
-    onUpdate({
-      universityProfile: undefined,
-      scheduleSourceMode: 'builtin',
-      selectedElectives: undefined,
-      selectedTrack: undefined,
-    });
-    onResetBuiltinSchedule?.();
-    setSelectedUniId(universities[0]?.id ?? 'lnu');
-    setFacultyId('');
-    setCourseNum(undefined);
-    setGroupInput('');
-    setGroups([]);
-    setGroupsError(null);
-    toast.info('Повернуто вбудований розклад');
-  };
 
   const formattedSyncTime = lastSyncedAt
     ? new Date(lastSyncedAt).toLocaleString('uk-UA', {
@@ -260,7 +272,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           {resolved.scheduleSourceMode === 'unconfigured'
             ? 'Профіль не налаштовано'
             : resolved.scheduleSourceMode === 'builtin'
-              ? 'Вбудований ФЕП-33с'
+              ? 'Перехід на живий розклад…'
             : syncStatus === 'synced' && formattedSyncTime
             ? `Оновлено ${formattedSyncTime}`
             : syncStatus === 'synced'
@@ -371,28 +383,153 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
               </div>
             </div>
 
-            <div>
-              <label
-                htmlFor="uni-group"
-                className="mb-1 block text-xs font-medium text-ink-secondary"
-              >
-                Академічна група {loadingGroups ? '(завантаження списку…)' : ''}
-              </label>
+            <div ref={comboContainerRef} className="relative">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label
+                  htmlFor="uni-group"
+                  className="block text-xs font-medium text-ink-secondary"
+                >
+                  Академічна група {loadingGroups ? '(завантаження списку…)' : ''}
+                </label>
+                {facultyId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchAllFaculties((prev) => !prev);
+                      setComboOpen(true);
+                    }}
+                    className="text-[11px] font-medium text-amber-fg hover:underline"
+                  >
+                    {searchAllFaculties ? 'Лише обраний факультет' : 'Шукати серед усіх груп'}
+                  </button>
+                )}
+              </div>
               <input
                 id="uni-group"
                 type="text"
-                list="uni-groups-datalist"
+                role="combobox"
+                aria-expanded={comboOpen}
+                aria-controls="uni-group-listbox"
+                aria-autocomplete="list"
+                autoComplete="off"
                 value={groupInput}
-                onChange={(e) => setGroupInput(e.target.value)}
-                placeholder="Введіть назву групи"
-                className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-xs font-medium text-ink placeholder:text-ink-muted focus:border-amber focus:outline-none"
+                onFocus={() => setComboOpen(true)}
+                onClick={() => setComboOpen(true)}
+                onChange={(e) => {
+                  setGroupInput(e.target.value);
+                  setHighlightedIndex(0);
+                  setComboOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setComboOpen(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setComboOpen(true);
+                    setHighlightedIndex((idx) =>
+                      orderedVisibleGroups.length > 0 ? Math.min(idx + 1, orderedVisibleGroups.length - 1) : 0
+                    );
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setHighlightedIndex((idx) => Math.max(0, idx - 1));
+                  } else if (e.key === 'Enter' && comboOpen && orderedVisibleGroups[highlightedIndex]) {
+                    e.preventDefault();
+                    setGroupInput(orderedVisibleGroups[highlightedIndex]!.name);
+                    setComboOpen(false);
+                  }
+                }}
+                placeholder="Оберіть або введіть назву групи"
+                className="w-full rounded-xl border border-line bg-surface-elevated/70 px-3 py-2.5 text-sm font-medium text-ink placeholder:text-ink-muted focus:border-amber focus:outline-none"
               />
-              <datalist id="uni-groups-datalist">
-                {filteredGroups.map((g) => (
-                  <option key={g.id} value={g.name} />
-                ))}
-              </datalist>
-              {groupsError && (
+              {comboOpen && (
+                <div
+                  id="uni-group-listbox"
+                  role="listbox"
+                  aria-label="Список академічних груп"
+                  className="mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-line bg-surface-elevated p-1 shadow-[0_10px_28px_rgba(0,0,0,0.22)]"
+                >
+                  {loadingGroups ? (
+                    <div className="px-3 py-3 text-xs text-ink-secondary">Завантаження списку груп…</div>
+                  ) : orderedVisibleGroups.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-ink-secondary">
+                      {groupsError ? groupsError : 'Груп за цим запитом не знайдено.'}
+                    </div>
+                  ) : (
+                    <>
+                      {verifiedGroups.length > 0 && (
+                        <div>
+                          <div className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-sage-fg">
+                            Підтверджені групи факультету
+                          </div>
+                          {verifiedGroups.map((g, i) => {
+                            const selected = g.name.toLocaleLowerCase('uk-UA') === groupInput.trim().toLocaleLowerCase('uk-UA');
+                            return (
+                              <button
+                                key={`v-${g.id}`}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => {
+                                  setGroupInput(g.name);
+                                  setComboOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                                  selected || highlightedIndex === i
+                                    ? 'bg-amber-soft font-semibold text-amber-fg'
+                                    : 'text-ink hover:bg-surface'
+                                }`}
+                              >
+                                <span>{g.name}</span>
+                                {g.course && (
+                                  <span className="font-mono text-[10px] text-ink-muted">{g.course} курс</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {unverifiedGroups.length > 0 && (
+                        <div className={verifiedGroups.length > 0 ? 'mt-1 border-t border-line pt-1' : ''}>
+                          {facultyId && !searchAllFaculties && (
+                            <div className="px-2.5 py-1 text-[10px] font-medium text-ink-muted">
+                              Групи без підтвердженої прив&apos;язки до факультету (довідник ЛНУ)
+                            </div>
+                          )}
+                          {unverifiedGroups.map((g, idx) => {
+                            const flatIndex = verifiedGroups.length + idx;
+                            const selected = g.name.toLocaleLowerCase('uk-UA') === groupInput.trim().toLocaleLowerCase('uk-UA');
+                            return (
+                              <button
+                                key={`u-${g.id}`}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                onClick={() => {
+                                  setGroupInput(g.name);
+                                  setComboOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
+                                  selected || highlightedIndex === flatIndex
+                                    ? 'bg-amber-soft font-semibold text-amber-fg'
+                                    : 'text-ink hover:bg-surface'
+                                }`}
+                              >
+                                <span>{g.name}</span>
+                                {g.course && (
+                                  <span className="font-mono text-[10px] text-ink-muted">{g.course} курс</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {groupsError && !comboOpen && (
                 <p className="mt-1.5 text-[11px] leading-relaxed text-ink-secondary">
                   {groupsError}
                 </p>
@@ -463,15 +600,7 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
             </span>
           </button>
 
-          {resolved.scheduleSourceMode !== 'builtin' && (
-            <button
-              type="button"
-              onClick={handleResetBuiltin}
-              className="inline-flex min-h-[38px] items-center justify-center rounded-xl border border-line bg-surface-elevated px-3 text-xs font-medium text-ink-secondary transition-colors hover:border-line-strong hover:text-ink"
-            >
-              Вбудований ФЕП-33с
-            </button>
-          )}
+
         </div>
       </div>
     </GlassCard>

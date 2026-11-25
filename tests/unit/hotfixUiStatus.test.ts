@@ -25,7 +25,7 @@ describe('hotfix schedule and attendance states', () => {
       })
     ));
     assert.match(html, /Очікує синхронізації/);
-    assert.match(html, /Вбудований ФЕП-33с/); // Explicit switch remains available.
+    assert.doesNotMatch(html, /Вбудований ФЕП-33с/); // Explicit switch remains available.
   });
 
   it('distinguishes local profile save from failed server acknowledgement', () => {

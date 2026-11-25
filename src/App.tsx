@@ -1,12 +1,12 @@
-import React, {
-  Suspense,
+import React, {Suspense,
   lazy,
   useCallback,
   useEffect,
   useMemo,
-  useState,
-} from 'react';
+  useState, useRef } from 'react';
 import { AppShell } from './components/layout/AppShell';
+import { AppSplash } from './components/layout/AppSplash';
+import { FirstLaunchOnboarding } from './components/onboarding/FirstLaunchOnboarding';
 import { BottomNav, type TabType } from './components/layout/BottomNav';
 import { OfflineBanner } from './components/layout/OfflineBanner';
 import { RootErrorBoundary } from './components/layout/RootErrorBoundary';
@@ -247,6 +247,37 @@ const AppContent: React.FC = () => {
     };
   }, [currentPair]);
 
+
+  // Stage D (v4.0.0): Safe backward-compatible migration of legacy builtin users to live ФЕП-33с.
+  // Never wipes local data if offline; commits live mode only after live schedule fetch succeeds.
+  const legacyMigrationAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (settings.scheduleSourceMode !== 'builtin' || legacyMigrationAttemptedRef.current) {
+      return;
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return;
+    }
+    legacyMigrationAttemptedRef.current = true;
+    const LEGACY_FEP33_LIVE_PROFILE = {
+      universityId: 'lnu',
+      facultyId: '1005',
+      facultyName: "Факультет електроніки та комп'ютерних технологій",
+      course: 3,
+      groupId: 'ФЕП-33с',
+      groupName: 'ФЕП-33с',
+      subgroup: settings.subgroup,
+    } as const;
+    void scheduleSource.syncGroupSchedule(LEGACY_FEP33_LIVE_PROFILE).then((ok) => {
+      if (ok) {
+        updateSettings({
+          scheduleSourceMode: 'live',
+          universityProfile: LEGACY_FEP33_LIVE_PROFILE,
+        });
+      }
+    });
+  }, [settings.scheduleSourceMode, settings.subgroup, scheduleSource, updateSettings]);
+
   const handleTabChange = useCallback((nextTab: TabType) => {
     setActiveTab((prevTab) => {
       if (prevTab === nextTab) return prevTab;
@@ -391,6 +422,7 @@ const AppContent: React.FC = () => {
 
   return (
     <>
+      <AppSplash />
       <AppShell
         currentTab={activeTab}
         onTabChange={handleTabChange}
@@ -424,7 +456,21 @@ const AppContent: React.FC = () => {
         }
       >
         <PageTransition pageKey={activeTab} direction={tabDirection}>
-          {activeTab === 'schedule' && (
+          {activeTab === 'schedule' && settings.scheduleSourceMode === 'unconfigured' && (
+            <FirstLaunchOnboarding
+              settings={settings}
+              onUpdate={updateSettings}
+              syncStatus={scheduleSource.syncStatus}
+              lastSyncedAt={scheduleSource.lastSyncedAt}
+              syncError={scheduleSource.syncError}
+              profileSyncStatus={profileSyncStatus}
+              profileSyncError={profileSyncError}
+              onConfirmProfileOverwrite={confirmProfileOverwrite}
+              onSyncGroupSchedule={scheduleSource.syncGroupSchedule}
+            />
+          )}
+
+          {activeTab === 'schedule' && settings.scheduleSourceMode !== 'unconfigured' && (
             <ScheduleView
               selectedDate={selectedDate}
               selectedIso={selectedIso}
@@ -517,6 +563,7 @@ const AppContent: React.FC = () => {
                 availableElectives={scheduleSource.availableElectives}
                 availableTracks={scheduleSource.availableTracks}
                 hasSubgroups={scheduleSource.hasSubgroups}
+                hasDepartments={scheduleSource.hasDepartments}
               />
             </Suspense>
           )}
