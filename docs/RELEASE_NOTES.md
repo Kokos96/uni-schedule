@@ -1,5 +1,11 @@
 # Release Notes — Uni Schedule
 
+## v4.3.1 (2026-11-26) — Signature Animation Correction
+
+- **Покращена анімація запуску (Hybrid №25):** Точніше відтворення Signature Calendar Reveal (`3000 мс`, `prefers-reduced-motion` `280 мс`) на єдиному `elapsed`-time `rAF` timeline без покадрових React `setState`.
+- **Геометричний FLIP-handoff та хвиля розкриття:** Плавніший морфінг сонця в реальну дату дня, безперервний перехід календаря у справжній `WeekStrip` (`2020–2480 мс`) без дублювання, скоригована bottom-up хвиля (`1960–2600 мс`) та синхронізована поява `BottomNav` (`2680 мс`).
+- **Початковий рендеринг і PWA:** Покращене початкове відображення фону у світлій і темній темах; Service Worker оновлено до `v16` (без змін D1-схеми). Деталі: [docs/releases/v4.3.1.md](releases/v4.3.1.md).
+
 ## v4.3.0 (2026-11-26) — Experience & Communication Update
 
 - **Анімація запуску Hybrid №25 — Signature Calendar Reveal (Stage A):** Реалізовано затверджену 3-секундну анімацію запуску (Quiet Sunrise → морфінг у реальну поточну дату → розгортання плиток тижня → вигнуте хвильове розкриття в живий інтерфейс → поява `BottomNav`), підтримку світлої/темної теми та `prefers-reduced-motion` (~320 мс).

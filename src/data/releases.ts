@@ -7,7 +7,7 @@
  * - CLI release tool (`scripts/publish-release.ts`)
  */
 
-export const INSTALLED_APP_VERSION = '4.3.0';
+export const INSTALLED_APP_VERSION = '4.3.1';
 
 export type ReleasePublicationStatus = 'draft' | 'published';
 
@@ -69,9 +69,32 @@ export function compareSemver(a: string, b: string): number {
 
 /**
  * Canonical catalog built exclusively from verified project releases and docs/releases/*.md.
- * Note: v4.3.0 remains `draft` with `publishedAt: null` until actual production publication.
+ * Note: v4.3.1 remains `draft` with `publishedAt: null` until actual production publication.
  */
 export const RELEASES_CATALOG: readonly ReleaseEntry[] = [
+  {
+    id: 'rel_4_3_1',
+    version: '4.3.1',
+    title: 'Signature Animation Correction',
+    ukTitle: 'Покращена анімація запуску',
+    summary:
+      'Ми вдосконалили фірмову анімацію запуску Uni Schedule. Оновлено рух календаря, хвильове відкриття інтерфейсу, появу нижньої навігації та оптимізовано плавність анімації.',
+    publishedAt: null,
+    publicationStatus: 'draft',
+    features: [],
+    improvements: [
+      'Точніше відтворення Signature Calendar Reveal (Hybrid №25).',
+      'Плавніший морфінг сонця в календарну дату.',
+      'Безперервний перехід календаря у справжній інтерфейс без дублювання.',
+      'Покращена синхронізація хвилі розкриття та появи нижньої навігації.',
+      'Оптимізована продуктивність анімації (єдиний timeline без покадрових React setState).',
+      'Покращене початкове відображення фону під час запуску.',
+    ],
+    fixes: [],
+    notificationTitle: 'Uni Schedule v4.3.1',
+    notificationBody:
+      'Покращена фірмова анімація запуску: плавніший перехід календаря, оновлена хвиля та нижня навігація.',
+  },
   {
     id: 'rel_4_3_0',
     version: '4.3.0',
@@ -79,8 +102,8 @@ export const RELEASES_CATALOG: readonly ReleaseEntry[] = [
     ukTitle: 'Оновлення інтерфейсу та нові можливості зв’язку',
     summary:
       'Uni Schedule отримав нову фірмову анімацію запуску Signature Calendar Reveal, зв’язок із розробником у Telegram, перегляд історії оновлень, вікно «Що нового?» та окремі push-сповіщення про вихід наступних версій.',
-    publishedAt: null,
-    publicationStatus: 'draft',
+    publishedAt: '2026-11-26',
+    publicationStatus: 'published',
     features: [
       'Фірмова 3-секундна анімація запуску Signature Calendar Reveal із реальною датою дня та плавним розкриттям розкладу.',
       'Зв’язок із розробником у Telegram (@kost99_99) прямо з налаштувань застосунку.',
@@ -97,6 +120,7 @@ export const RELEASES_CATALOG: readonly ReleaseEntry[] = [
     notificationTitle: 'Uni Schedule v4.3.0',
     notificationBody:
       'Нова анімація запуску, історія оновлень, зв’язок із розробником та сповіщення про нові версії. Дізнайся, що нового!',
+    githubReleaseUrl: 'https://github.com/Kokos96/uni-schedule/releases/tag/v4.3.0',
   },
   {
     id: 'rel_4_2_1',

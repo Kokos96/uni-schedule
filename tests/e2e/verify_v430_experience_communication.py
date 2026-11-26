@@ -66,7 +66,7 @@ BASE_SETTINGS = {
 }
 
 
-def init_script(settings=None, last_ver='4.3.0', seen=None, skip_splash=True):
+def init_script(settings=None, last_ver='4.3.1', seen=None, skip_splash=True):
     lines = []
     if skip_splash:
         lines.append("sessionStorage.setItem('uni_schedule_splash_seen_v1', '1');")
@@ -121,32 +121,32 @@ def main():
             save_video(page, ctx, '08_developer_contact.webm')
             print('PASS 08_developer_contact')
 
-            # 09: What's New on first launch after upgrade (simulate published 4.3.0 via cached releases)
+            # 09: What's New on first launch after upgrade (simulate published 4.3.1 via cached releases)
             ctx = new_ctx(browser, 'dark')
             page = ctx.new_page()
             page.on('pageerror', lambda e: errors.append(f'09: {e}'))
-            published_430_cache = [{
-                'id': 'rel_4_3_0',
-                'version': '4.3.0',
-                'title': 'Experience & Communication Update',
-                'ukTitle': 'Оновлення інтерфейсу та нові можливості зв’язку',
-                'summary': 'Нові можливості зв’язку з розробником та історія оновлень.',
+            published_431_cache = [{
+                'id': 'rel_4_3_1',
+                'version': '4.3.1',
+                'title': 'Signature Animation Correction',
+                'ukTitle': 'Покращена анімація запуску',
+                'summary': 'Оновлено фірмову анімацію запуску Uni Schedule.',
                 'publishedAt': '2026-11-27',
                 'publicationStatus': 'published',
-                'features': ['Зв’язок із розробником у Telegram (@kost99_99).', 'Вікно «Що нового?» та історія версій.'],
-                'improvements': ['Захист від повторної доставки push-сповіщень.'],
+                'features': [],
+                'improvements': ['Точніше відтворення Signature Calendar Reveal.'],
                 'fixes': [],
-                'notificationTitle': 'Uni Schedule v4.3.0',
-                'notificationBody': 'Дізнайся, що нового!',
+                'notificationTitle': 'Uni Schedule v4.3.1',
+                'notificationBody': 'Покращена анімація запуску!',
             }]
             page.add_init_script(
-                init_script(BASE_SETTINGS, last_ver='4.2.1', seen=['rel_4_2_1']) +
-                f"\nlocalStorage.setItem('uni_schedule_cached_releases_v1', {json.dumps(json.dumps(published_430_cache, ensure_ascii=False))});"
+                init_script(BASE_SETTINGS, last_ver='4.3.0', seen=['rel_4_3_0']) +
+                f"\nlocalStorage.setItem('uni_schedule_cached_releases_v1', {json.dumps(json.dumps(published_431_cache, ensure_ascii=False))});"
             )
             page.goto(BASE_URL, wait_until='networkidle')
             modal = page.get_by_test_id('whats-new-modal-content')
             modal.wait_for(state='visible', timeout=7000)
-            assert 'v4.3.0' in modal.inner_text()
+            assert 'v4.3.1' in modal.inner_text()
             page.get_by_role('button', name='Зрозуміло').click()
             page.wait_for_timeout(500)
             assert page.get_by_test_id('whats-new-modal-content').count() == 0
@@ -194,8 +194,8 @@ def main():
             hist = page.get_by_test_id('update-history-modal-content')
             assert hist.is_visible()
             hist_text = hist.inner_text()
-            assert 'v4.2.1' in hist_text and 'v4.2.0' in hist_text
-            assert 'v4.3.0' not in hist_text, 'Draft v4.3.0 must NOT appear in published history'
+            assert 'v4.3.0' in hist_text and 'v4.2.1' in hist_text
+            assert 'v4.3.1' not in hist_text, 'Draft v4.3.1 must NOT appear in published history'
             save_video(page, ctx, '11_update_history.webm')
             print('PASS 11_update_history')
 

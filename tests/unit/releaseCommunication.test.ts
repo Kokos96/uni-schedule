@@ -26,9 +26,9 @@ test('SemVer comparison orders numerically (4.10.0 > 4.9.0, 4.3.1 > 4.3.0) and v
   assert.equal(isValidSemver('4.3.0-beta'), false);
 });
 
-test('Canonical release catalog hides draft v4.3.0 from published list and sorts newest-first', () => {
+test('Canonical release catalog hides draft v4.3.1 from published list and sorts newest-first', () => {
   const published = getPublishedReleases();
-  assert.ok(published.length >= 4);
+  assert.ok(published.length >= 5);
   assert.equal(
     published.some((r) => r.publicationStatus === 'draft'),
     false,
@@ -41,37 +41,37 @@ test('Canonical release catalog hides draft v4.3.0 from published list and sorts
     );
   }
   const latest = getLatestPublishedRelease();
-  assert.equal(latest?.version, '4.2.1');
-  assert.equal(getReleaseByVersion('4.3.0', { includeDraft: false }), null);
-  assert.equal(getReleaseByVersion('4.3.0', { includeDraft: true })?.version, '4.3.0');
+  assert.equal(latest?.version, '4.3.0');
+  assert.equal(getReleaseByVersion('4.3.1', { includeDraft: false }), null);
+  assert.equal(getReleaseByVersion('4.3.1', { includeDraft: true })?.version, '4.3.1');
 });
 
 test('computeReleaseViewState handles upgrade, new user onboarding, rollback, and installed < latest safely', () => {
-  const published430: ReleaseEntry = {
-    ...RELEASES_CATALOG.find((r) => r.version === '4.3.0')!,
+  const published431: ReleaseEntry = {
+    ...RELEASES_CATALOG.find((r) => r.version === '4.3.1')!,
     publicationStatus: 'published',
     publishedAt: '2026-11-27',
   };
-  const catalog = [published430, ...getPublishedReleases()];
+  const catalog = [published431, ...getPublishedReleases()];
 
-  // 1. Existing user upgraded from 4.2.1 -> 4.3.0: autoShowRelease fires once
+  // 1. Existing user upgraded from 4.3.0 -> 4.3.1: autoShowRelease fires once
   const upgraded = computeReleaseViewState({
     catalog,
-    installedVersion: '4.3.0',
-    lastInstalledVersion: '4.2.1',
-    seenReleaseIds: ['rel_4_2_1'],
+    installedVersion: '4.3.1',
+    lastInstalledVersion: '4.3.0',
+    seenReleaseIds: ['rel_4_3_0'],
     isUnconfigured: false,
   });
-  assert.equal(upgraded.autoShowRelease?.version, '4.3.0');
+  assert.equal(upgraded.autoShowRelease?.version, '4.3.1');
   assert.equal(upgraded.hasUnreadInstalledRelease, true);
   assert.equal(upgraded.hasAvailableUpdate, false);
 
-  // 2. After marking rel_4_3_0 seen: never auto-shows again
+  // 2. After marking rel_4_3_1 seen: never auto-shows again
   const afterSeen = computeReleaseViewState({
     catalog,
-    installedVersion: '4.3.0',
-    lastInstalledVersion: '4.2.1',
-    seenReleaseIds: ['rel_4_2_1', 'rel_4_3_0'],
+    installedVersion: '4.3.1',
+    lastInstalledVersion: '4.3.0',
+    seenReleaseIds: ['rel_4_3_0', 'rel_4_3_1'],
     isUnconfigured: false,
   });
   assert.equal(afterSeen.autoShowRelease, null);
@@ -80,19 +80,19 @@ test('computeReleaseViewState handles upgrade, new user onboarding, rollback, an
   // 3. Brand-new user in onboarding: never blocks onboarding with What's New
   const newUser = computeReleaseViewState({
     catalog,
-    installedVersion: '4.3.0',
+    installedVersion: '4.3.1',
     lastInstalledVersion: null,
     seenReleaseIds: [],
     isUnconfigured: true,
   });
   assert.equal(newUser.autoShowRelease, null);
 
-  // 4. Rollback to 4.2.1 when rel_4_2_1 was already seen: no duplicate modal, but detects newer 4.3.0 available
+  // 4. Rollback to 4.3.0 when rel_4_3_0 was already seen: no duplicate modal, but detects newer 4.3.1 available
   const rollback = computeReleaseViewState({
     catalog,
-    installedVersion: '4.2.1',
-    lastInstalledVersion: '4.3.0',
-    seenReleaseIds: ['rel_4_2_1', 'rel_4_3_0'],
+    installedVersion: '4.3.0',
+    lastInstalledVersion: '4.3.1',
+    seenReleaseIds: ['rel_4_3_0', 'rel_4_3_1'],
     isUnconfigured: false,
   });
   assert.equal(rollback.autoShowRelease, null);
@@ -132,40 +132,40 @@ test('mergeReleaseCatalogs merges remote updates with offline fallback and ignor
 });
 
 test('handles draft-in-bundle -> API publish -> offline persistence, rollback unpublish, and skipped versions', () => {
-  // 1. Before publish: 4.3.0 is draft in RELEASES_CATALOG, so merged published catalog hides it
+  // 1. Before publish: 4.3.1 is draft in RELEASES_CATALOG, so merged published catalog hides it
   const beforePublish = mergeReleaseCatalogs(null, getPublishedReleases());
-  assert.equal(beforePublish.some((r) => r.version === '4.3.0'), false);
+  assert.equal(beforePublish.some((r) => r.version === '4.3.1'), false);
 
-  // 2. After CLI publishes 4.3.0 in D1, API returns 4.3.0 as published -> overrides built-in draft
-  const apiPublished430: ReleaseEntry = {
-    ...RELEASES_CATALOG.find((r) => r.version === '4.3.0')!,
+  // 2. After CLI publishes 4.3.1 in D1, API returns 4.3.1 as published -> overrides built-in draft
+  const apiPublished431: ReleaseEntry = {
+    ...RELEASES_CATALOG.find((r) => r.version === '4.3.1')!,
     publicationStatus: 'published',
     publishedAt: '2026-11-27',
   };
-  const afterPublish = mergeReleaseCatalogs([apiPublished430, ...getPublishedReleases()], getPublishedReleases());
-  assert.equal(afterPublish[0]?.version, '4.3.0');
+  const afterPublish = mergeReleaseCatalogs([apiPublished431, ...getPublishedReleases()], getPublishedReleases());
+  assert.equal(afterPublish[0]?.version, '4.3.1');
   assert.equal(afterPublish[0]?.publicationStatus, 'published');
 
-  // 3. Offline restart: cached published catalog (afterPublish) merged with built-in (where 4.3.0 is still draft)
-  //    MUST preserve 4.3.0 as published and never revert it to draft!
+  // 3. Offline restart: cached published catalog (afterPublish) merged with built-in (where 4.3.1 is still draft)
+  //    MUST preserve 4.3.1 as published and never revert it to draft!
   const offlineReload = mergeReleaseCatalogs(afterPublish, getPublishedReleases());
-  assert.equal(offlineReload[0]?.version, '4.3.0');
+  assert.equal(offlineReload[0]?.version, '4.3.1');
   assert.equal(offlineReload[0]?.publicationStatus, 'published');
 
-  // 4. Skipped multiple versions (4.0.0 -> 4.3.0): auto-shows ONLY installed 4.3.0, no stacked modals
+  // 4. Skipped multiple versions (4.0.0 -> 4.3.1): auto-shows ONLY installed 4.3.1, no stacked modals
   const skippedState = computeReleaseViewState({
     catalog: offlineReload,
-    installedVersion: '4.3.0',
+    installedVersion: '4.3.1',
     lastInstalledVersion: '4.0.0',
     seenReleaseIds: ['rel_4_0_0'],
     isUnconfigured: false,
   });
-  assert.equal(skippedState.autoShowRelease?.version, '4.3.0');
+  assert.equal(skippedState.autoShowRelease?.version, '4.3.1');
 
-  // 5. Server rollback: API stops returning 4.3.0 -> merge drops 4.3.0 and does not advertise rolled-back version
+  // 5. Server rollback: API stops returning 4.3.1 -> merge drops 4.3.1 and does not advertise rolled-back version
   const afterRollback = mergeReleaseCatalogs(getPublishedReleases(), getPublishedReleases());
-  assert.equal(afterRollback[0]?.version, '4.2.1');
-  assert.equal(afterRollback.some((r) => r.version === '4.3.0'), false);
+  assert.equal(afterRollback[0]?.version, '4.3.0');
+  assert.equal(afterRollback.some((r) => r.version === '4.3.1'), false);
 });
 
 test('Service Worker notificationclick posts OPEN_DEEP_LINK to open client, opens window on cold start, and rejects cross-origin URLs', async () => {

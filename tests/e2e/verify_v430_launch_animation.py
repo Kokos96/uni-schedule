@@ -51,7 +51,7 @@ def seed_script(settings=None):
         f"if (!localStorage.getItem('uni_schedule_settings_v2')) "
         f"localStorage.setItem('uni_schedule_settings_v2', {json.dumps(json.dumps(settings, ensure_ascii=False))});"
         f"if (!localStorage.getItem('uni_schedule_last_installed_version_v1')) "
-        f"localStorage.setItem('uni_schedule_last_installed_version_v1', '\"4.3.0\"');"
+        f"localStorage.setItem('uni_schedule_last_installed_version_v1', '\"4.3.1\"');"
     )
 
 

@@ -351,7 +351,7 @@ describe('workers/api v4.3.0 Release Communication, Concurrency & Quality Gate',
       new Request('https://api.test/api/admin/releases/dispatch', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ version: '4.3.0', dryRun: false, confirmLive: true }),
+        body: JSON.stringify({ version: '4.3.1', dryRun: false, confirmLive: true }),
       }),
       env
     );
@@ -362,7 +362,7 @@ describe('workers/api v4.3.0 Release Communication, Concurrency & Quality Gate',
       new Request('https://api.test/api/admin/releases/dispatch', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ version: '4.3.0' }),
+        body: JSON.stringify({ version: '4.3.1' }),
       }),
       env
     );
@@ -370,30 +370,30 @@ describe('workers/api v4.3.0 Release Communication, Concurrency & Quality Gate',
     assert.equal(((await rDefaultDry.json()) as { dryRun: boolean }).dryRun, true);
     assert.equal(db.deliveries.size, 0);
 
-    // 11. Publish 4.3.0 -> visible; Rollback to draft -> hidden again!
+    // 11. Publish 4.3.1 -> visible; Rollback to draft -> hidden again!
     const pubRes = await worker.fetch(
       new Request('https://api.test/api/admin/releases/publish', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ version: '4.3.0', publicationStatus: 'published' }),
+        body: JSON.stringify({ version: '4.3.1', publicationStatus: 'published' }),
       }),
       env
     );
     assert.equal(pubRes.status, 200);
     const latestAfterPub = (await (await worker.fetch(new Request('https://api.test/api/releases/latest'), env)).json()) as { release: { version: string } };
-    assert.equal(latestAfterPub.release.version, '4.3.0');
+    assert.equal(latestAfterPub.release.version, '4.3.1');
 
     const unpubRes = await worker.fetch(
       new Request('https://api.test/api/admin/releases/publish', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ version: '4.3.0', publicationStatus: 'draft' }),
+        body: JSON.stringify({ version: '4.3.1', publicationStatus: 'draft' }),
       }),
       env
     );
     assert.equal(unpubRes.status, 200);
     const latestAfterRollback = (await (await worker.fetch(new Request('https://api.test/api/releases/latest'), env)).json()) as { release: { version: string } };
-    assert.equal(latestAfterRollback.release.version, '4.2.1');
+    assert.equal(latestAfterRollback.release.version, '4.3.0');
   });
 
   it('prevents duplicate Web Push under concurrent dispatches, crash-after-send pending, and unknown timeouts', async () => {
