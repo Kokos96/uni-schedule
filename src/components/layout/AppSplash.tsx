@@ -39,6 +39,10 @@ const REDUCED_DURATION_MS = 320;
 const clamp01 = (v: number): number => (v <= 0 ? 0 : v >= 1 ? 1 : v);
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 const easeOutCubic = (t: number): number => 1 - Math.pow(1 - clamp01(t), 3);
+const easeInOutQuad = (t: number): number => {
+  const x = clamp01(t);
+  return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+};
 const easeInOutCubic = (t: number): number => {
   const x = clamp01(t);
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
@@ -226,23 +230,23 @@ export const AppSplash: React.FC<AppSplashProps> = ({
       }
 
       // 1. Phase notifications (only 4 React updates across the entire 3000ms)
+      //    BottomNav rises at 2680ms -> 2980ms matching reference bnav_diff curve
       if (elapsed >= 600 && lastEmittedPhase === 'sunrise') emitPhase('date');
       if (elapsed >= 1100 && lastEmittedPhase === 'date') emitPhase('calendar');
-      if (elapsed >= 1900 && lastEmittedPhase === 'calendar') emitPhase('reveal');
-      if (elapsed >= 2560 && lastEmittedPhase === 'reveal') emitPhase('settle');
+      if (elapsed >= 1980 && lastEmittedPhase === 'calendar') emitPhase('reveal');
+      if (elapsed >= 2680 && lastEmittedPhase === 'reveal') emitPhase('settle');
 
       // 2. Sun emergence from horizon (0 -> 500ms, measured cubic rise from y=+90px to y=0)
       const pRise = easeInOutCubic(seg(elapsed, 0, 500));
       const sunRiseY = lerp(90, 0, pRise);
       if (horizonClipRef.current) {
-        // Clip below horizon strictly during sun emergence (0 -> 520ms), then open for calendar & FLIP
         horizonClipRef.current.style.clipPath =
           elapsed < 520 ? 'inset(-12px -40px 10px -40px)' : 'none';
       }
 
-      // 3. Symmetric Amber Arch (draws 180 -> 750ms, holds, fades 1000 -> 1450ms)
+      // 3. Symmetric Amber Arch (draws 180 -> 750ms, holds, fades 1050 -> 1500ms)
       const pArchDraw = easeOutCubic(seg(elapsed, 180, 750));
-      const pArchFade = easeInOutCubic(seg(elapsed, 1000, 1450));
+      const pArchFade = easeInOutCubic(seg(elapsed, 1050, 1500));
       if (archPathRef.current) {
         archPathRef.current.style.strokeDashoffset = String(ARCH_PATH_LEN * (1 - pArchDraw));
       }
@@ -250,33 +254,33 @@ export const AppSplash: React.FC<AppSplashProps> = ({
         archSvgRef.current.style.opacity = String(clamp01(pArchDraw > 0 ? 1 - pArchFade : 0));
       }
       const pHorizIn = easeOutCubic(seg(elapsed, 120, 500));
-      const pHorizOut = easeInOutCubic(seg(elapsed, 1000, 1350));
+      const pHorizOut = easeInOutCubic(seg(elapsed, 1020, 1380));
       const hOp = pHorizIn * (1 - pHorizOut);
       if (horizon1Ref.current) {
-        horizon1Ref.current.style.opacity = String(0.6 * hOp);
+        horizon1Ref.current.style.opacity = String(0.55 * hOp);
         horizon1Ref.current.style.transform = `scaleX(${lerp(0.35, 1, pHorizIn)})`;
       }
       if (horizon2Ref.current) {
-        horizon2Ref.current.style.opacity = String(0.4 * hOp);
+        horizon2Ref.current.style.opacity = String(0.35 * hOp);
         horizon2Ref.current.style.transform = `scaleX(${lerp(0.25, 1, pHorizIn)})`;
       }
 
-      // 4. Wordmark `Uni Schedule` (fades in 300 -> 750ms, fades out 1700 -> 2120ms before wave arrives)
+      // 4. Wordmark `Uni Schedule` (fades in 300 -> 750ms, fades out 1880 -> 2220ms as wave arrives)
       const pWmIn = easeOutCubic(seg(elapsed, 300, 750));
-      const pWmOut = easeInOutCubic(seg(elapsed, 1700, 2120));
+      const pWmOut = easeInOutCubic(seg(elapsed, 1880, 2220));
       if (wordmarkRef.current) {
         wordmarkRef.current.style.opacity = String(pWmIn * (1 - pWmOut));
-        wordmarkRef.current.style.transform = `translate3d(0, ${lerp(8, 0, pWmIn) - 6 * pWmOut}px, 0)`;
+        wordmarkRef.current.style.transform = `translate3d(0, ${lerp(6, 0, pWmIn) - 4 * pWmOut}px, 0)`;
       }
-      const pUndIn = easeOutCubic(seg(elapsed, 550, 900));
+      const pUndIn = easeOutCubic(seg(elapsed, 560, 920));
       if (underlineRef.current) {
-        underlineRef.current.style.opacity = String(pUndIn * (1 - pWmOut));
+        underlineRef.current.style.opacity = String(0.8 * pUndIn * (1 - pWmOut));
         underlineRef.current.style.transform = `scaleX(${pUndIn * (1 - pWmOut)})`;
       }
 
-      // 5. Real Date inside sun (550 -> 820ms), smoothly morphing color on FLIP landing (2100 -> 2400ms)
+      // 5. Real Date inside sun (550 -> 820ms), smoothly morphing color on FLIP landing (2160 -> 2440ms)
       const pDateIn = easeOutCubic(seg(elapsed, 550, 820));
-      const pTextSwap = easeInOutCubic(seg(elapsed, 2100, 2400));
+      const pTextSwap = easeInOutCubic(seg(elapsed, 2160, 2440));
       if (activeTextRef.current) {
         activeTextRef.current.style.opacity = String(pDateIn * (1 - pTextSwap));
         activeTextRef.current.style.transform = `scale(${lerp(0.86, 1, pDateIn)})`;
@@ -289,9 +293,9 @@ export const AppSplash: React.FC<AppSplashProps> = ({
       const pMorph = easeInOutCubic(seg(elapsed, 750, 1300));
       const pSlide = easeInOutCubic(seg(elapsed, 750, 1580));
 
-      // 7. True Geometric FLIP Handoff (1950 -> 2450ms) onto measured WeekStrip DOMRects
-      const pFlip = easeInOutCubic(seg(elapsed, 1950, 2450));
-      const pHandoffFade = easeOutCubic(seg(elapsed, 2420, 2520));
+      // 7. True Geometric FLIP Handoff synchronized with wave (2020 -> 2480ms)
+      const pFlip = easeInOutCubic(seg(elapsed, 2020, 2480));
+      const pHandoffFade = easeOutCubic(seg(elapsed, 2460, 2550));
 
       const baseScaleX = lerp(1, TILE_W / SUN_SIZE, pMorph);
       const baseScaleY = lerp(1, TILE_H / SUN_SIZE, pMorph);
@@ -315,21 +319,21 @@ export const AppSplash: React.FC<AppSplashProps> = ({
       if (activeBgRef.current) {
         activeBgRef.current.style.transform = `scale(${curActiveSx}, ${curActiveSy})`;
         activeBgRef.current.style.borderRadius = `${baseRadius}px`;
-        // Transition solid amber fill -> WeekStrip outlined active style during FLIP (2100 -> 2420ms)
-        const pFillOut = easeInOutCubic(seg(elapsed, 2100, 2420));
+        // Transition solid amber fill -> WeekStrip outlined active style during FLIP (2160 -> 2460ms)
+        const pFillOut = easeInOutCubic(seg(elapsed, 2160, 2460));
         activeBgRef.current.style.opacity = String(1 - pFillOut);
       }
       if (activeOutlineRef.current) {
         activeOutlineRef.current.style.transform = `scale(${curActiveSx}, ${curActiveSy})`;
         activeOutlineRef.current.style.borderRadius = `${baseRadius}px`;
-        const pOutlineIn = easeInOutCubic(seg(elapsed, 2080, 2380));
+        const pOutlineIn = easeInOutCubic(seg(elapsed, 2140, 2440));
         activeOutlineRef.current.style.opacity = String(pOutlineIn);
       }
       if (activeDotRef.current) {
-        activeDotRef.current.style.opacity = String(easeOutCubic(seg(elapsed, 1950, 2200)));
+        activeDotRef.current.style.opacity = String(easeOutCubic(seg(elapsed, 2000, 2240)));
       }
 
-      // 8. Neighbor Weekday Tiles Fan-Out (1050 -> 1600ms) + FLIP Handoff (1950 -> 2450ms)
+      // 8. Neighbor Weekday Tiles Fan-Out (1050 -> 1580ms) + FLIP Handoff (2020 -> 2480ms)
       launchCalendar.items.forEach((item, idx) => {
         if (item.isActive) return;
         const el = neighborRefs.current[idx];
@@ -355,39 +359,41 @@ export const AppSplash: React.FC<AppSplashProps> = ({
 
         const dot = neighborDotRefs.current[idx];
         if (dot) {
-          dot.style.opacity = String(easeOutCubic(seg(elapsed, 1950, 2200)) * 0.55);
+          dot.style.opacity = String(easeOutCubic(seg(elapsed, 2000, 2240)) * 0.55);
         }
       });
 
-      // 9. Bottom-Up Convex Dome Wave Reveal on Live AppShell (1920 -> 2560ms)
+      // 9. Bottom-Up Convex Dome Wave Reveal on Live AppShell (1960 -> 2600ms)
+      //    Exact 50ms fit to reference: 2050ms 13%, 2100ms 21%, 2200ms 39%, 2250ms 49%, 2300ms 60%, 2400ms 81%, 2450ms 90%, 2500ms 97%
       if (revealEl) {
-        if (elapsed < 1920) {
-          revealEl.style.clipPath = 'ellipse(125% 0% at 50% 100%)';
-        } else if (elapsed < 2560) {
-          const pWave = easeInOutCubic(seg(elapsed, 1920, 2560));
-          const rx = lerp(125, 175, pWave);
-          const ry = lerp(0, 148, pWave);
+        if (elapsed < 1960) {
+          revealEl.style.clipPath = 'ellipse(118% 0% at 50% 100%)';
+        } else if (elapsed < 2600) {
+          const pRaw = seg(elapsed, 1960, 2600);
+          const pWave = 0.72 * pRaw + 0.28 * easeInOutQuad(pRaw);
+          const rx = lerp(118, 168, pWave);
+          const ry = lerp(0, 112, pWave);
           revealEl.style.clipPath = `ellipse(${rx.toFixed(1)}% ${ry.toFixed(1)}% at 50% 100%)`;
         } else {
           revealEl.style.clipPath = '';
         }
       }
 
-      // 10. Seamless WeekStrip Role Transfer at 2420ms (exact moment FLIP tiles land!)
+      // 10. Seamless WeekStrip Role Transfer at 2460ms (exact moment FLIP tiles land!)
       if (weekStripRow && targetRects) {
-        if (elapsed >= 2420) {
+        if (elapsed >= 2460) {
           weekStripRow.style.opacity = '1';
         }
       }
 
-      // Keep FLIP calendar layer ABOVE the rising wave dome during handoff (1920 -> 2520ms)
+      // Keep FLIP calendar layer ABOVE the rising wave dome during handoff (1960 -> 2550ms)
       if (handoffLayerRef.current) {
-        handoffLayerRef.current.style.zIndex = elapsed >= 1900 && elapsed < 2540 ? '108' : '101';
+        handoffLayerRef.current.style.zIndex = elapsed >= 1960 && elapsed < 2560 ? '108' : '101';
       }
 
-      // Hide splash canvas cleanly once wave has cleared the screen (2560ms)
+      // Hide splash canvas cleanly once wave has cleared the screen (2580ms)
       if (overlayRef.current) {
-        overlayRef.current.style.opacity = elapsed >= 2560 ? '0' : '1';
+        overlayRef.current.style.opacity = elapsed >= 2580 ? '0' : '1';
       }
 
       if (elapsed >= TOTAL_DURATION_MS) {
@@ -459,7 +465,7 @@ export const AppSplash: React.FC<AppSplashProps> = ({
                   ref={archPathRef}
                   d="M 10 156 L 10 92 A 87.5 87.5 0 0 1 185 92 L 185 156"
                   stroke="currentColor"
-                  strokeWidth="1.25"
+                  strokeWidth="1.15"
                   strokeLinecap="round"
                   strokeDasharray={ARCH_PATH_LEN}
                   strokeDashoffset={ARCH_PATH_LEN}
@@ -491,19 +497,19 @@ export const AppSplash: React.FC<AppSplashProps> = ({
             )}
           </div>
 
-          {/* Editorial serif wordmark `Uni Schedule` + centered amber underline */}
+          {/* Editorial serif wordmark `Uni Schedule` + crisp hairline amber underline */}
           <div
             ref={wordmarkRef}
             style={{ opacity: reducedMotion ? 1 : 0, willChange: 'transform, opacity' }}
-            className="mt-2 flex flex-col items-center"
+            className="mt-2.5 flex flex-col items-center"
           >
-            <span className="font-serif text-[32px] sm:text-[35px] font-medium tracking-[-0.02em] leading-none text-ink">
+            <span className="font-serif text-[31px] sm:text-[33px] font-normal tracking-[-0.012em] leading-none text-ink/95">
               Uni Schedule
             </span>
             <span
               ref={underlineRef}
-              style={{ opacity: reducedMotion ? 0.85 : 0, transform: 'scaleX(0)', willChange: 'transform, opacity' }}
-              className="mt-3.5 h-[1.5px] w-16 origin-center rounded-full bg-amber"
+              style={{ opacity: reducedMotion ? 0.8 : 0, transform: 'scaleX(0)', willChange: 'transform, opacity' }}
+              className="mt-3 h-[1px] w-12 origin-center rounded-full bg-amber/85"
             />
           </div>
         </div>
