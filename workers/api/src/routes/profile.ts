@@ -1,4 +1,5 @@
 import { validateLnuAcademicSelection } from '../../../../src/data/lnuAcademicCatalog';
+import { normalizeSelectedParallelGroups } from '../../../../src/utils/parallelGroups';
 import { errorResponse, jsonResponse, parseJsonBody } from '../security';
 import type { AuthContext, Env } from '../types';
 
@@ -30,8 +31,20 @@ interface ProfileRow {
   department?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
+  selected_parallel_groups?: string | null;
   source_mode: SourceMode;
   revision: number;
+}
+
+function parseSelectedParallelGroupsJson(
+  raw: string | null | undefined
+): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  try {
+    return normalizeSelectedParallelGroups(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
 }
 
 function parseSelectedElectivesJson(raw: string | null | undefined): string[] {
@@ -55,7 +68,8 @@ export async function handleGetProfile(
   const row = await env.DB.prepare(
     `SELECT user_id, university_id, faculty_id, faculty_name, course,
             group_id, group_name, subgroup, elective_course, timezone, updated_at,
-            department, selected_electives, selected_track, source_mode, revision
+            department, selected_electives, selected_track, selected_parallel_groups,
+            source_mode, revision
      FROM student_profiles
      WHERE user_id = ?`
   )
@@ -65,6 +79,8 @@ export async function handleGetProfile(
   if (!row) {
     return errorResponse('NOT_FOUND', 'Профіль користувача не знайдено', 404, corsHeaders);
   }
+
+  const selectedParallelGroups = parseSelectedParallelGroupsJson(row.selected_parallel_groups);
 
   return jsonResponse(
     {
@@ -85,6 +101,7 @@ export async function handleGetProfile(
         ...(row.selected_track !== null && row.selected_track !== undefined
           ? { selectedTrack: row.selected_track }
           : {}),
+        ...(selectedParallelGroups ? { selectedParallelGroups } : {}),
         timezone: row.timezone,
         updatedAt: row.updated_at,
       },
@@ -261,14 +278,49 @@ export async function handleUpdateProfile(
     selectedTrack = body.selectedTrack;
   }
 
+  const hasExplicitParallelGroupsField = Object.prototype.hasOwnProperty.call(
+    body,
+    'selectedParallelGroups'
+  );
+  let selectedParallelGroups: Record<string, string> | undefined;
+  if (hasExplicitParallelGroupsField && body.selectedParallelGroups !== undefined && body.selectedParallelGroups !== null) {
+    if (typeof body.selectedParallelGroups !== 'object' || Array.isArray(body.selectedParallelGroups)) {
+      return errorResponse('VALIDATION_ERROR', 'Некоректний вибір паралельних підгруп', 400, corsHeaders);
+    }
+    const entries = Object.entries(body.selectedParallelGroups as Record<string, unknown>);
+    if (entries.length > 12) {
+      return errorResponse('VALIDATION_ERROR', 'Забагато вимірів паралельних підгруп', 400, corsHeaders);
+    }
+    for (const [k, v] of entries) {
+      if (
+        typeof k !== 'string' ||
+        !k.startsWith('pg_') ||
+        k.length > 48 ||
+        typeof v !== 'string' ||
+        (!v.startsWith('opt_') && !v.startsWith('var_')) ||
+        v.length > 48
+      ) {
+        return errorResponse('VALIDATION_ERROR', 'Некоректний ключ паралельної підгрупи', 400, corsHeaders);
+      }
+    }
+    selectedParallelGroups = normalizeSelectedParallelGroups(body.selectedParallelGroups);
+  }
+
   const suppliedRevision = body.expectedRevision;
   const legacyClient = suppliedRevision === undefined && body.sourceMode === undefined;
   if (!legacyClient && (typeof suppliedRevision !== 'number' || !Number.isInteger(suppliedRevision) || suppliedRevision < 0)) {
     return errorResponse('REVISION_REQUIRED', 'Потрібна актуальна версія профілю', 409, corsHeaders);
   }
   const current = await env.DB.prepare(
-    `SELECT revision, source_mode FROM student_profiles WHERE user_id = ?`
-  ).bind(auth.userId).first<{ revision: number; source_mode: SourceMode }>();
+    `SELECT revision, source_mode, university_id, group_id, selected_parallel_groups
+     FROM student_profiles WHERE user_id = ?`
+  ).bind(auth.userId).first<{
+    revision: number;
+    source_mode: SourceMode;
+    university_id: string;
+    group_id: string;
+    selected_parallel_groups?: string | null;
+  }>();
   // Old installed PWAs can still acknowledge and update a live profile. They cannot
   // silently replace a newer client's explicit builtin/manual/unconfigured choice.
   if (legacyClient && current && current.source_mode !== 'live') {
@@ -285,14 +337,31 @@ export async function handleUpdateProfile(
     }, 409, corsHeaders);
   }
 
+  // Backward compatibility with v4.2.0 clients: if `selectedParallelGroups` was omitted from
+  // the PUT payload and the student kept the same academic group, preserve server-side selections.
+  // If the academic group changed, clear stale parallel selections.
+  if (!hasExplicitParallelGroupsField) {
+    const sameGroup =
+      Boolean(current) &&
+      current!.university_id === universityId &&
+      current!.group_id === groupId &&
+      current!.source_mode === sourceMode;
+    selectedParallelGroups = sameGroup
+      ? parseSelectedParallelGroupsJson(current?.selected_parallel_groups)
+      : undefined;
+  }
+
   const now = new Date().toISOString();
   const selectedElectivesJson = JSON.stringify(selectedElectives);
+  const selectedParallelGroupsJson = selectedParallelGroups
+    ? JSON.stringify(selectedParallelGroups)
+    : null;
   const updateResult = await env.DB.prepare(
     `INSERT INTO student_profiles (
        user_id, university_id, faculty_id, faculty_name, course,
        group_id, group_name, subgroup, elective_course, timezone, updated_at,
-       department, selected_electives, selected_track, source_mode, revision
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+       department, selected_electives, selected_track, selected_parallel_groups, source_mode, revision
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
      ON CONFLICT(user_id) DO UPDATE SET
        university_id = excluded.university_id,
        faculty_id = excluded.faculty_id,
@@ -307,6 +376,7 @@ export async function handleUpdateProfile(
        department = excluded.department,
        selected_electives = excluded.selected_electives,
        selected_track = excluded.selected_track,
+       selected_parallel_groups = excluded.selected_parallel_groups,
        source_mode = excluded.source_mode,
        revision = student_profiles.revision + 1
      WHERE student_profiles.revision = ?`
@@ -326,6 +396,7 @@ export async function handleUpdateProfile(
       department,
       selectedElectivesJson,
       selectedTrack,
+      selectedParallelGroupsJson,
       sourceMode,
       expectedRevision
     )
@@ -356,6 +427,7 @@ export async function handleUpdateProfile(
         sourceMode,
         revision: expectedRevision + 1,
         ...(selectedTrack !== null ? { selectedTrack } : {}),
+        ...(selectedParallelGroups ? { selectedParallelGroups } : {}),
         timezone,
         updatedAt: now,
       },

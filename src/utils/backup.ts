@@ -14,6 +14,7 @@ import {
 } from '../types/backup';
 import { DeadlineItem, DeadlinePriority, LessonNote } from '../types/notes';
 import { formatIsoDate, isValidIsoDate, isValidTimeString } from './date';
+import { normalizeSelectedParallelGroups } from './parallelGroups';
 
 export const BACKUP_APP_VERSION = '3.6.0';
 export const BACKUP_SCHEMA_VERSION = 2;
@@ -148,6 +149,7 @@ function validateSettings(raw: unknown, errors: string[]): UserSettings | null {
     typeof raw.selectedTrack === 'number' && Number.isInteger(raw.selectedTrack) && raw.selectedTrack >= 1 && raw.selectedTrack <= 20
       ? raw.selectedTrack
       : undefined;
+  const selectedParallelGroups = normalizeSelectedParallelGroups(raw.selectedParallelGroups);
   let universityProfile: UserSettings['universityProfile'];
   if (isPlainObject(raw.universityProfile)) {
     const up = raw.universityProfile;
@@ -180,6 +182,7 @@ function validateSettings(raw: unknown, errors: string[]): UserSettings | null {
     ...(universityProfile ? { universityProfile } : {}),
     ...(selectedElectives ? { selectedElectives } : {}),
     ...(selectedTrack !== undefined ? { selectedTrack } : {}),
+    ...(selectedParallelGroups ? { selectedParallelGroups } : {}),
   };
 }
 

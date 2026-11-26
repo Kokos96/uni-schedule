@@ -1,12 +1,14 @@
 import React, { useRef } from 'react';
-import { BookOpen, Buildings, Users } from '@phosphor-icons/react';
+import { BookOpen, Buildings, Translate, Users } from '@phosphor-icons/react';
 import { DEPARTMENT_OPTIONS, ELECTIVE_OPTIONS } from '../../constants/profile';
 import type { ScheduleActivationResult, ScheduleSyncStatus } from '../../hooks/useScheduleSource';
 import type { UseSettingsResult } from '../../hooks/useSettings';
 import type { StudentSelection } from '../../integrations/universities/types';
 import type { ResolvedUserSettings, UserSettings } from '../../types';
-import { StatusDot } from '../ui/Badge';
+import type { ParallelGroupDimension } from '../../utils/parallelGroups';
+import { MetaChip, StatusDot } from '../ui/Badge';
 import { GlassCard } from '../ui/GlassCard';
+import { PremiumSelect, type PremiumSelectOption } from '../ui/PremiumSelect';
 import { SegmentedControl, type SegmentedOption } from '../ui/SegmentedControl';
 import { UniversitySelectorCard } from './UniversitySelectorCard';
 
@@ -74,6 +76,7 @@ export interface ProfileSettingsSectionProps {
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
   availableTracks?: Array<{ number: number; subjects: string[] }>;
+  availableParallelGroups?: ParallelGroupDimension[];
   hasSubgroups?: boolean;
   hasDepartments?: boolean;
 }
@@ -93,20 +96,34 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
   isUsingCustomGroup = false,
   availableElectives = [],
   availableTracks = [],
+  availableParallelGroups = [],
   hasSubgroups = true,
   hasDepartments = false,
 }) => {
   const deptRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const electiveRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedElectives = resolved.selectedElectives ?? [];
+  const selectedParallelGroups = resolved.selectedParallelGroups ?? {};
   const hasLiveProfile = resolved.scheduleSourceMode === 'live' && Boolean(resolved.universityProfile);
   const showDepartmentSelector = resolved.scheduleSourceMode === 'builtin' || (hasLiveProfile && hasDepartments);
   const showMissingDepartmentsNote =
-    hasLiveProfile && isUsingCustomGroup && !showDepartmentSelector;
+    hasLiveProfile && isUsingCustomGroup && !showDepartmentSelector && availableParallelGroups.length === 0;
   const availableElectiveKeys = new Set(availableElectives.map((e) => e.key));
   const savedMissingElectives = selectedElectives.filter(
     (key) => !availableElectiveKeys.has(key)
   );
+
+  const handleSelectParallelGroup = (dimensionKey: string, optionKey: string) => {
+    const next: Record<string, string> = { ...selectedParallelGroups };
+    if (!optionKey) {
+      delete next[dimensionKey];
+    } else {
+      next[dimensionKey] = optionKey;
+    }
+    onUpdate({
+      selectedParallelGroups: Object.keys(next).length > 0 ? next : undefined,
+    });
+  };
 
   const toggleLiveElective = (key: string) => {
     const next = selectedElectives.includes(key)
@@ -199,6 +216,100 @@ export const ProfileSettingsSection: React.FC<ProfileSettingsSectionProps> = ({
           </div>
         </GlassCard>
       )}
+
+      {hasLiveProfile && availableParallelGroups.length > 0 && (() => {
+        const concreteCount = availableParallelGroups.filter((d) => {
+          const val = selectedParallelGroups[d.key];
+          if (!val) return false;
+          const matched = d.options.find((o) => o.key === val);
+          return Boolean(matched && !matched.isVariantGroup);
+        }).length;
+        const partialCount = availableParallelGroups.filter((d) => {
+          const val = selectedParallelGroups[d.key];
+          if (!val) return false;
+          const matched = d.options.find((o) => o.key === val);
+          return Boolean(matched && matched.isVariantGroup);
+        }).length;
+        const fullyPersonalized = concreteCount === availableParallelGroups.length;
+        return (
+        <GlassCard variant="glass" padding="lg" data-testid="parallel-groups-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-secondary">
+              <Translate weight="duotone" className="h-4 w-4 text-amber-fg" aria-hidden="true" />
+              <span>Мовні та паралельні підгрупи</span>
+            </div>
+            <MetaChip
+              variant={fullyPersonalized ? 'sage' : 'amber'}
+              mono
+            >
+              {concreteCount + partialCount}/{availableParallelGroups.length} обрано
+              {partialCount > 0 ? ' (частково)' : ''}
+            </MetaChip>
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-secondary">
+            У розкладі групи є паралельні збірні заняття. Обери свою мову або викладача для кожного
+            напряму, щоб у розкладі залишилися лише твої пари.
+          </p>
+          <div className="mt-4 space-y-3.5">
+            {availableParallelGroups.map((dim) => {
+              const rawSavedVal = selectedParallelGroups[dim.key] ?? '';
+              const matchedOpt = rawSavedVal ? dim.options.find((o) => o.key === rawSavedVal) : undefined;
+              const isStale = Boolean(rawSavedVal && !matchedOpt);
+              const isPartial = Boolean(matchedOpt?.isVariantGroup);
+              const currentVal = matchedOpt ? rawSavedVal : '';
+              const options: PremiumSelectOption[] = [
+                {
+                  value: '',
+                  label: 'Показувати всі підгрупи',
+                  description: 'Без фільтрації — усі паралельні варіанти в розкладі',
+                },
+                ...dim.options.map((opt) => ({
+                  value: opt.key,
+                  label: opt.label,
+                  description: opt.description,
+                  badge: opt.badge,
+                })),
+              ];
+              return (
+                <div key={dim.key} data-testid={`parallel-dim-${dim.key}`}>
+                  <PremiumSelect
+                    id={`parallel-dim-${dim.key}`}
+                    label={dim.label}
+                    value={currentVal}
+                    options={options}
+                    onChange={(nextVal) => handleSelectParallelGroup(dim.key, nextVal)}
+                    placeholder="Обери свою підгрупу або викладача"
+                    searchable={dim.options.length > 4}
+                    searchPlaceholder="Пошук мови або викладача…"
+                  />
+                  {isStale && (
+                    <p className="mt-1.5 text-[11px] leading-snug text-amber-fg">
+                      Збережений викладач відсутній у поточному вікні розкладу (можлива заміна). Тимчасово показано всі підгрупи — оберіть актуальний варіант.
+                    </p>
+                  )}
+                  {isPartial && (
+                    <p className="mt-1.5 text-[11px] leading-snug text-ink-secondary">
+                      Застосовано частковий фільтр за мовою — у розкладі можуть залишатися пари інших викладачів цієї мови.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {Object.keys(selectedParallelGroups).length > 0 && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onUpdate({ selectedParallelGroups: undefined })}
+                className="text-xs font-medium text-ink-secondary underline-offset-4 transition-colors hover:text-amber-fg hover:underline"
+              >
+                Скинути вибір підгруп
+              </button>
+            </div>
+          )}
+        </GlassCard>
+        );
+      })()}
 
       {showMissingDepartmentsNote && (
         <GlassCard variant="glass" padding="lg">

@@ -10,6 +10,7 @@ import {
   UserSettings,
 } from '../types';
 import { DEFAULT_SEMESTER_START_DATE, isValidIsoDate } from '../utils/date';
+import { normalizeSelectedParallelGroups } from '../utils/parallelGroups';
 import { readStorage, StorageErrorCode, writeStorage } from '../utils/storage';
 import type { StudentSelection } from '../integrations/universities/types';
 
@@ -143,6 +144,8 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
       ? candidate.selectedTrack
       : undefined;
 
+  const selectedParallelGroups = normalizeSelectedParallelGroups(candidate.selectedParallelGroups);
+
   return {
     subgroup,
     department,
@@ -156,6 +159,7 @@ export function normalizeSettings(raw: unknown): ResolvedUserSettings {
     ...(universityProfile ? { universityProfile: { ...universityProfile, subgroup } } : {}),
     ...(selectedElectives !== undefined ? { selectedElectives } : {}),
     ...(selectedTrack !== undefined ? { selectedTrack } : {}),
+    ...(selectedParallelGroups ? { selectedParallelGroups } : {}),
   };
 }
 
@@ -253,6 +257,7 @@ export const useSettings = (): UseSettingsResult => {
             electiveCourse: remote.electiveCourse,
             selectedElectives: remote.selectedElectives,
             selectedTrack: remote.selectedTrack,
+            selectedParallelGroups: remote.selectedParallelGroups,
           });
           if (profileSignature(local) !== profileSignature(remoteComparable)) queue.enqueue(local);
           return;
@@ -277,6 +282,7 @@ export const useSettings = (): UseSettingsResult => {
           electiveCourse: remote.electiveCourse,
           selectedElectives: remote.selectedElectives,
           selectedTrack: remote.selectedTrack,
+          selectedParallelGroups: remote.selectedParallelGroups,
         });
         settingsRef.current = restored;
         setSettings(restored);

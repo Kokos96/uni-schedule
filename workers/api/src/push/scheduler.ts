@@ -1,4 +1,10 @@
 import { resolveDepartmentsForLesson } from '../../../../src/data/academicProgramRegistry';
+import {
+  computeParallelDimensionKey,
+  matchesParallelGroupSelection,
+  normalizeSelectedParallelGroups,
+  parseParallelSubject,
+} from '../../../../src/utils/parallelGroups';
 import { sendWebPushWithRetry, type PushPayload, type VapidConfig } from './webPush';
 import type { Env } from '../types';
 
@@ -106,6 +112,7 @@ export interface ActiveSubscriptionRow {
   elective_course?: string | null;
   selected_electives?: string | null;
   selected_track?: number | null;
+  selected_parallel_groups?: string | null;
   revision?: number;
   schedule_source_type?: 'dated' | 'recurring' | null;
   covered_from?: string | null;
@@ -174,10 +181,22 @@ function parseSelectedElectivesList(raw: string | null | undefined): string[] {
   return [];
 }
 
+function parseSelectedParallelGroupsJson(
+  raw: string | null | undefined
+): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  try {
+    return normalizeSelectedParallelGroups(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
+}
+
 function matchesStudentLessonProfile(
   lesson: {
     subgroup: number | null;
     subject: string;
+    teacher?: string | null;
     is_elective?: number;
     elective_key?: string | null;
     track_number?: number | null;
@@ -185,7 +204,17 @@ function matchesStudentLessonProfile(
     lesson_date?: string | null;
     status?: string;
   },
-  row: Pick<ActiveSubscriptionRow, 'university_id' | 'group_id' | 'department' | 'subgroup' | 'elective_course' | 'selected_electives' | 'selected_track'>,
+  row: Pick<
+    ActiveSubscriptionRow,
+    | 'university_id'
+    | 'group_id'
+    | 'department'
+    | 'subgroup'
+    | 'elective_course'
+    | 'selected_electives'
+    | 'selected_track'
+    | 'selected_parallel_groups'
+  >,
   weekParity?: 'numerator' | 'denominator'
 ): boolean {
   if (lesson.subgroup !== null && lesson.subgroup !== row.subgroup) {
@@ -206,6 +235,22 @@ function matchesStudentLessonProfile(
     lesson.track_number !== row.selected_track
   ) {
     return false;
+  }
+  const selectedParallel = parseSelectedParallelGroupsJson(row.selected_parallel_groups);
+  if (selectedParallel) {
+    const ok = matchesParallelGroupSelection(
+      {
+        subject: lesson.subject,
+        teacher: lesson.teacher,
+        isElective: lesson.is_elective === 1,
+        subgroup: lesson.subgroup === 1 || lesson.subgroup === 2 ? lesson.subgroup : null,
+        trackNumber: lesson.track_number,
+      },
+      selectedParallel
+    );
+    if (!ok) {
+      return false;
+    }
   }
   if (lesson.is_elective === 1) {
     if (!lesson.elective_key) return false;
@@ -315,6 +360,167 @@ function formatSummaryLine(counts: AttendanceSummaryCounts): string {
   return parts.join(', ') + '.';
 }
 
+function filterLessonsForPush<
+  T extends {
+    lesson_id: string;
+    lesson_date: string | null;
+    day_of_week?: number;
+    pair_number?: number;
+    subgroup: number | null;
+    subject: string;
+    teacher?: string | null;
+    room?: string | null;
+    is_elective?: number;
+    elective_key?: string | null;
+    track_number?: number | null;
+    week_type?: string | null;
+    status?: string;
+  }
+>(
+  lessons: readonly T[],
+  row: Pick<
+    ActiveSubscriptionRow,
+    | 'university_id'
+    | 'group_id'
+    | 'department'
+    | 'subgroup'
+    | 'elective_course'
+    | 'selected_electives'
+    | 'selected_track'
+    | 'selected_parallel_groups'
+  >,
+  weekParity?: 'numerator' | 'denominator'
+): T[] {
+  // 1. Apply non-parallel filters first (subgroup, department, cancelled, track, elective, week_type)
+  const baseRowWithoutParallel = { ...row, selected_parallel_groups: null };
+  const baseFiltered = lessons.filter((l) =>
+    matchesStudentLessonProfile(l, baseRowWithoutParallel, weekParity)
+  );
+  const selectedParallel = parseSelectedParallelGroupsJson(row.selected_parallel_groups);
+
+  // 2. Group potential parallel candidates by (date|dow, pair_number, dimKey)
+  const slotGroups = new Map<string, T[]>();
+  const slotOrder: Array<{ key: string; single?: T }> = [];
+  const seenSlots = new Set<string>();
+
+  for (const lesson of baseFiltered) {
+    const isCandidate =
+      lesson.is_elective !== 1 &&
+      lesson.subgroup === null &&
+      (lesson.track_number === undefined || lesson.track_number === null);
+    if (!isCandidate || lesson.pair_number === undefined) {
+      slotOrder.push({ key: `single:${lesson.lesson_id}:${lesson.lesson_date ?? ''}`, single: lesson });
+      continue;
+    }
+    const dimKey = computeParallelDimensionKey(lesson.subject);
+    const slotKey = `${lesson.lesson_date ?? `d${lesson.day_of_week ?? 0}`}|${lesson.pair_number}|${dimKey}`;
+    let bucket = slotGroups.get(slotKey);
+    if (!bucket) {
+      bucket = [];
+      slotGroups.set(slotKey, bucket);
+    }
+    bucket.push(lesson);
+    if (!seenSlots.has(slotKey)) {
+      seenSlots.add(slotKey);
+      slotOrder.push({ key: slotKey });
+    }
+  }
+
+  // 3. Resolve each slot safely:
+  //    - Single lesson in slot: apply selectedParallel only if it belongs to a configured dim AND matches, else keep if general
+  //    - Multiple parallel lessons in same slot:
+  //      * If user has a valid selection matching >=1 lesson in this slot -> keep ONLY matching lessons
+  //      * If user has NO selection or a STALE selection (matches 0 lessons) -> collapse into 1 summary entry
+  //        so Push NEVER spams 10+ alternative notifications for unselected/stale subgroups!
+  const result: T[] = [];
+  for (const entry of slotOrder) {
+    if (entry.single) {
+      result.push(entry.single);
+      continue;
+    }
+    const bucket = slotGroups.get(entry.key) ?? [];
+    if (bucket.length <= 1) {
+      const only = bucket[0];
+      if (!only) continue;
+      if (selectedParallel) {
+        const dimKey = computeParallelDimensionKey(only.subject);
+        if (selectedParallel[dimKey]) {
+          // Only filter out if the same dimKey actually has a matching lesson elsewhere in this day
+          const anyMatchInDay = baseFiltered.some((l) =>
+            matchesParallelGroupSelection(
+              {
+                subject: l.subject,
+                teacher: l.teacher,
+                isElective: l.is_elective === 1,
+                subgroup: l.subgroup === 1 || l.subgroup === 2 ? l.subgroup : null,
+                trackNumber: l.track_number,
+              },
+              { [dimKey]: selectedParallel[dimKey]! }
+            ) && computeParallelDimensionKey(l.subject) === dimKey
+          );
+          if (
+            anyMatchInDay &&
+            !matchesParallelGroupSelection(
+              {
+                subject: only.subject,
+                teacher: only.teacher,
+                isElective: only.is_elective === 1,
+                subgroup: only.subgroup === 1 || only.subgroup === 2 ? only.subgroup : null,
+                trackNumber: only.track_number,
+              },
+              selectedParallel
+            )
+          ) {
+            continue;
+          }
+        }
+      }
+      result.push(only);
+      continue;
+    }
+
+    // Multiple parallel lessons in the same (date, pair_number, dimKey) slot
+    if (selectedParallel) {
+      const matched = bucket.filter((l) =>
+        matchesParallelGroupSelection(
+          {
+            subject: l.subject,
+            teacher: l.teacher,
+            isElective: l.is_elective === 1,
+            subgroup: l.subgroup === 1 || l.subgroup === 2 ? l.subgroup : null,
+            trackNumber: l.track_number,
+          },
+          selectedParallel
+        )
+      );
+      if (matched.length > 0 && matched.length < bucket.length) {
+        // Specific option or language variant matched cleanly
+        if (matched.length > 1) {
+          // Language-level ("усі викладачі") still has multiple teachers -> collapse to 1 notification per slot
+          const first = matched[0]!;
+          result.push({ ...first, teacher: null, room: null });
+        } else {
+          result.push(...matched);
+        }
+        continue;
+      }
+    }
+
+    // Unselected or stale selection on a multi-option parallel slot -> collapse to 1 clean notification
+    const rep = bucket[0]!;
+    const { baseSubject } = parseParallelSubject(rep.subject);
+    result.push({
+      ...rep,
+      lesson_id: `parallel_${computeParallelDimensionKey(rep.subject)}_p${rep.pair_number}`,
+      subject: `${baseSubject} (оберіть підгрупу)`,
+      teacher: null,
+      room: null,
+    });
+  }
+
+  return result;
+}
+
 export function evaluateNotificationsForUser(
   row: ActiveSubscriptionRow,
   local: LocalDateTimeParts,
@@ -326,11 +532,11 @@ export function evaluateNotificationsForUser(
   const candidates: CandidateNotification[] = [];
   const scheduleScope = `${row.university_id}:${row.group_id}:s${row.subgroup}`;
 
-  // Filter lessons by student's subgroup, track, week parity, and selected DVVS electives
+  // Filter lessons by student's subgroup, track, week parity, selected DVVS electives, and parallel subgroups
   const weekParity = getWeekParityFromIso(local.isoDate);
-  const myTodayLessons = todayLessons
-    .filter((l) => matchesStudentLessonProfile(l, row, weekParity))
-    .sort((a, b) => a.pair_number - b.pair_number || a.start_time.localeCompare(b.start_time));
+  const myTodayLessons = filterLessonsForPush(todayLessons, row, weekParity).sort(
+    (a, b) => a.pair_number - b.pair_number || a.start_time.localeCompare(b.start_time)
+  );
 
   // 1. Morning digest
   if (row.morning_enabled === 1) {
@@ -521,7 +727,7 @@ export async function runNotificationCron(
             np.evening_enabled, np.evening_time,
             np.friday_enabled, np.friday_time,
             sp.department, sp.elective_course, sp.selected_electives, sp.selected_track,
-            sp.revision, ug.schedule_source_type, ug.covered_from, ug.covered_to
+            sp.selected_parallel_groups, sp.revision, ug.schedule_source_type, ug.covered_from, ug.covered_to
      FROM push_subscriptions ps
      JOIN user_devices ud ON ud.id = ps.device_id AND ud.revoked_at IS NULL
      JOIN student_profiles sp ON sp.user_id = ps.user_id
@@ -571,6 +777,7 @@ export async function runNotificationCron(
         day_of_week?: number;
         subgroup: number | null;
         subject: string;
+        teacher?: string | null;
         is_elective?: number;
         elective_key?: string | null;
         track_number?: number | null;
@@ -580,7 +787,7 @@ export async function runNotificationCron(
       if (local.weekday === 5 && row.friday_enabled === 1) {
         const mondayIso = addDaysToIso(local.isoDate, -4);
         const weekRes = await env.DB.prepare(
-          `SELECT lesson_id, lesson_date, day_of_week, subgroup, subject, is_elective, elective_key, track_number, week_type, status
+          `SELECT lesson_id, lesson_date, day_of_week, subgroup, subject, teacher, is_elective, elective_key, track_number, week_type, status
            FROM schedule_entries
            WHERE group_id = ? AND (lesson_date BETWEEN ? AND ? OR lesson_date IS NULL)`
         )
@@ -591,6 +798,7 @@ export async function runNotificationCron(
             day_of_week?: number;
             subgroup: number | null;
             subject: string;
+            teacher?: string | null;
             is_elective?: number;
             elective_key?: string | null;
             track_number?: number | null;
@@ -602,9 +810,7 @@ export async function runNotificationCron(
         );
       }
 
-      const myTodayLessons = todayLessons.filter((l) =>
-        matchesStudentLessonProfile(l, row, todayParity)
-      );
+      const myTodayLessons = filterLessonsForPush(todayLessons, row, todayParity);
 
       let todaySummary: AttendanceSummaryCounts | undefined;
       const eveningMin = hhmmToMinutes(row.evening_time);

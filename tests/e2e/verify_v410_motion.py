@@ -73,7 +73,7 @@ def main() -> None:
             # Navigate to Settings (tall scrollable page)
             nav.get_by_role("button", name="Опції").click()
             page.wait_for_timeout(450)
-            expect(page.get_by_text("Uni Schedule v4.2.0")).to_be_visible()
+            expect(page.get_by_text("Uni Schedule v4.2.1")).to_be_visible()
             assert page.get_by_text("Graphite Glass").count() == 0, "Obsolete Graphite Glass text still present"
             assert page.get_by_text("uni-schedule 2.0").count() == 0, "Obsolete v2.0 text still present"
             print("PASS 2: Settings v4.1.0 branding clean & no glassmorphism on dock")

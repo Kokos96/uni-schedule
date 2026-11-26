@@ -683,4 +683,151 @@ describe('workers/api Stage 4 Web Push & Cron', () => {
     assert.equal(bothMorning.length, 1);
     assert.match(bothMorning[0]?.payload.body ?? '', /4 пари/);
   });
+
+  it('filters parallel language/teacher subgroups consistently with frontend selectedParallelGroups', async () => {
+    const {
+      computeParallelDimensionKey,
+      computeParallelOptionKey,
+    } = await import('../../../src/utils/parallelGroups');
+
+    const secondDim = computeParallelDimensionKey('Друга іноземна мова (німецька)');
+    const germanTeacherOpt = computeParallelOptionKey(
+      'Друга іноземна мова (німецька)',
+      'доц. Захаров Ю.М.'
+    );
+
+    const inaRow: ActiveSubscriptionRow = {
+      sub_id: 'sub-ina',
+      user_id: 'u-ina',
+      device_id: 'd-ina',
+      endpoint: 'https://push.example/ina',
+      p256dh: 'p',
+      auth: 'a',
+      university_id: 'lnu',
+      group_id: 'ІНА-35с',
+      subgroup: 1,
+      timezone: 'Europe/Kyiv',
+      morning_enabled: 1,
+      morning_time: '08:00',
+      before_lesson_enabled: 0,
+      before_lesson_minutes: 10,
+      before_end_enabled: 0,
+      before_end_minutes: 10,
+      evening_enabled: 0,
+      evening_time: '20:00',
+      friday_enabled: 0,
+      friday_time: '18:00',
+      selected_parallel_groups: JSON.stringify({ [secondDim]: germanTeacherOpt }),
+      revision: 2,
+    };
+
+    const mondayInaLessons: ScheduledLessonRow[] = [
+      {
+        lesson_id: 'ina-de-1',
+        lesson_date: '2026-11-23',
+        day_of_week: 1,
+        pair_number: 1,
+        start_time: '08:30',
+        end_time: '09:50',
+        subject: 'Друга іноземна мова (німецька)',
+        lesson_type: 'П',
+        teacher: 'доц. Захаров Ю.М.',
+        room: null,
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+      },
+      {
+        lesson_id: 'ina-es-1',
+        lesson_date: '2026-11-23',
+        day_of_week: 1,
+        pair_number: 1,
+        start_time: '08:30',
+        end_time: '09:50',
+        subject: 'Друга іноземна мова (іспанська)',
+        lesson_type: 'П',
+        teacher: 'доц. Іспанський І.І.',
+        room: null,
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+      },
+      {
+        lesson_id: 'ina-fr-1',
+        lesson_date: '2026-11-23',
+        day_of_week: 1,
+        pair_number: 1,
+        start_time: '08:30',
+        end_time: '09:50',
+        subject: 'Друга іноземна мова (французька)',
+        lesson_type: 'П',
+        teacher: 'доц. Французький Ф.Ф.',
+        room: null,
+        building: null,
+        subgroup: null,
+        is_elective: 0,
+      },
+      {
+        lesson_id: 'ina-phil-2',
+        lesson_date: '2026-11-23',
+        day_of_week: 1,
+        pair_number: 2,
+        start_time: '10:10',
+        end_time: '11:30',
+        subject: 'Філософія',
+        lesson_type: 'Л',
+        teacher: 'проф. Філософ Ф.Ф.',
+        room: '100/І',
+        building: 'Корпус І',
+        subgroup: null,
+        is_elective: 0,
+      },
+    ];
+
+    const morning = evaluateNotificationsForUser(
+      inaRow,
+      { isoDate: '2026-11-23', weekday: 1, minutesOfDay: 480 },
+      mondayInaLessons,
+      2
+    );
+    assert.equal(morning.length, 1);
+    assert.match(morning[0]?.payload.body ?? '', /2 пари/);
+    assert.match(morning[0]?.payload.body ?? '', /німецька/);
+    assert.doesNotMatch(morning[0]?.payload.body ?? '', /іспанська|французька/);
+
+    // Safety: when selected_parallel_groups is unset OR stale (replaced teacher),
+    // Push collapses parallel alternatives into 1 summary notification (no 10x spam)
+    // while keeping mandatory general lessons intact.
+    const unconfiguredRow: ActiveSubscriptionRow = {
+      ...inaRow,
+      selected_parallel_groups: null,
+      before_lesson_enabled: 1,
+      before_lesson_minutes: 10,
+    };
+    const beforeLessonUnconfigured = evaluateNotificationsForUser(
+      unconfiguredRow,
+      { isoDate: '2026-11-23', weekday: 1, minutesOfDay: 500 }, // 08:20 (10 min before 08:30)
+      mondayInaLessons,
+      2
+    );
+    assert.equal(
+      beforeLessonUnconfigured.length,
+      1,
+      'Must send at most 1 collapsed reminder for unselected parallel slot, not 3'
+    );
+    assert.match(beforeLessonUnconfigured[0]?.payload.body ?? '', /оберіть підгрупу/);
+
+    const staleTeacherRow: ActiveSubscriptionRow = {
+      ...unconfiguredRow,
+      selected_parallel_groups: JSON.stringify({ [secondDim]: 'opt_replaced_teacher' }),
+    };
+    const morningStale = evaluateNotificationsForUser(
+      staleTeacherRow,
+      { isoDate: '2026-11-23', weekday: 1, minutesOfDay: 480 },
+      mondayInaLessons,
+      2
+    );
+    assert.equal(morningStale.length, 1);
+    assert.match(morningStale[0]?.payload.body ?? '', /2 пари/);
+  });
 });

@@ -16,6 +16,12 @@ import type {
 } from '../types';
 import { formatIsoDate, getScheduleDayNumber } from '../utils/date';
 import {
+  detectParallelGroupDimensions,
+  resolveActiveParallelSelections,
+  type ParallelGroupDimension,
+  type ParallelSelectionMap,
+} from '../utils/parallelGroups';
+import {
   classroomsData,
   classroomsMap as defaultClassroomsMap,
   createClassroomsMap,
@@ -69,6 +75,11 @@ export interface ScheduleSourceState {
   datedLessonsByIso: Record<string, Lesson[]> | null;
   availableElectives: Array<{ key: string; subject: string }>;
   availableTracks: Array<{ number: number; subjects: string[] }>;
+  availableParallelGroups: ParallelGroupDimension[];
+  unconfiguredParallelGroups: ParallelGroupDimension[];
+  staleParallelGroups: ParallelGroupDimension[];
+  partialParallelGroups: ParallelGroupDimension[];
+  effectiveParallelSelections: ParallelSelectionMap | undefined;
   hasSubgroups: boolean;
   hasDepartments: boolean;
   isUsingCustomGroup: boolean;
@@ -77,6 +88,7 @@ export interface ScheduleSourceState {
   syncError: string | null;
   syncWarnings: string[];
   getLessonsForDate: (date: Date, parity: WeekParity) => Lesson[];
+  getUnfilteredParallelLessonsForDate: (date: Date, parity: WeekParity) => Lesson[];
   getDateAvailability: (date: Date) => ScheduleDateAvailability;
   activateGroupSchedule: (
     selection: StudentSelection,
@@ -183,6 +195,31 @@ export function useScheduleSource(
       .sort((a, b) => a.number - b.number);
   }, [hasMatchingCache, cachedSchedule]);
 
+  const availableParallelGroups = useMemo(() => {
+    if (!hasMatchingCache || !cachedSchedule) return [];
+    return detectParallelGroupDimensions(cachedSchedule.lessons, {
+      universityId: cachedSchedule.universityId,
+      groupId: cachedSchedule.groupId,
+    });
+  }, [hasMatchingCache, cachedSchedule]);
+
+  const parallelState = useMemo(
+    () =>
+      resolveActiveParallelSelections(
+        availableParallelGroups,
+        settings.selectedParallelGroups
+      ),
+    [availableParallelGroups, settings.selectedParallelGroups]
+  );
+
+  const effectiveFilterSettings = useMemo(
+    () => ({
+      ...settings,
+      selectedParallelGroups: parallelState.effectiveSelections,
+    }),
+    [settings, parallelState.effectiveSelections]
+  );
+
   const getLessonsForDate = useCallback(
     (date: Date, parity: WeekParity): Lesson[] => {
       if (bundle) {
@@ -192,19 +229,44 @@ export function useScheduleSource(
           cachedSchedule?.sourceType === 'dated' ||
           Object.keys(bundle.datedLessonsByIso).length > 0;
         if (dated) {
-          return filterLessons(dated, settings, isDatedSource ? undefined : parity);
+          return filterLessons(dated, effectiveFilterSettings, isDatedSource ? undefined : parity);
         }
         // LNU supplies an exact-date calendar. A missing date is never a weekly recurrence.
         if (isDatedSource) {
           return [];
         }
         const dayNum = getScheduleDayNumber(date);
-        return filterLessons(getDayLessons(dayNum, bundle.schedule), settings, parity);
+        return filterLessons(getDayLessons(dayNum, bundle.schedule), effectiveFilterSettings, parity);
       }
 
       if (!isBuiltin) return [];
       const dayNum = getScheduleDayNumber(date);
-      return filterLessons(getDayLessons(dayNum, scheduleData), settings, parity);
+      return filterLessons(getDayLessons(dayNum, scheduleData), effectiveFilterSettings, parity);
+    },
+    [bundle, cachedSchedule, isBuiltin, effectiveFilterSettings]
+  );
+
+  const getUnfilteredParallelLessonsForDate = useCallback(
+    (date: Date, parity: WeekParity): Lesson[] => {
+      const withoutParallel = { ...settings, selectedParallelGroups: undefined };
+      if (bundle) {
+        const iso = formatIsoDate(date);
+        const dated = bundle.datedLessonsByIso[iso];
+        const isDatedSource =
+          cachedSchedule?.sourceType === 'dated' ||
+          Object.keys(bundle.datedLessonsByIso).length > 0;
+        if (dated) {
+          return filterLessons(dated, withoutParallel, isDatedSource ? undefined : parity);
+        }
+        if (isDatedSource) {
+          return [];
+        }
+        const dayNum = getScheduleDayNumber(date);
+        return filterLessons(getDayLessons(dayNum, bundle.schedule), withoutParallel, parity);
+      }
+      if (!isBuiltin) return [];
+      const dayNum = getScheduleDayNumber(date);
+      return filterLessons(getDayLessons(dayNum, scheduleData), withoutParallel, parity);
     },
     [bundle, cachedSchedule, isBuiltin, settings]
   );
@@ -433,6 +495,11 @@ export function useScheduleSource(
     datedLessonsByIso: bundle ? bundle.datedLessonsByIso : null,
     availableElectives,
     availableTracks,
+    availableParallelGroups,
+    unconfiguredParallelGroups: parallelState.unconfiguredDimensions,
+    staleParallelGroups: parallelState.staleDimensions,
+    partialParallelGroups: parallelState.partialDimensions,
+    effectiveParallelSelections: parallelState.effectiveSelections,
     hasSubgroups: isBuiltin || Boolean(hasMatchingCache && cachedSchedule?.lessons.some((lesson) => lesson.subgroup !== undefined)),
     isUsingCustomGroup: Boolean(bundle),
     syncStatus,
@@ -440,6 +507,7 @@ export function useScheduleSource(
     syncError,
     syncWarnings: hasMatchingCache ? (cachedSchedule?.warnings ?? []) : [],
     getLessonsForDate,
+    getUnfilteredParallelLessonsForDate,
     getDateAvailability,
     activateGroupSchedule,
     syncGroupSchedule,

@@ -118,9 +118,17 @@ class MockD1Database {
           const userId = bound[0] as string;
           const prof = db.student_profiles.get(userId);
           if (prof) results = [prof];
-        } else if (normalized.startsWith('SELECT revision, source_mode FROM student_profiles WHERE user_id = ?')) {
+        } else if (normalized.startsWith('SELECT revision, source_mode')) {
           const prof = db.student_profiles.get(bound[0] as string);
-          if (prof) results = [{ revision: prof.revision ?? 0, source_mode: prof.source_mode ?? 'live' }];
+          if (prof) {
+            results = [{
+              revision: prof.revision ?? 0,
+              source_mode: prof.source_mode ?? 'live',
+              university_id: prof.university_id,
+              group_id: prof.group_id,
+              selected_parallel_groups: prof.selected_parallel_groups ?? null,
+            }];
+          }
         } else if (normalized.startsWith('SELECT revision FROM student_profiles WHERE user_id = ?')) {
           const prof = db.student_profiles.get(bound[0] as string);
           if (prof) results = [{ revision: prof.revision ?? 0 }];
@@ -206,7 +214,7 @@ class MockD1Database {
             changes = 1;
           }
         } else if (normalized.startsWith('INSERT INTO student_profiles')) {
-          const [user_id, university_id, faculty_id, faculty_name, course, group_id, group_name, subgroup, elective_course, timezone, updated_at, department, selected_electives, selected_track, source_mode, expected_revision] = bound;
+          const [user_id, university_id, faculty_id, faculty_name, course, group_id, group_name, subgroup, elective_course, timezone, updated_at, department, selected_electives, selected_track, selected_parallel_groups, source_mode, expected_revision] = bound;
           const previous = db.student_profiles.get(user_id as string);
           if (!previous || previous.revision === expected_revision) {
             db.student_profiles.set(user_id as string, {
@@ -224,6 +232,7 @@ class MockD1Database {
               department,
               selected_electives,
               selected_track,
+              selected_parallel_groups,
               source_mode,
               revision: (previous?.revision as number ?? 0) + 1,
             });
@@ -1109,5 +1118,189 @@ describe('workers/api Stage 3 endpoints', () => {
       strictEnv
     );
     assert.equal(strictRes.status, 500);
+  });
+
+  it('persists and validates selectedParallelGroups on PUT/GET /api/profile', async () => {
+    const db = new MockD1Database();
+    const env = makeEnv(db);
+    const regRes = await worker.fetch(
+      new Request('https://api.test/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceName: 'InaDevice' }),
+      }),
+      env
+    );
+    assert.equal(regRes.status, 201);
+    const { syncToken } = (await regRes.json()) as { syncToken: string };
+
+    const putRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: 0,
+          universityId: 'lnu',
+          facultyId: '1007',
+          facultyName: 'Факультет іноземних мов',
+          course: 3,
+          groupId: 'ІНА-35с',
+          groupName: 'ІНА-35с',
+          subgroup: 1,
+          electiveCourse: 'freelance',
+          selectedElectives: [],
+          selectedParallelGroups: {
+            pg_first: 'opt_teacher1',
+            pg_second: 'var_german',
+          },
+          timezone: 'Europe/Kyiv',
+        }),
+      }),
+      env
+    );
+    assert.equal(putRes.status, 200);
+    const putData = (await putRes.json()) as {
+      profile: { selectedParallelGroups?: Record<string, string>; revision: number };
+    };
+    assert.deepEqual(putData.profile.selectedParallelGroups, {
+      pg_first: 'opt_teacher1',
+      pg_second: 'var_german',
+    });
+
+    const getRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        headers: { Authorization: `Bearer ${syncToken}` },
+      }),
+      env
+    );
+    assert.equal(getRes.status, 200);
+    const getData = (await getRes.json()) as {
+      profile: { selectedParallelGroups?: Record<string, string> };
+    };
+    assert.deepEqual(getData.profile.selectedParallelGroups, {
+      pg_first: 'opt_teacher1',
+      pg_second: 'var_german',
+    });
+
+    // Rejects invalid key prefix
+    const badRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: putData.profile.revision,
+          universityId: 'lnu',
+          facultyId: '1007',
+          groupId: 'ІНА-35с',
+          groupName: 'ІНА-35с',
+          selectedParallelGroups: { invalid_key: 'opt_1' },
+        }),
+      }),
+      env
+    );
+    assert.equal(badRes.status, 400);
+
+    // Backward compatibility: older v4.2.0 client omits `selectedParallelGroups` while keeping same group -> PRESERVED!
+    const v420Res = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: putData.profile.revision,
+          universityId: 'lnu',
+          facultyId: '1007',
+          groupId: 'ІНА-35с',
+          groupName: 'ІНА-35с',
+          subgroup: 2,
+        }),
+      }),
+      env
+    );
+    assert.equal(v420Res.status, 200);
+    const v420Data = (await v420Res.json()) as {
+      profile: { selectedParallelGroups?: Record<string, string>; revision: number; subgroup: number };
+    };
+    assert.equal(v420Data.profile.subgroup, 2);
+    assert.deepEqual(v420Data.profile.selectedParallelGroups, {
+      pg_first: 'opt_teacher1',
+      pg_second: 'var_german',
+    });
+
+    // Explicit empty object `{}` from v4.2.1 client intentionally clears parallel selections
+    const clearRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${syncToken}`,
+        },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: v420Data.profile.revision,
+          universityId: 'lnu',
+          facultyId: '1007',
+          groupId: 'ІНА-35с',
+          groupName: 'ІНА-35с',
+          selectedParallelGroups: {},
+        }),
+      }),
+      env
+    );
+    assert.equal(clearRes.status, 200);
+    const clearData = (await clearRes.json()) as {
+      profile: { selectedParallelGroups?: Record<string, string>; revision: number };
+    };
+    assert.equal(clearData.profile.selectedParallelGroups, undefined);
+
+    // Group change from v4.2.0 client (field omitted) clears previous group's parallel selections
+    const restoreRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: clearData.profile.revision,
+          universityId: 'lnu',
+          facultyId: '1007',
+          groupId: 'ІНА-35с',
+          groupName: 'ІНА-35с',
+          selectedParallelGroups: { pg_first: 'opt_teacher1' },
+        }),
+      }),
+      env
+    );
+    const restoreRev = ((await restoreRes.json()) as { profile: { revision: number } }).profile.revision;
+    const changeGroupRes = await worker.fetch(
+      new Request('https://api.test/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${syncToken}` },
+        body: JSON.stringify({
+          sourceMode: 'live',
+          expectedRevision: restoreRev,
+          universityId: 'lnu',
+          facultyId: '1005',
+          groupId: 'ФЕП-33с',
+          groupName: 'ФЕП-33с',
+        }),
+      }),
+      env
+    );
+    assert.equal(changeGroupRes.status, 200);
+    const changeGroupData = (await changeGroupRes.json()) as {
+      profile: { selectedParallelGroups?: Record<string, string> };
+    };
+    assert.equal(changeGroupData.profile.selectedParallelGroups, undefined);
   });
 });

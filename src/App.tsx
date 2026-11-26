@@ -202,11 +202,19 @@ const AppContent: React.FC = () => {
     [selectedDate, weekParity, scheduleSource]
   );
 
+  const selectedDayUnfilteredParallelLessons = useMemo(
+    () => scheduleSource.getUnfilteredParallelLessonsForDate(selectedDate, weekParity),
+    [selectedDate, weekParity, scheduleSource]
+  );
+
   const weekGrid = useMemo(
     () =>
       buildWeekGrid(
         scheduleSource.schedule,
-        settings,
+        {
+          ...settings,
+          selectedParallelGroups: scheduleSource.effectiveParallelSelections,
+        },
         weekDates,
         weekParity,
         scheduleSource.datedLessonsByIso ?? undefined
@@ -214,6 +222,7 @@ const AppContent: React.FC = () => {
     [
       scheduleSource.schedule,
       scheduleSource.datedLessonsByIso,
+      scheduleSource.effectiveParallelSelections,
       settings,
       weekDates,
       weekParity,
@@ -495,9 +504,13 @@ const AppContent: React.FC = () => {
               onNextDay={handleNextDay}
               onResetToToday={handleResetToToday}
               lessons={selectedDayLessons}
+              unfilteredParallelLessons={selectedDayUnfilteredParallelLessons}
               dateAvailability={scheduleSource.getDateAvailability(selectedDate)}
               todayAvailability={scheduleSource.getDateAvailability(todayDate)}
               needsElectiveSelection={needsElectiveSelection}
+              unconfiguredParallelGroups={scheduleSource.unconfiguredParallelGroups}
+              staleParallelGroups={scheduleSource.staleParallelGroups}
+              partialParallelGroups={scheduleSource.partialParallelGroups}
               todayLessons={todayLessons}
               currentPair={currentPair}
               settings={settings}
@@ -578,6 +591,7 @@ const AppContent: React.FC = () => {
                 isUsingCustomGroup={scheduleSource.isUsingCustomGroup}
                 availableElectives={scheduleSource.availableElectives}
                 availableTracks={scheduleSource.availableTracks}
+                availableParallelGroups={scheduleSource.availableParallelGroups}
                 hasSubgroups={scheduleSource.hasSubgroups}
                 hasDepartments={scheduleSource.hasDepartments}
               />

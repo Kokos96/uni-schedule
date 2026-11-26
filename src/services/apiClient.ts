@@ -120,6 +120,7 @@ export async function syncProfileToBackend(
       electiveCourse: settings.electiveCourse,
       selectedElectives: settings.selectedElectives ?? [],
       selectedTrack: settings.selectedTrack ?? null,
+      selectedParallelGroups: settings.selectedParallelGroups ?? {},
       timezone,
     }),
   });
@@ -159,6 +160,7 @@ export interface RemoteStudentProfile {
   electiveCourse: string;
   selectedElectives?: string[];
   selectedTrack?: number;
+  selectedParallelGroups?: Record<string, string>;
 }
 
 export type ProfileReadResult =

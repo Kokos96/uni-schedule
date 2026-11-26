@@ -29,14 +29,20 @@ export interface UserSettings {
   selectedElectives?: string[];
   /** Selected numbered specialization/department track (e.g. 1 or 2) */
   selectedTrack?: number;
+  /** Selected parallel subgroup/language options keyed by dimensionKey (`pg_...` -> `opt_...` | `var_...`) */
+  selectedParallelGroups?: Record<string, string>;
 }
 
 export type ResolvedUserSettings = Required<
-  Omit<UserSettings, 'universityProfile' | 'selectedElectives' | 'selectedTrack'>
+  Omit<
+    UserSettings,
+    'universityProfile' | 'selectedElectives' | 'selectedTrack' | 'selectedParallelGroups'
+  >
 > & {
   universityProfile?: StudentSelection;
   selectedElectives?: string[];
   selectedTrack?: number;
+  selectedParallelGroups?: Record<string, string>;
 };
 
 export interface Lesson {
@@ -55,6 +61,12 @@ export interface Lesson {
   trackNumber?: number;
   groupLabel?: string;
   departments?: DepartmentType[]; // Які кафедри відвідують пару
+  /** Parallel combined-group dimension key (`pg_...`) when the schedule has overlapping sections. */
+  parallelGroupKey?: string;
+  /** Specific parallel option key (`opt_...`) for `(subject, teacher)`. */
+  parallelOptionKey?: string;
+  /** Optional parenthetical variant key (`var_...`), e.g. language variant. */
+  parallelVariantKey?: string;
 }
 
 export interface ScheduleDay {

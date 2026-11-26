@@ -21,6 +21,7 @@ export function profileSignature(settings: ResolvedUserSettings): string {
     electiveCourse: settings.electiveCourse,
     selectedElectives: settings.selectedElectives ?? [],
     selectedTrack: settings.selectedTrack ?? null,
+    selectedParallelGroups: settings.selectedParallelGroups ?? {},
   });
 }
 

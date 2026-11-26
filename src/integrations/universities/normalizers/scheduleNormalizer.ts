@@ -7,6 +7,13 @@ import type {
   WeekType,
 } from '../../../types';
 import { DAY_NAMES_UA_FULL, parseIsoDate } from '../../../utils/date';
+import {
+  computeParallelDimensionKey,
+  computeParallelOptionKey,
+  computeParallelVariantKey,
+  detectParallelGroupDimensions,
+  isParallelLessonCandidate,
+} from '../../../utils/parallelGroups';
 import { resolveDepartmentsForLesson } from '../../../data/academicProgramRegistry';
 import type { NormalizedSchedule, ScheduleLesson } from '../types';
 
@@ -101,6 +108,12 @@ export function toAppScheduleBundle(
   const classroomsById = new Map<string, Classroom>();
   const daysMap = new Map<number, Map<string, Lesson>>();
   const datedLessonsByIso: Record<string, Lesson[]> = {};
+  const parallelDimKeys = new Set(
+    detectParallelGroupDimensions(normalized.lessons, {
+      universityId: normalized.universityId,
+      groupId: normalized.groupId,
+    }).map((dim) => dim.key)
+  );
 
   for (let d = 1; d <= 7; d += 1) {
     daysMap.set(d, new Map());
@@ -152,6 +165,15 @@ export function toAppScheduleBundle(
         subgroup: item.subgroup,
       });
 
+    const depts = resolveDepartmentsForLesson(normalized.universityId, normalized.groupId, item.subject);
+    const dimKey =
+      !depts &&
+      isParallelLessonCandidate(item, normalized.universityId, normalized.groupId)
+        ? computeParallelDimensionKey(item.subject)
+        : undefined;
+    const isParallelDim = Boolean(dimKey && parallelDimKeys.has(dimKey));
+    const parallelVariantKey = isParallelDim ? computeParallelVariantKey(item.subject) : undefined;
+
     const appLesson: Lesson = {
       id: lessonId,
       order: item.number,
@@ -163,14 +185,18 @@ export function toAppScheduleBundle(
       classroomId,
       weekType: item.weekType ?? 'both',
       ...(item.subgroup ? { subgroup: item.subgroup } : {}),
-      ...(() => {
-        const depts = resolveDepartmentsForLesson(normalized.universityId, normalized.groupId, item.subject);
-        return depts ? { departments: depts } : {};
-      })(),
+      ...(depts ? { departments: depts } : {}),
       ...(item.isElective ? { isElective: true } : {}),
       ...(item.electiveKey ? { electiveKey: item.electiveKey } : {}),
       ...(item.trackNumber !== undefined ? { trackNumber: item.trackNumber } : {}),
       ...(item.groupLabel ? { groupLabel: item.groupLabel } : {}),
+      ...(isParallelDim && dimKey
+        ? {
+            parallelGroupKey: dimKey,
+            parallelOptionKey: computeParallelOptionKey(item.subject, item.teacher),
+            ...(parallelVariantKey ? { parallelVariantKey } : {}),
+          }
+        : {}),
     };
 
     const dayBucket = daysMap.get(item.dayOfWeek);

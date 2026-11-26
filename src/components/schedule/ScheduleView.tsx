@@ -8,9 +8,11 @@ import {
   CaretLeft,
   CaretRight,
   Columns,
+  SlidersHorizontal,
 } from '@phosphor-icons/react';
 import type { CurrentPairState } from '../../hooks/useCurrentPair';
 import type { ScheduleDateAvailability } from '../../hooks/useScheduleSource';
+import type { ParallelGroupDimension } from '../../utils/parallelGroups';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import {
   REDUCED_MOTION_TRANSITION,
@@ -61,9 +63,13 @@ export interface ScheduleViewProps {
   onNextDay: () => void;
   onResetToToday: () => void;
   lessons: Lesson[];
+  unfilteredParallelLessons?: Lesson[];
   dateAvailability?: ScheduleDateAvailability;
   todayAvailability?: ScheduleDateAvailability;
   needsElectiveSelection?: boolean;
+  unconfiguredParallelGroups?: ParallelGroupDimension[];
+  staleParallelGroups?: ParallelGroupDimension[];
+  partialParallelGroups?: ParallelGroupDimension[];
   todayLessons?: Lesson[];
   currentPair: CurrentPairState;
   settings: ResolvedUserSettings;
@@ -108,9 +114,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onNextDay,
   onResetToToday,
   lessons,
+  unfilteredParallelLessons,
   dateAvailability = 'loaded',
   todayAvailability = 'loaded',
   needsElectiveSelection = false,
+  unconfiguredParallelGroups = [],
+  staleParallelGroups = [],
+  partialParallelGroups = [],
   todayLessons,
   currentPair,
   settings,
@@ -131,6 +141,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   const isDesktop = useIsDesktop();
   const reducedMotion = useAppReducedMotion();
   const [mobileMode, setMobileMode] = useState<DesktopScheduleMode>('day');
+  const [showAllParallelForDateIso, setShowAllParallelForDateIso] = useState<string | null>(null);
+
+  const isShowingAllParallelToday = showAllParallelForDateIso === selectedIso;
+  const hiddenParallelCount =
+    unfilteredParallelLessons && unfilteredParallelLessons.length > lessons.length
+      ? unfilteredParallelLessons.length - lessons.length
+      : 0;
+  const visibleDayLessons =
+    isShowingAllParallelToday && unfilteredParallelLessons
+      ? unfilteredParallelLessons
+      : lessons;
 
   const activeMode: DesktopScheduleMode = isDesktop
     ? settings.desktopScheduleMode
@@ -243,8 +264,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
       : undefined;
 
   const renderDayLessons = () => {
-    if (lessons.length === 0) {
+    if (visibleDayLessons.length === 0) {
       const unavailable = dateAvailability === 'outside_coverage' || dateAvailability === 'not_loaded';
+      const hasHiddenParallel = !unavailable && hiddenParallelCount > 0;
       return (
         <GlassCard variant="matte" padding="none">
           <EmptyState
@@ -259,11 +281,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             title={
               unavailable
                 ? settings.scheduleSourceMode === 'unconfigured' ? 'Оберіть розклад' : 'Розклад недоступний'
-                : needsElectiveSelection && !isWeekend
-                  ? 'Потрібно обрати ДВВС'
-                  : isWeekend
-                    ? 'Вихідний день'
-                    : 'Пар немає'
+                : hasHiddenParallel
+                  ? 'Пар обраної підгрупи немає'
+                  : needsElectiveSelection && !isWeekend
+                    ? 'Потрібно обрати ДВВС'
+                    : isWeekend
+                      ? 'Вихідний день'
+                      : 'Пар немає'
             }
             description={
               settings.scheduleSourceMode === 'unconfigured'
@@ -272,11 +296,13 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 ? 'Ця дата поза завантаженим періодом. Оновіть розклад групи в налаштуваннях.'
                 : dateAvailability === 'not_loaded'
                   ? 'Розклад обраної групи ще не завантажено. Відкрийте налаштування та синхронізуйте його.'
-                  : needsElectiveSelection && !isWeekend
-                    ? 'У завантаженому розкладі знайдено вибіркові дисципліни (ДВВС), але жодна ще не обрана.'
-                    : isWeekend
-                      ? 'Час перепочити або спокійно підготуватися до наступного тижня.'
-                      : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
+                  : hasHiddenParallel
+                    ? `У цей день є ${hiddenParallelCount} паралельних занять інших викладачів (можлива точкова заміна викладача).`
+                    : needsElectiveSelection && !isWeekend
+                      ? 'У завантаженому розкладі знайдено вибіркові дисципліни (ДВВС), але жодна ще не обрана.'
+                      : isWeekend
+                        ? 'Час перепочити або спокійно підготуватися до наступного тижня.'
+                        : 'У цей день за вашим профілем занять немає. Можна переглянути дедлайни або сусідній день.'
             }
             action={
               unavailable && onNavigateToSettings
@@ -284,24 +310,29 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                     label: 'Відкрити налаштування розкладу',
                     onClick: onNavigateToSettings,
                   }
-                : needsElectiveSelection && onNavigateToSettings
-                ? {
-                    label: 'Обрати ДВВС в Опціях',
-                    onClick: onNavigateToSettings,
-                  }
-                : !isToday
+                : hasHiddenParallel
                   ? {
-                      label: 'Повернутися на сьогодні',
-                      onClick: onResetToToday,
-                      icon: <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" />,
+                      label: `Показати всі підгрупи (${hiddenParallelCount})`,
+                      onClick: () => setShowAllParallelForDateIso(selectedIso),
                     }
-                  : onNavigateToDeadlines
+                  : needsElectiveSelection && onNavigateToSettings
+                  ? {
+                      label: 'Обрати ДВВС в Опціях',
+                      onClick: onNavigateToSettings,
+                    }
+                  : !isToday
                     ? {
-                        label: 'Переглянути дедлайни',
-                        onClick: onNavigateToDeadlines,
-                        icon: <ArrowRight className="h-3.5 w-3.5" weight="regular" />,
+                        label: 'Повернутися на сьогодні',
+                        onClick: onResetToToday,
+                        icon: <ArrowCounterClockwise className="h-3.5 w-3.5" weight="regular" />,
                       }
-                    : undefined
+                    : onNavigateToDeadlines
+                      ? {
+                          label: 'Переглянути дедлайни',
+                          onClick: onNavigateToDeadlines,
+                          icon: <ArrowRight className="h-3.5 w-3.5" weight="regular" />,
+                        }
+                      : undefined
             }
           />
         </GlassCard>
@@ -309,25 +340,56 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
     }
 
     return (
-      <StaggerList itemCount={lessons.length} className="space-y-3">
-        {lessons.map((lesson) => (
-          <StaggerCard key={lesson.id} interactive={false}>
-            <PairCard
-              lesson={lesson}
-              teacher={teachersMap.get(lesson.teacherId)}
-              classroom={classroomsMap.get(lesson.classroomId)}
-              isCurrent={activeLessonId === lesson.id}
-              attendanceStatus={getAttendanceStatus(lesson.id, selectedIso)}
-              onToggleAttendance={(status) =>
-                onToggleAttendance(lesson.id, selectedIso, status)
-              }
-              noteCount={selectedNoteCountMap.get(lesson.id) ?? 0}
-              activeDeadlineLabel={deadlineLabelByLessonId.get(lesson.id) ?? null}
-              onOpenNotes={() => onOpenNotes(lesson, selectedIso)}
-            />
-          </StaggerCard>
-        ))}
-      </StaggerList>
+      <div className="space-y-3">
+        {isShowingAllParallelToday && hiddenParallelCount > 0 && (
+          <div
+            data-testid="showing-all-parallel-banner"
+            className="flex items-center justify-between gap-2 rounded-xl border border-amber/35 bg-amber-soft/65 px-3.5 py-2 text-xs"
+          >
+            <span className="text-ink-secondary">
+              Показано всі паралельні підгрупи за цей день (для перевірки можливих замін)
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAllParallelForDateIso(null)}
+              className="shrink-0 font-semibold text-amber-fg hover:underline"
+            >
+              Моя підгрупа
+            </button>
+          </div>
+        )}
+        <StaggerList itemCount={visibleDayLessons.length} className="space-y-3">
+          {visibleDayLessons.map((lesson) => (
+            <StaggerCard key={lesson.id} interactive={false}>
+              <PairCard
+                lesson={lesson}
+                teacher={teachersMap.get(lesson.teacherId)}
+                classroom={classroomsMap.get(lesson.classroomId)}
+                isCurrent={activeLessonId === lesson.id}
+                attendanceStatus={getAttendanceStatus(lesson.id, selectedIso)}
+                onToggleAttendance={(status) =>
+                  onToggleAttendance(lesson.id, selectedIso, status)
+                }
+                noteCount={selectedNoteCountMap.get(lesson.id) ?? 0}
+                activeDeadlineLabel={deadlineLabelByLessonId.get(lesson.id) ?? null}
+                onOpenNotes={() => onOpenNotes(lesson, selectedIso)}
+              />
+            </StaggerCard>
+          ))}
+        </StaggerList>
+        {!isShowingAllParallelToday && hiddenParallelCount > 0 && (
+          <div className="flex justify-center pt-1">
+            <button
+              type="button"
+              data-testid="toggle-hidden-parallel-btn"
+              onClick={() => setShowAllParallelForDateIso(selectedIso)}
+              className="inline-flex min-h-[34px] items-center gap-1.5 rounded-xl border border-line bg-surface-elevated/60 px-3.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-amber/40 hover:text-amber-fg"
+            >
+              <span>Приховано паралельних підгруп: {hiddenParallelCount} · Перевірити заміни</span>
+            </button>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -417,6 +479,63 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           />
         </div>
       </div>
+
+      {(unconfiguredParallelGroups.length > 0 || staleParallelGroups.length > 0 || partialParallelGroups.length > 0) && (
+        <div
+          role="region"
+          aria-label="Налаштування паралельних підгруп"
+          data-testid="parallel-groups-banner"
+          className="flex flex-col gap-2.5 rounded-2xl border border-amber/35 bg-amber-soft/75 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <SlidersHorizontal
+              weight="duotone"
+              className="mt-0.5 h-4 w-4 shrink-0 text-amber-fg"
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              {staleParallelGroups.length > 0 ? (
+                <>
+                  <p className="text-xs font-semibold text-ink">
+                    Обрана підгрупа відсутня в актуальному розкладі ({staleParallelGroups.map((d) => d.label).join(', ')})
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-ink-secondary">
+                    Можлива заміна викладача — тимчасово показано всі варіанти, щоб не приховати ваші пари. Оновіть вибір.
+                  </p>
+                </>
+              ) : unconfiguredParallelGroups.length > 0 ? (
+                <>
+                  <p className="text-xs font-semibold text-ink">
+                    Показано всі паралельні підгрупи ({unconfiguredParallelGroups.map((d) => d.label).join(', ')})
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-ink-secondary">
+                    Оберіть свою мову та викладача у налаштуваннях профілю, щоб приховати чужі підгрупи.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold text-ink">
+                    Часткова фільтрація за мовою ({partialParallelGroups.map((d) => d.label).join(', ')})
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-ink-secondary">
+                    Показано кількох викладачів обраної мови. Для повної персоналізації оберіть свого викладача.
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          {onNavigateToSettings && (
+            <button
+              type="button"
+              onClick={onNavigateToSettings}
+              className="inline-flex min-h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber/45 bg-surface px-3 py-1.5 text-xs font-semibold text-amber-fg transition-colors hover:border-amber/70 active:scale-[0.98]"
+            >
+              <span>Обрати підгрупи</span>
+              <ArrowRight className="h-3.5 w-3.5" weight="regular" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Week Mode */}
       {activeMode === 'week' ? (

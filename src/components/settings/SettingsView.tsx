@@ -13,6 +13,7 @@ import type { AttendanceRecord, UserSettings } from '../../types';
 import type { UniScheduleBackupData } from '../../types/backup';
 import type { DeadlineItem, LessonNote } from '../../types/notes';
 import { getWeekParity } from '../../utils/date';
+import type { ParallelGroupDimension } from '../../utils/parallelGroups';
 import { MetaChip } from '../ui/Badge';
 import { EditorialUnderline } from '../ui/EditorialOrnaments';
 import { GlassCard } from '../ui/GlassCard';
@@ -48,6 +49,7 @@ export interface SettingsViewProps {
   isUsingCustomGroup?: boolean;
   availableElectives?: Array<{ key: string; subject: string }>;
   availableTracks?: Array<{ number: number; subjects: string[] }>;
+  availableParallelGroups?: ParallelGroupDimension[];
   hasSubgroups?: boolean;
   hasDepartments?: boolean;
 }
@@ -76,6 +78,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   isUsingCustomGroup = false,
   availableElectives = [],
   availableTracks = [],
+  availableParallelGroups = [],
   hasSubgroups = true,
   hasDepartments = false,
 }) => {
@@ -145,6 +148,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             isUsingCustomGroup={isUsingCustomGroup}
             availableElectives={availableElectives}
             availableTracks={availableTracks}
+            availableParallelGroups={availableParallelGroups}
             hasSubgroups={hasSubgroups}
             hasDepartments={hasDepartments}
           />
@@ -201,7 +205,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
               <div className="min-w-0">
                 <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
-                  Uni Schedule v4.2.0
+                  Uni Schedule v4.2.1
                 </h3>
                 <p className="mt-0.5 text-xs text-ink-secondary">
                   Розклад занять, відвідуваність, нотатки та дедлайни (PWA)

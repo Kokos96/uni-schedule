@@ -20,7 +20,12 @@ export { getWeekParity };
 
 export type LessonFilterProfile = Pick<
   UserSettings,
-  'subgroup' | 'department' | 'electiveCourse' | 'selectedElectives' | 'selectedTrack'
+  | 'subgroup'
+  | 'department'
+  | 'electiveCourse'
+  | 'selectedElectives'
+  | 'selectedTrack'
+  | 'selectedParallelGroups'
 >;
 
 export interface TimeSlot {
@@ -143,6 +148,16 @@ export function filterLessons(
         lesson.trackNumber !== settings.selectedTrack
       ) {
         return false;
+      }
+      if (lesson.parallelGroupKey && settings.selectedParallelGroups) {
+        const chosen = settings.selectedParallelGroups[lesson.parallelGroupKey];
+        if (
+          chosen &&
+          lesson.parallelOptionKey !== chosen &&
+          lesson.parallelVariantKey !== chosen
+        ) {
+          return false;
+        }
       }
       if (lesson.isElective) {
         if (lesson.electiveKey?.startsWith('el_')) {

@@ -365,7 +365,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
       onUpdate({
         universityProfile: selection,
         scheduleSourceMode: 'manual',
-        ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+        ...(groupChanged
+          ? { selectedElectives: [], selectedTrack: undefined, selectedParallelGroups: undefined }
+          : {}),
       });
       setActivatedGroupName(selection.groupName);
       toast.info('Обрано ручний режим для іншого університету');
@@ -397,7 +399,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           onUpdate({
             universityProfile: committedSelection,
             scheduleSourceMode: 'live',
-            ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+            ...(groupChanged
+          ? { selectedElectives: [], selectedTrack: undefined, selectedParallelGroups: undefined }
+          : {}),
           });
           setActivatedGroupName(committedSelection.groupName);
           toast.success(`Розклад групи ${committedSelection.groupName} активовано`);
@@ -413,7 +417,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
           onUpdate({
             universityProfile: selection,
             scheduleSourceMode: 'live',
-            ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+            ...(groupChanged
+          ? { selectedElectives: [], selectedTrack: undefined, selectedParallelGroups: undefined }
+          : {}),
           });
           setActivatedGroupName(selection.groupName);
           toast.success(`Розклад групи ${selection.groupName} активовано`);
@@ -427,7 +433,9 @@ export const UniversitySelectorCard: React.FC<UniversitySelectorCardProps> = ({
         onUpdate({
           universityProfile: selection,
           scheduleSourceMode: 'live',
-          ...(groupChanged ? { selectedElectives: [], selectedTrack: undefined } : {}),
+          ...(groupChanged
+          ? { selectedElectives: [], selectedTrack: undefined, selectedParallelGroups: undefined }
+          : {}),
         });
         setActivatedGroupName(selection.groupName);
       }
