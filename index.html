@@ -32,6 +32,7 @@
               : (pref === 'light' ? 'light' : 'dark');
           var root = document.documentElement;
           root.setAttribute('data-theme', resolved);
+          root.style.backgroundColor = resolved === 'dark' ? '#242522' : '#F4F1EA';
           if (resolved === 'dark') {
             root.classList.add('dark');
           } else {
@@ -39,6 +40,7 @@
           }
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.style.backgroundColor = '#242522';
           document.documentElement.classList.add('dark');
         }
       })();

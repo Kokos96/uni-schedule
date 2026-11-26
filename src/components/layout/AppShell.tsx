@@ -1,9 +1,9 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { useAppReducedMotion } from '../../lib/motion';
 import { Desktop, Moon, Sun, type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import type { ResolvedUserSettings, ThemeMode } from '../../types';
 import { SidebarNav, type TabType } from './SidebarNav';
+import type { LaunchPhase } from './AppSplash';
 
 export interface AppShellProps {
   currentTab: TabType;
@@ -18,6 +18,7 @@ export interface AppShellProps {
   banner?: React.ReactNode;
   bottomNav?: React.ReactNode;
   launchRevealed?: boolean;
+  launchPhase?: LaunchPhase;
   children: React.ReactNode;
 }
 
@@ -48,12 +49,18 @@ export const AppShell: React.FC<AppShellProps> = ({
   banner,
   bottomNav,
   launchRevealed = true,
+  launchPhase = 'done',
   children,
 }) => {
   const reducedMotion = useAppReducedMotion();
   const resolvedTitle = pageTitle ?? DEFAULT_TAB_TITLES[currentTab];
   const themeMeta = THEME_META[settings.theme];
   const ThemeIcon = themeMeta.Icon;
+  const isPreReveal =
+    !reducedMotion &&
+    (launchPhase === 'sunrise' || launchPhase === 'date' || launchPhase === 'calendar');
+  const isWaveRevealing = !reducedMotion && launchPhase === 'reveal';
+  const isWaveLayerActive = isPreReveal || isWaveRevealing;
 
   return (
     <div className="min-h-screen bg-canvas text-ink selection:bg-amber/25 selection:text-ink">
@@ -76,20 +83,25 @@ export const AppShell: React.FC<AppShellProps> = ({
         liveStatusLabel={liveStatusLabel}
       />
 
-      {/* Main Content Area */}
-      <div className="lg:pl-64 xl:pl-[272px] min-h-screen flex flex-col">
+      {/* Main Content Area — during Hybrid #25 `reveal` phase, rises bottom-up inside a convex dome
+          clip-path above the splash layer (single continuous scene, zero cheap opacity crossfade). */}
+      <div
+        style={
+          isPreReveal
+            ? { clipPath: 'ellipse(125% 0% at 50% 100%)', willChange: 'clip-path' }
+            : isWaveRevealing
+              ? { animation: 'hybrid25-dome-reveal 720ms cubic-bezier(0.33, 1, 0.68, 1) forwards', willChange: 'clip-path' }
+              : undefined
+        }
+        className={`lg:pl-64 xl:pl-[272px] min-h-screen flex flex-col bg-canvas ${
+          isWaveLayerActive ? 'relative z-[105]' : ''
+        }`}
+      >
         {banner}
 
-        <motion.main
+        <main
           id="main-content"
           aria-hidden={!launchRevealed || undefined}
-          initial={reducedMotion ? false : { opacity: 0, y: 16, scale: 0.985 }}
-          animate={{
-            opacity: launchRevealed ? 1 : 0,
-            y: launchRevealed ? 0 : 16,
-            scale: launchRevealed ? 1 : 0.985,
-          }}
-          transition={reducedMotion ? { duration: 0.05 } : { duration: 0.54, ease: [0.22, 1, 0.36, 1] }}
           tabIndex={-1}
           className={`relative flex-1 w-full max-w-7xl mx-auto px-3 xs:px-4 lg:px-8 pt-[max(1rem,calc(env(safe-area-inset-top)+0.5rem))] pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pt-6 lg:pb-10 focus:outline-none ${
             launchRevealed ? '' : 'pointer-events-none'
@@ -112,7 +124,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           </div>
 
           {children}
-        </motion.main>
+        </main>
       </div>
 
       {/* Mobile / Tablet Bottom Dock Slot */}

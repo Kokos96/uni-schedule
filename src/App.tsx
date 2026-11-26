@@ -612,6 +612,7 @@ const AppContent: React.FC = () => {
       <AppSplash phase={launchPhase} onPhaseChange={setLaunchPhase} activeDate={selectedDate} />
       <AppShell
         launchRevealed={launchPhase === 'reveal' || launchPhase === 'settle' || launchPhase === 'done'}
+        launchPhase={launchPhase}
         currentTab={activeTab}
         onTabChange={handleTabChange}
         settings={settings}

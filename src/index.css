@@ -306,3 +306,13 @@ a,
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Hybrid #25 Signature Calendar Reveal — bottom-up convex dome handoff */
+@keyframes hybrid25-dome-reveal {
+  0% {
+    clip-path: ellipse(125% 0% at 50% 100%);
+  }
+  100% {
+    clip-path: ellipse(165% 142% at 50% 100%);
+  }
+}
