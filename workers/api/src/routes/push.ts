@@ -34,6 +34,8 @@ interface PreferenceRow {
   friday_enabled: number;
   friday_time: string;
   schedule_change_enabled?: number;
+  release_updates_enabled?: number;
+  release_updates_enabled_at?: string | null;
   updated_at: string;
 }
 
@@ -50,6 +52,7 @@ const DEFAULT_PREFERENCES = {
   fridayEnabled: true,
   fridayTime: '18:00',
   scheduleChangeEnabled: true,
+  releaseUpdatesEnabled: false,
 };
 
 function mapPreferenceRow(row: PreferenceRow) {
@@ -66,6 +69,7 @@ function mapPreferenceRow(row: PreferenceRow) {
     fridayEnabled: row.friday_enabled === 1,
     fridayTime: row.friday_time,
     scheduleChangeEnabled: row.schedule_change_enabled !== 0,
+    releaseUpdatesEnabled: row.release_updates_enabled === 1,
     updatedAt: row.updated_at,
   };
 }
@@ -280,7 +284,8 @@ export async function handleGetNotificationPreferences(
             before_lesson_enabled, before_lesson_minutes,
             before_end_enabled, before_end_minutes,
             evening_enabled, evening_time,
-            friday_enabled, friday_time, schedule_change_enabled, updated_at
+            friday_enabled, friday_time, schedule_change_enabled,
+            release_updates_enabled, release_updates_enabled_at, updated_at
      FROM notification_preferences
      WHERE user_id = ?`
   )
@@ -312,7 +317,8 @@ export async function handleUpdateNotificationPreferences(
             before_lesson_enabled, before_lesson_minutes,
             before_end_enabled, before_end_minutes,
             evening_enabled, evening_time,
-            friday_enabled, friday_time, schedule_change_enabled, updated_at
+            friday_enabled, friday_time, schedule_change_enabled,
+            release_updates_enabled, release_updates_enabled_at, updated_at
      FROM notification_preferences
      WHERE user_id = ?`
   )
@@ -389,6 +395,11 @@ export async function handleUpdateNotificationPreferences(
     base.scheduleChangeEnabled,
     'scheduleChangeEnabled'
   );
+  const rReleaseUpdatesEnabled = parseBool(
+    b.releaseUpdatesEnabled,
+    base.releaseUpdatesEnabled,
+    'releaseUpdatesEnabled'
+  );
 
   const results = [
     rEnabled,
@@ -403,6 +414,7 @@ export async function handleUpdateNotificationPreferences(
     rFridayEnabled,
     rFridayTime,
     rScheduleChangeEnabled,
+    rReleaseUpdatesEnabled,
   ];
   const invalid = results.find((r) => !r.ok);
   if (invalid && !invalid.ok) {
@@ -426,16 +438,34 @@ export async function handleUpdateNotificationPreferences(
   const fridayEnabled = (rFridayEnabled as { ok: true; value: boolean }).value;
   const fridayTime = (rFridayTime as { ok: true; value: string }).value;
   const scheduleChangeEnabled = (rScheduleChangeEnabled as { ok: true; value: boolean }).value;
+  const releaseUpdatesEnabled = (rReleaseUpdatesEnabled as { ok: true; value: boolean }).value;
 
   const now = new Date().toISOString();
+  // Server-managed consent timestamp:
+  // - missing field from older v4.2.1 clients preserves both state & original timestamp
+  // - false -> true records a fresh server timestamp
+  // - true -> true preserves the original consent timestamp
+  // - true -> false revokes consent timestamp (NULL)
+  const prevReleaseEnabled = base.releaseUpdatesEnabled;
+  const prevReleaseEnabledAt = existingRow?.release_updates_enabled_at ?? null;
+  let releaseUpdatesEnabledAt: string | null;
+  if (b.releaseUpdatesEnabled === undefined) {
+    releaseUpdatesEnabledAt = prevReleaseEnabled ? prevReleaseEnabledAt : null;
+  } else if (releaseUpdatesEnabled) {
+    releaseUpdatesEnabledAt = prevReleaseEnabled && prevReleaseEnabledAt ? prevReleaseEnabledAt : now;
+  } else {
+    releaseUpdatesEnabledAt = null;
+  }
+
   await env.DB.prepare(
     `INSERT INTO notification_preferences (
        user_id, enabled, morning_enabled, morning_time,
        before_lesson_enabled, before_lesson_minutes,
        before_end_enabled, before_end_minutes,
        evening_enabled, evening_time,
-       friday_enabled, friday_time, schedule_change_enabled, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       friday_enabled, friday_time, schedule_change_enabled,
+       release_updates_enabled, release_updates_enabled_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        enabled = excluded.enabled,
        morning_enabled = excluded.morning_enabled,
@@ -449,6 +479,8 @@ export async function handleUpdateNotificationPreferences(
        friday_enabled = excluded.friday_enabled,
        friday_time = excluded.friday_time,
        schedule_change_enabled = excluded.schedule_change_enabled,
+       release_updates_enabled = excluded.release_updates_enabled,
+       release_updates_enabled_at = excluded.release_updates_enabled_at,
        updated_at = excluded.updated_at`
   )
     .bind(
@@ -465,6 +497,8 @@ export async function handleUpdateNotificationPreferences(
       fridayEnabled ? 1 : 0,
       fridayTime,
       scheduleChangeEnabled ? 1 : 0,
+      releaseUpdatesEnabled ? 1 : 0,
+      releaseUpdatesEnabledAt,
       now
     )
     .run();
@@ -484,6 +518,7 @@ export async function handleUpdateNotificationPreferences(
         fridayEnabled,
         fridayTime,
         scheduleChangeEnabled,
+        releaseUpdatesEnabled,
         updatedAt: now,
       },
     },

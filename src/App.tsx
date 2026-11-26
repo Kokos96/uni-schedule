@@ -40,6 +40,27 @@ import {
   parseIsoDate,
 } from './utils/date';
 import { buildWeekGrid } from './utils/schedule';
+import {
+  INSTALLED_APP_VERSION,
+  RELEASES_CATALOG,
+  getPublishedReleases,
+  getReleaseByVersion,
+  type ReleaseEntry,
+} from './data/releases';
+import {
+  computeReleaseViewState,
+  markReleaseSeen,
+  mergeReleaseCatalogs,
+  parseReleaseDeepLink,
+  readCachedReleases,
+  readLastInstalledVersion,
+  readSeenReleaseIds,
+  writeCachedReleases,
+  writeLastInstalledVersion,
+} from './utils/releaseTracking';
+import { getApiBaseUrl } from './services/apiClient';
+import { WhatsNewModal } from './components/releases/WhatsNewModal';
+import { UpdateHistoryModal } from './components/releases/UpdateHistoryModal';
 import type { StorageErrorCode } from './utils/storage';
 
 const LessonNotesDrawer = lazy(() =>
@@ -158,6 +179,156 @@ const AppContent: React.FC = () => {
     dateIso: string;
   } | null>(null);
   const [hasOpenedNotesDrawer, setHasOpenedNotesDrawer] = useState(false);
+
+  // Release communication state (Stage C & D)
+  const [publishedReleases, setPublishedReleases] = useState<ReleaseEntry[]>(() =>
+    mergeReleaseCatalogs(readCachedReleases(), getPublishedReleases())
+  );
+  const [seenReleaseIds, setSeenReleaseIds] = useState<string[]>(() => readSeenReleaseIds());
+  const [lastInstalledVersion] = useState<string | null>(() => readLastInstalledVersion());
+  const [whatsNewRelease, setWhatsNewRelease] = useState<ReleaseEntry | null>(null);
+  const [updateHistoryOpen, setUpdateHistoryOpen] = useState(false);
+  const [pendingDeepLink, setPendingDeepLink] = useState<{ version?: string; openHistory?: boolean } | null>(() =>
+    typeof window !== 'undefined' ? parseReleaseDeepLink(window.location.search) : null
+  );
+  const autoWhatsNewHandledRef = useRef(false);
+
+  // Background fetch of published releases from API (graceful offline fallback)
+  useEffect(() => {
+    const apiBaseUrl = getApiBaseUrl();
+    if (!apiBaseUrl || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+    let cancelled = false;
+    void fetch(`${apiBaseUrl}/api/releases`, { cache: 'default' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { releases?: ReleaseEntry[] } | null) => {
+        if (cancelled || !data?.releases?.length) return;
+        const merged = mergeReleaseCatalogs(data.releases, getPublishedReleases());
+        writeCachedReleases(merged);
+        setPublishedReleases(merged);
+      })
+      .catch(() => {
+        // Offline / API unavailable — keep cached or built-in catalog
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Listen for Service Worker notificationclick deep-link messages in already-open windows
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const onSwMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null;
+      if (data?.type !== 'OPEN_DEEP_LINK' || typeof data.url !== 'string') return;
+      try {
+        const parsed = new URL(data.url, window.location.origin);
+        if (parsed.origin !== window.location.origin) return;
+        const link = parseReleaseDeepLink(parsed.search);
+        if (link) setPendingDeepLink(link);
+      } catch {
+        // Ignore malformed URL
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onSwMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onSwMessage);
+  }, []);
+
+  const releaseState = useMemo(
+    () =>
+      computeReleaseViewState({
+        catalog: [...RELEASES_CATALOG.filter((r) => r.version === INSTALLED_APP_VERSION), ...publishedReleases],
+        installedVersion: INSTALLED_APP_VERSION,
+        lastInstalledVersion,
+        seenReleaseIds,
+        isUnconfigured: settings.scheduleSourceMode === 'unconfigured',
+      }),
+    [publishedReleases, lastInstalledVersion, seenReleaseIds, settings.scheduleSourceMode]
+  );
+
+  // Record installed version once launch completes
+  useEffect(() => {
+    if (launchPhase !== 'done') return;
+    writeLastInstalledVersion(INSTALLED_APP_VERSION);
+  }, [launchPhase]);
+
+  // Handle pending deep link OR automatic post-upgrade "What's New" only AFTER launch animation settles
+  // and never colliding with onboarding or other open modals
+  useEffect(() => {
+    if (launchPhase !== 'done') return;
+    const isOnboarding = settings.scheduleSourceMode === 'unconfigured';
+    if (pendingDeepLink) {
+      // Preserve deep link across onboarding instead of losing it or colliding with FirstLaunchOnboarding
+      if (isOnboarding) return;
+      if (notesDrawerTarget) setNotesDrawerTarget(null);
+      if (pendingDeepLink.openHistory) {
+        setWhatsNewRelease(null);
+        setUpdateHistoryOpen(true);
+      } else {
+        const target =
+          (pendingDeepLink.version
+            ? getReleaseByVersion(pendingDeepLink.version, { includeDraft: false, catalog: publishedReleases })
+            : null) ??
+          releaseState.latestPublishedRelease;
+        if (target) {
+          setUpdateHistoryOpen(false);
+          setWhatsNewRelease(target);
+        }
+      }
+      setPendingDeepLink(null);
+      if (typeof window !== 'undefined' && window.location.search.includes('view=release')) {
+        const cleanUrl = window.location.pathname + window.location.hash;
+        window.history.replaceState(null, '', cleanUrl);
+      }
+      return;
+    }
+
+    if (
+      !autoWhatsNewHandledRef.current &&
+      releaseState.autoShowRelease &&
+      !notesDrawerTarget &&
+      !updateHistoryOpen &&
+      !whatsNewRelease
+    ) {
+      autoWhatsNewHandledRef.current = true;
+      setWhatsNewRelease(releaseState.autoShowRelease);
+    }
+  }, [
+    launchPhase,
+    settings.scheduleSourceMode,
+    pendingDeepLink,
+    publishedReleases,
+    releaseState,
+    notesDrawerTarget,
+    updateHistoryOpen,
+    whatsNewRelease,
+  ]);
+
+  const handleCloseWhatsNew = useCallback(() => {
+    if (whatsNewRelease) {
+      setSeenReleaseIds(markReleaseSeen(whatsNewRelease.id));
+    }
+    setWhatsNewRelease(null);
+  }, [whatsNewRelease]);
+
+  const handleOpenWhatsNewManual = useCallback(() => {
+    const target =
+      releaseState.installedRelease ??
+      releaseState.latestPublishedRelease ??
+      RELEASES_CATALOG[0] ??
+      null;
+    if (target) {
+      setUpdateHistoryOpen(false);
+      setWhatsNewRelease(target);
+    }
+  }, [releaseState]);
+
+  const handleOpenUpdateHistory = useCallback(() => {
+    if (whatsNewRelease) {
+      setSeenReleaseIds(markReleaseSeen(whatsNewRelease.id));
+    }
+    setWhatsNewRelease(null);
+    setUpdateHistoryOpen(true);
+  }, [whatsNewRelease]);
 
   const selectedIso = useMemo(() => formatIsoDate(selectedDate), [selectedDate]);
   const isToday = selectedIso === todayIso;
@@ -438,9 +609,9 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      <AppSplash phase={launchPhase} onPhaseChange={setLaunchPhase} />
+      <AppSplash phase={launchPhase} onPhaseChange={setLaunchPhase} activeDate={selectedDate} />
       <AppShell
-        launchRevealed={launchPhase === 'morph' || launchPhase === 'content' || launchPhase === 'done'}
+        launchRevealed={launchPhase === 'reveal' || launchPhase === 'settle' || launchPhase === 'done'}
         currentTab={activeTab}
         onTabChange={handleTabChange}
         settings={settings}
@@ -469,7 +640,7 @@ const AppContent: React.FC = () => {
             currentTab={activeTab}
             onTabChange={handleTabChange}
             deadlinesBadgeCount={deadlinesBadgeCount}
-            visible={launchPhase === 'content' || launchPhase === 'done'}
+            visible={launchPhase === 'settle' || launchPhase === 'done'}
             hiddenByKeyboard={isKeyboardOpen}
           />
         }
@@ -594,6 +765,9 @@ const AppContent: React.FC = () => {
                 availableParallelGroups={scheduleSource.availableParallelGroups}
                 hasSubgroups={scheduleSource.hasSubgroups}
                 hasDepartments={scheduleSource.hasDepartments}
+                hasUnreadRelease={releaseState.hasUnreadInstalledRelease}
+                onOpenWhatsNew={handleOpenWhatsNewManual}
+                onOpenUpdateHistory={handleOpenUpdateHistory}
               />
             </Suspense>
           )}
@@ -621,6 +795,28 @@ const AppContent: React.FC = () => {
                 ? scheduleSource.classroomsMap.get(notesDrawerTarget.lesson.classroomId)
                 : undefined
             }
+          />
+        </Suspense>
+      )}
+      {whatsNewRelease && (
+        <Suspense fallback={null}>
+          <WhatsNewModal
+            open={whatsNewRelease !== null}
+            release={whatsNewRelease}
+            installedVersion={INSTALLED_APP_VERSION}
+            onClose={handleCloseWhatsNew}
+            onOpenHistory={handleOpenUpdateHistory}
+          />
+        </Suspense>
+      )}
+
+      {updateHistoryOpen && (
+        <Suspense fallback={null}>
+          <UpdateHistoryModal
+            open={updateHistoryOpen}
+            releases={publishedReleases}
+            installedVersion={INSTALLED_APP_VERSION}
+            onClose={() => setUpdateHistoryOpen(false)}
           />
         </Suspense>
       )}

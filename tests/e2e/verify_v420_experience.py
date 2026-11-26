@@ -171,7 +171,7 @@ def main() -> None:
             sp1.wait_for(state="detached", timeout=5000)
             ms_dark = int((time.time() - t0) * 1000)
             p1.wait_for_timeout(450)
-            assert 2000 <= ms_dark <= 3400, f"Dark launch duration out of range: {ms_dark}ms"
+            assert 2600 <= ms_dark <= 4200, f"Dark launch duration out of range: {ms_dark}ms"
             save_video(p1, "01_premium_cold_launch_dark.webm")
             c1.close()
             print(f"PASS 01: Dark cold launch ({ms_dark}ms)")

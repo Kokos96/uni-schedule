@@ -8,6 +8,7 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  RELEASE_ADMIN_TOKEN?: string;
 }
 
 export interface AuthContext {

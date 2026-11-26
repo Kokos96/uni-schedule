@@ -17,6 +17,8 @@ export interface NotificationPreferences {
   eveningTime: string;
   fridayEnabled: boolean;
   fridayTime: string;
+  /** Independent opt-in toggle for Uni Schedule release/news push notifications (default: false). */
+  releaseUpdatesEnabled?: boolean;
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -31,6 +33,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   eveningTime: '20:00',
   fridayEnabled: true,
   fridayTime: '18:00',
+  releaseUpdatesEnabled: false,
 };
 
 export function isPushSupported(): boolean {

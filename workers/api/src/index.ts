@@ -16,6 +16,13 @@ import {
   handleUpsertPushSubscription,
 } from './routes/push';
 import {
+  handleAdminDispatchReleasePush,
+  handleAdminPublishRelease,
+  handleGetLatestRelease,
+  handleGetReleaseByVersion,
+  handleListReleases,
+} from './routes/releases';
+import {
   handleGetFaculties,
   handleGetGroups,
   handleGetSchedule,
@@ -64,7 +71,7 @@ export default {
           return errorResponse('DB_UNAVAILABLE', 'База даних недоступна', 503, corsHeaders);
         }
         return jsonResponse(
-          { ok: true, db: 'ok', service: 'uni-schedule-api', stage: 3, version: '4.2.1' },
+          { ok: true, db: 'ok', service: 'uni-schedule-api', stage: 3, version: '4.3.0' },
           200,
           corsHeaders
         );
@@ -125,6 +132,39 @@ export default {
           methods: ['GET'],
           authRequired: false,
           handler: ({ env: e, corsHeaders: ch }) => handleGetVapidPublicKey(e, ch),
+        },
+        {
+          pattern: '/api/releases',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ env: e, corsHeaders: ch }) => handleListReleases(e, ch),
+        },
+        {
+          pattern: '/api/releases/latest',
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ env: e, corsHeaders: ch }) => handleGetLatestRelease(e, ch),
+        },
+        {
+          pattern: /^\/api\/releases\/([a-z0-9._-]+)$/i,
+          methods: ['GET'],
+          authRequired: false,
+          handler: ({ params, env: e, corsHeaders: ch }) =>
+            handleGetReleaseByVersion(params[0]!, e, ch),
+        },
+        {
+          pattern: '/api/admin/releases/publish',
+          methods: ['POST'],
+          authRequired: false,
+          handler: ({ request: req, env: e, corsHeaders: ch }) =>
+            handleAdminPublishRelease(req, e, ch),
+        },
+        {
+          pattern: '/api/admin/releases/dispatch',
+          methods: ['POST'],
+          authRequired: false,
+          handler: ({ request: req, env: e, corsHeaders: ch }) =>
+            handleAdminDispatchReleasePush(req, e, ch),
         },
         {
           pattern: '/api/universities',

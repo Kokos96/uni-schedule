@@ -450,6 +450,8 @@ class MockD1Database {
               evening_time,
               friday_enabled,
               friday_time,
+              schedule_change_enabled,
+              release_updates_enabled,
               updated_at,
             ] = bound;
             db.notification_preferences.set(user_id as string, {
@@ -465,6 +467,8 @@ class MockD1Database {
               evening_time,
               friday_enabled,
               friday_time,
+              schedule_change_enabled,
+              release_updates_enabled,
               updated_at,
             });
           }

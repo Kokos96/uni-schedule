@@ -1,10 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowCounterClockwise,
+  ArrowUpRight,
+  ClockCounterClockwise,
   DeviceMobile,
   Export,
   Laptop,
+  Sparkle,
 } from '@phosphor-icons/react';
+import { INSTALLED_APP_VERSION } from '../../data/releases';
 import { DEPARTMENT_OPTIONS } from '../../constants/profile';
 import { DEFAULT_SETTINGS, normalizeSettings, type UseSettingsResult } from '../../hooks/useSettings';
 import type { ScheduleActivationResult, ScheduleSyncStatus } from '../../hooks/useScheduleSource';
@@ -14,7 +18,7 @@ import type { UniScheduleBackupData } from '../../types/backup';
 import type { DeadlineItem, LessonNote } from '../../types/notes';
 import { getWeekParity } from '../../utils/date';
 import type { ParallelGroupDimension } from '../../utils/parallelGroups';
-import { MetaChip } from '../ui/Badge';
+import { MetaChip, StatusDot } from '../ui/Badge';
 import { EditorialUnderline } from '../ui/EditorialOrnaments';
 import { GlassCard } from '../ui/GlassCard';
 import { ModalDrawer } from '../ui/ModalDrawer';
@@ -52,6 +56,9 @@ export interface SettingsViewProps {
   availableParallelGroups?: ParallelGroupDimension[];
   hasSubgroups?: boolean;
   hasDepartments?: boolean;
+  hasUnreadRelease?: boolean;
+  onOpenWhatsNew?: () => void;
+  onOpenUpdateHistory?: () => void;
 }
 
 const NOOP = () => {};
@@ -81,6 +88,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   availableParallelGroups = [],
   hasSubgroups = true,
   hasDepartments = false,
+  hasUnreadRelease = false,
+  onOpenWhatsNew,
+  onOpenUpdateHistory,
 }) => {
   const { toast } = useToast();
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
@@ -205,13 +215,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
               <div className="min-w-0">
                 <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
-                  Uni Schedule v4.2.1
+                  Uni Schedule v{INSTALLED_APP_VERSION}
                 </h3>
                 <p className="mt-0.5 text-xs text-ink-secondary">
                   Розклад занять, відвідуваність, нотатки та дедлайни (PWA)
                 </p>
               </div>
             </div>
+
+            {(onOpenWhatsNew || onOpenUpdateHistory) && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-line/70 pt-3.5">
+                {onOpenWhatsNew && (
+                  <button
+                    type="button"
+                    data-testid="open-whats-new-btn"
+                    onClick={onOpenWhatsNew}
+                    className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-amber/40 bg-amber-soft/75 px-3 py-1.5 text-xs font-semibold text-amber-fg transition-colors hover:border-amber/65 active:scale-[0.98]"
+                  >
+                    <Sparkle weight="duotone" className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Що нового?</span>
+                    {hasUnreadRelease && <StatusDot tone="amber" size="sm" />}
+                  </button>
+                )}
+                {onOpenUpdateHistory && (
+                  <button
+                    type="button"
+                    data-testid="open-update-history-btn"
+                    onClick={onOpenUpdateHistory}
+                    className="inline-flex min-h-[36px] items-center gap-1.5 rounded-xl border border-line bg-surface-elevated px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:border-line-strong active:scale-[0.98]"
+                  >
+                    <ClockCounterClockwise weight="regular" className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Історія оновлень</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2.5 border-t border-line/70 pt-3.5 text-xs text-ink-secondary">
               <div className="flex items-start gap-2.5">
@@ -237,6 +275,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
             </div>
+          </GlassCard>
+
+          <GlassCard variant="glass" padding="lg" data-testid="developer-contact-card" className="space-y-3">
+            <div>
+              <h3 className="font-serif text-sm font-bold tracking-tight text-ink">
+                Зв&apos;язок із розробником
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-ink-secondary">
+                Знайшов помилку або маєш ідею, як покращити Uni Schedule? Напиши розробнику в Telegram.
+              </p>
+            </div>
+            <a
+              href="https://t.me/kost99_99"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="developer-telegram-link"
+              className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-elevated/70 px-3.5 py-2.5 transition-colors hover:border-amber/45 hover:bg-surface-elevated active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-soft text-amber-fg"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                    <path d="M21.94 4.33a1.25 1.25 0 0 0-1.35-.2L2.63 11.42a1.25 1.25 0 0 0 .06 2.34l4.47 1.46 1.72 5.38a1.1 1.1 0 0 0 1.85.42l2.53-2.58 4.61 3.39a1.25 1.25 0 0 0 1.96-.75l2.8-15.49a1.25 1.25 0 0 0-.69-1.26ZM9.93 15.2l-.32 3.16-.99-3.11 9.02-6.12-7.71 6.07Z" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <span className="block text-xs font-semibold text-ink">Telegram</span>
+                  <span className="block font-mono text-xs text-amber-fg">@kost99_99</span>
+                </div>
+              </div>
+              <ArrowUpRight weight="regular" className="h-4 w-4 shrink-0 text-ink-secondary" aria-hidden="true" />
+            </a>
           </GlassCard>
         </div>
       </div>

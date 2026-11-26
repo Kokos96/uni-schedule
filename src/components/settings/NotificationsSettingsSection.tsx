@@ -298,6 +298,44 @@ export const NotificationsSettingsSection: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* Independent Release Updates / News category (default OFF) */}
+        <div className="border-t border-line/70 pt-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <label
+                htmlFor="push-release-updates"
+                className="block text-xs font-semibold text-ink"
+              >
+                Новини та оновлення
+              </label>
+              <p className="mt-0.5 text-[11px] leading-snug text-ink-secondary">
+                Отримуй сповіщення про нові версії Uni Schedule та їхні можливості.
+              </p>
+              {!pushSupported && (
+                <p className="mt-1 text-[11px] text-amber-fg">
+                  Цей браузер не підтримує Web Push-сповіщення.
+                </p>
+              )}
+              {pushSupported &&
+                typeof Notification !== 'undefined' &&
+                Notification.permission === 'denied' && (
+                  <p className="mt-1 text-[11px] text-terracotta-fg">
+                    Дозвіл на сповіщення заблоковано в налаштуваннях браузера.
+                  </p>
+                )}
+            </div>
+            <input
+              id="push-release-updates"
+              data-testid="release-updates-toggle"
+              type="checkbox"
+              aria-label="Новини та оновлення"
+              checked={Boolean(prefs.releaseUpdatesEnabled)}
+              onChange={(e) => updatePrefs({ releaseUpdatesEnabled: e.target.checked })}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#D88B45]"
+            />
+          </div>
+        </div>
       </div>
     </GlassCard>
   );

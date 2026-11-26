@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v14';
+const CACHE_VERSION = 'v15';
 const SHELL_CACHE = `rozklad-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `rozklad-assets-${CACHE_VERSION}`;
 const ACTIVE_CACHES = new Set([SHELL_CACHE, ASSET_CACHE]);
@@ -278,8 +278,12 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of allClients) {
         if ('focus' in client) {
           await client.focus();
-          if ('navigate' in client && targetUrl !== '/') {
-            await client.navigate(targetUrl);
+          if (targetUrl !== '/') {
+            if (typeof client.postMessage === 'function') {
+              client.postMessage({ type: 'OPEN_DEEP_LINK', url: targetUrl });
+            } else if ('navigate' in client) {
+              await client.navigate(targetUrl);
+            }
           }
           return;
         }

@@ -188,7 +188,7 @@ def main() -> None:
             p1.screenshot(path=str(OUT_DIR / "01_splash_settle.png"))
             splash.wait_for(state="detached", timeout=5000)
             elapsed_ms = int((time.time() - t0) * 1000)
-            assert 2000 <= elapsed_ms <= 3400, f"Unexpected cold launch duration: {elapsed_ms}ms"
+            assert 2600 <= elapsed_ms <= 4200, f"Unexpected cold launch duration: {elapsed_ms}ms"
             p1.wait_for_timeout(450)
             expect(p1.locator('nav[aria-label="Мобільна навігація"]')).to_be_visible()
             rec1 = save_video(p1, "01_cold_launch.webm")
