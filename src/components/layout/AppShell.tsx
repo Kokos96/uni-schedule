@@ -56,11 +56,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   const resolvedTitle = pageTitle ?? DEFAULT_TAB_TITLES[currentTab];
   const themeMeta = THEME_META[settings.theme];
   const ThemeIcon = themeMeta.Icon;
-  const isPreReveal =
+  const isWaveActive =
     !reducedMotion &&
-    (launchPhase === 'sunrise' || launchPhase === 'date' || launchPhase === 'calendar');
-  const isWaveRevealing = !reducedMotion && launchPhase === 'reveal';
-  const isWaveLayerActive = isPreReveal || isWaveRevealing;
+    (launchPhase === 'sunrise' ||
+      launchPhase === 'date' ||
+      launchPhase === 'calendar' ||
+      launchPhase === 'reveal');
 
   return (
     <div className="min-h-screen bg-canvas text-ink selection:bg-amber/25 selection:text-ink">
@@ -83,18 +84,13 @@ export const AppShell: React.FC<AppShellProps> = ({
         liveStatusLabel={liveStatusLabel}
       />
 
-      {/* Main Content Area — during Hybrid #25 `reveal` phase, rises bottom-up inside a convex dome
-          clip-path above the splash layer (single continuous scene, zero cheap opacity crossfade). */}
+      {/* Main Content Area — driven directly by AppSplash's single 60 FPS rAF timeline via
+          `data-app-reveal-layer` during Hybrid #25 reveal (zero React re-renders per frame). */}
       <div
-        style={
-          isPreReveal
-            ? { clipPath: 'ellipse(125% 0% at 50% 100%)', willChange: 'clip-path' }
-            : isWaveRevealing
-              ? { animation: 'hybrid25-dome-reveal 720ms cubic-bezier(0.33, 1, 0.68, 1) forwards', willChange: 'clip-path' }
-              : undefined
-        }
+        data-app-reveal-layer="true"
+        style={isWaveActive ? { clipPath: 'ellipse(125% 0% at 50% 100%)', willChange: 'clip-path' } : undefined}
         className={`lg:pl-64 xl:pl-[272px] min-h-screen flex flex-col bg-canvas ${
-          isWaveLayerActive ? 'relative z-[105]' : ''
+          isWaveActive ? 'relative z-[105]' : ''
         }`}
       >
         {banner}

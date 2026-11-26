@@ -142,6 +142,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
 
       {/* Interactive Day Strip */}
       <div
+        data-weekstrip-row="true"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         className="grid touch-pan-y gap-1 xs:gap-1.5"
@@ -152,6 +153,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
         aria-label="Дні тижня"
       >
         {weekDates.map((date) => {
+          const iso = formatIsoDate(date);
           const dayNum = getScheduleDayNumber(date);
           const shortName = DAY_NAMES_UA_SHORT[dayNum] ?? '';
           const fullName = DAY_NAMES_UA_FULL[dayNum] ?? shortName;
@@ -161,7 +163,8 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
 
           return (
             <button
-              key={formatIsoDate(date)}
+              key={iso}
+              data-weekstrip-iso={iso}
               type="button"
               onClick={() => onSelectDate(date)}
               aria-current={isSelected ? 'date' : undefined}

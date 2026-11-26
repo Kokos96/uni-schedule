@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useAppReducedMotion } from '../../lib/motion';
 import {
   DAY_NAMES_UA_SHORT,
@@ -24,34 +23,47 @@ export function resetSplashForTest(): void {
 export interface AppSplashProps {
   phase: LaunchPhase;
   onPhaseChange: (phase: LaunchPhase) => void;
-  /** Real active calendar date used for Phase B/C (never hardcoded). */
+  /** Real active calendar date used for Phase B/C/FLIP handoff (never hardcoded). */
   activeDate?: Date;
 }
 
-const EASE_SUNRISE = [0.22, 1, 0.36, 1] as const;
-const EASE_SIGNATURE = [0.19, 1, 0.22, 1] as const;
+/** Reference-measured geometry (normalized from 780x1820 -> 390x910 logical canvas). */
+const SUN_SIZE = 90;
+const TILE_W = 62;
+const TILE_H = 80;
+const SLOT_PITCH = 67; // 62px tile + 5px gap
+const ARCH_PATH_LEN = 404; // M 10 156 L 10 92 A 87.5 87.5 0 0 1 185 92 L 185 156
+const TOTAL_DURATION_MS = 3000;
+const REDUCED_DURATION_MS = 320;
 
-/** Fixed tile geometry matching the approved Hybrid #25 render (5-day row fits 320px–1280px). */
-const TILE_W = 58;
-const TILE_H = 74;
-const TILE_GAP = 7;
-const SLOT_PITCH = TILE_W + TILE_GAP; // 65px between tile centers
+const clamp01 = (v: number): number => (v <= 0 ? 0 : v >= 1 ? 1 : v);
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+const easeOutCubic = (t: number): number => 1 - Math.pow(1 - clamp01(t), 3);
+const easeInOutCubic = (t: number): number => {
+  const x = clamp01(t);
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+};
+const seg = (tMs: number, startMs: number, endMs: number): number =>
+  clamp01((tMs - startMs) / Math.max(1, endMs - startMs));
+
+interface TargetTileRect {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+}
 
 /**
- * UNI SCHEDULE v4.3.1 — HYBRID #25: SIGNATURE CALENDAR REVEAL (3000ms)
+ * UNI SCHEDULE v4.3.1 — HYBRID #25: EXACT SINGLE-TIMELINE MOTION RECONSTRUCTION (3000ms)
  *
- * Frame-accurate programmatic implementation of approved references
- * (`uni_launch_25_dark_3s.mp4` & `uni_launch_25_light_3s.mp4`):
- * - Phase A (`sunrise`,  0–620ms)   : Centered amber sun rises progressively from horizon clip;
- *                                     symmetric amber arch draws left-over-top-to-right;
- *                                     two subtle horizon lines + prominent serif `Uni Schedule` wordmark.
- * - Phase B (`date`,     620–1150ms): Real active weekday + day number fade in at dead center inside
- *                                     the sun, then the centered sun morphs smoothly into the rounded date tile.
- * - Phase C (`calendar`, 1150–1900ms): Active amber tile glides into its weekday slot while real
- *                                     surrounding weekday tiles fan out symmetrically; arch fades out.
- * - Phase D (`reveal`,   1900–2580ms): Wordmark clears cleanly before the live AppShell rises from the
- *                                     bottom inside a convex dome clip-path (single continuous scene).
- * - Phase E (`settle`,   2580–3000ms): Live app fully uncovered + BottomNav rises; completes at 3000ms.
+ * Reconstructed directly from 180-frame 60 FPS measurements of `uni_launch_25_dark_3s.mp4`
+ * and `uni_launch_25_light_3s.mp4`:
+ * - Single continuous `requestAnimationFrame` clock driven by `performance.now()` (0 -> 3000ms).
+ * - Zero per-frame React `setState`; all visual updates mutate GPU-composited `transform`,
+ *   `opacity`, `strokeDashoffset`, and `clipPath` directly on DOM refs.
+ * - True FLIP geometric handoff: measures real `WeekStrip` day-button `DOMRect`s ONCE on mount,
+ *   glides & morphs the 5 splash tiles directly onto the live `WeekStrip` tiles (1950 -> 2450ms)
+ *   while the live `AppShell` rises bottom-up inside a convex dome clip-path (1920 -> 2560ms).
  */
 export const AppSplash: React.FC<AppSplashProps> = ({
   phase,
@@ -61,8 +73,26 @@ export const AppSplash: React.FC<AppSplashProps> = ({
   const reducedMotion = useAppReducedMotion();
   const onPhaseChangeRef = useRef(onPhaseChange);
   onPhaseChangeRef.current = onPhaseChange;
-
   const completedRef = useRef(hasCompletedColdSplash);
+
+  // DOM refs mutated directly at 60 FPS inside rAF (zero React re-renders per frame)
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const handoffLayerRef = useRef<HTMLDivElement | null>(null);
+  const archPathRef = useRef<SVGPathElement | null>(null);
+  const archSvgRef = useRef<SVGSVGElement | null>(null);
+  const horizon1Ref = useRef<SVGLineElement | null>(null);
+  const horizon2Ref = useRef<SVGLineElement | null>(null);
+  const horizonClipRef = useRef<HTMLDivElement | null>(null);
+  const activeWrapRef = useRef<HTMLDivElement | null>(null);
+  const activeBgRef = useRef<HTMLDivElement | null>(null);
+  const activeOutlineRef = useRef<HTMLDivElement | null>(null);
+  const activeTextRef = useRef<HTMLDivElement | null>(null);
+  const activeTextLandedRef = useRef<HTMLDivElement | null>(null);
+  const activeDotRef = useRef<HTMLSpanElement | null>(null);
+  const wordmarkRef = useRef<HTMLDivElement | null>(null);
+  const underlineRef = useRef<HTMLSpanElement | null>(null);
+  const neighborRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const neighborDotRefs = useRef<Array<HTMLSpanElement | null>>([]);
 
   // Freeze real calendar dates for the duration of this cold launch
   const launchCalendar = useMemo(() => {
@@ -99,8 +129,15 @@ export const AppSplash: React.FC<AppSplashProps> = ({
     }
 
     let cancelled = false;
-    const emit = (next: LaunchPhase) => {
-      if (cancelled || completedRef.current) return;
+    let rafId = 0;
+    let lastEmittedPhase: LaunchPhase = 'sunrise';
+
+    const emitPhase = (next: LaunchPhase) => {
+      if (cancelled || next === lastEmittedPhase) return;
+      lastEmittedPhase = next;
+      if (overlayRef.current) {
+        overlayRef.current.setAttribute('data-launch-phase', next);
+      }
       if (next === 'done') {
         completedRef.current = true;
         hasCompletedColdSplash = true;
@@ -108,335 +145,489 @@ export const AppSplash: React.FC<AppSplashProps> = ({
       onPhaseChangeRef.current(next);
     };
 
-    if (reducedMotion) {
-      const timers = [
-        window.setTimeout(() => emit('reveal'), 120),
-        window.setTimeout(() => emit('settle'), 220),
-        window.setTimeout(() => emit('done'), 320),
-        window.setTimeout(() => emit('done'), 520),
-      ];
-      return () => {
-        cancelled = true;
-        for (const id of timers) window.clearTimeout(id);
-      };
+    // Query live AppShell reveal wrapper & WeekStrip targets ONCE (never per-frame)
+    const revealEl = document.querySelector<HTMLElement>('[data-app-reveal-layer="true"]');
+    const weekStripRow = document.querySelector<HTMLElement>('[data-weekstrip-row="true"]');
+
+    // Measure splash stage center and live WeekStrip target rects once layout is ready
+    let stageCx = window.innerWidth / 2;
+    let stageCy = window.innerHeight * 0.435;
+    let targetRects: Record<string, TargetTileRect> | null = null;
+
+    const measureTargetsOnce = () => {
+      if (horizonClipRef.current) {
+        const sr = horizonClipRef.current.getBoundingClientRect();
+        if (sr.width > 0 && sr.height > 0) {
+          stageCx = sr.left + sr.width / 2;
+          stageCy = sr.top + sr.height / 2;
+        }
+      }
+      if (weekStripRow) {
+        const map: Record<string, TargetTileRect> = {};
+        const btns = weekStripRow.querySelectorAll<HTMLElement>('[data-weekstrip-iso]');
+        btns.forEach((btn) => {
+          const iso = btn.getAttribute('data-weekstrip-iso');
+          if (!iso) return;
+          const r = btn.getBoundingClientRect();
+          if (r.width > 10 && r.height > 10) {
+            map[iso] = {
+              cx: r.left + r.width / 2,
+              cy: r.top + r.height / 2,
+              w: r.width,
+              h: r.height,
+            };
+          }
+        });
+        if (Object.keys(map).length >= 3) {
+          targetRects = map;
+          // Hide real WeekStrip tiles during FLIP handoff so there is NEVER a duplicate calendar
+          weekStripRow.style.opacity = '0';
+        }
+      }
+    };
+
+    const cleanupDomOverrides = () => {
+      if (revealEl) {
+        revealEl.style.clipPath = '';
+        revealEl.style.willChange = '';
+      }
+      if (weekStripRow) {
+        weekStripRow.style.opacity = '';
+      }
+    };
+
+    if (!reducedMotion) {
+      measureTargetsOnce();
     }
 
-    const timers = [
-      window.setTimeout(() => emit('date'), 620),
-      window.setTimeout(() => emit('calendar'), 1150),
-      window.setTimeout(() => emit('reveal'), 1900),
-      window.setTimeout(() => emit('settle'), 2580),
-      window.setTimeout(() => emit('done'), 3000),
-      window.setTimeout(() => emit('done'), 3600),
-    ];
+    const startTime = performance.now();
+    const centerIdx = 2;
+    const activeIdx = launchCalendar.activeIndex;
+    const activeSlotX = (activeIdx - centerIdx) * SLOT_PITCH;
+    const activeIso = launchCalendar.items[activeIdx]?.iso ?? '';
+
+    const renderFrame = (elapsed: number) => {
+      if (reducedMotion) {
+        const pFade = easeOutCubic(seg(elapsed, 110, REDUCED_DURATION_MS));
+        if (overlayRef.current) {
+          overlayRef.current.style.opacity = String(1 - pFade);
+        }
+        if (handoffLayerRef.current) {
+          handoffLayerRef.current.style.opacity = String(1 - pFade);
+        }
+        if (elapsed >= 120 && lastEmittedPhase === 'sunrise') emitPhase('reveal');
+        if (elapsed >= 220 && lastEmittedPhase === 'reveal') emitPhase('settle');
+        if (elapsed >= REDUCED_DURATION_MS) {
+          cleanupDomOverrides();
+          emitPhase('done');
+          return false;
+        }
+        return true;
+      }
+
+      // 1. Phase notifications (only 4 React updates across the entire 3000ms)
+      if (elapsed >= 600 && lastEmittedPhase === 'sunrise') emitPhase('date');
+      if (elapsed >= 1100 && lastEmittedPhase === 'date') emitPhase('calendar');
+      if (elapsed >= 1900 && lastEmittedPhase === 'calendar') emitPhase('reveal');
+      if (elapsed >= 2560 && lastEmittedPhase === 'reveal') emitPhase('settle');
+
+      // 2. Sun emergence from horizon (0 -> 500ms, measured cubic rise from y=+90px to y=0)
+      const pRise = easeInOutCubic(seg(elapsed, 0, 500));
+      const sunRiseY = lerp(90, 0, pRise);
+      if (horizonClipRef.current) {
+        // Clip below horizon strictly during sun emergence (0 -> 520ms), then open for calendar & FLIP
+        horizonClipRef.current.style.clipPath =
+          elapsed < 520 ? 'inset(-12px -40px 10px -40px)' : 'none';
+      }
+
+      // 3. Symmetric Amber Arch (draws 180 -> 750ms, holds, fades 1000 -> 1450ms)
+      const pArchDraw = easeOutCubic(seg(elapsed, 180, 750));
+      const pArchFade = easeInOutCubic(seg(elapsed, 1000, 1450));
+      if (archPathRef.current) {
+        archPathRef.current.style.strokeDashoffset = String(ARCH_PATH_LEN * (1 - pArchDraw));
+      }
+      if (archSvgRef.current) {
+        archSvgRef.current.style.opacity = String(clamp01(pArchDraw > 0 ? 1 - pArchFade : 0));
+      }
+      const pHorizIn = easeOutCubic(seg(elapsed, 120, 500));
+      const pHorizOut = easeInOutCubic(seg(elapsed, 1000, 1350));
+      const hOp = pHorizIn * (1 - pHorizOut);
+      if (horizon1Ref.current) {
+        horizon1Ref.current.style.opacity = String(0.6 * hOp);
+        horizon1Ref.current.style.transform = `scaleX(${lerp(0.35, 1, pHorizIn)})`;
+      }
+      if (horizon2Ref.current) {
+        horizon2Ref.current.style.opacity = String(0.4 * hOp);
+        horizon2Ref.current.style.transform = `scaleX(${lerp(0.25, 1, pHorizIn)})`;
+      }
+
+      // 4. Wordmark `Uni Schedule` (fades in 300 -> 750ms, fades out 1700 -> 2120ms before wave arrives)
+      const pWmIn = easeOutCubic(seg(elapsed, 300, 750));
+      const pWmOut = easeInOutCubic(seg(elapsed, 1700, 2120));
+      if (wordmarkRef.current) {
+        wordmarkRef.current.style.opacity = String(pWmIn * (1 - pWmOut));
+        wordmarkRef.current.style.transform = `translate3d(0, ${lerp(8, 0, pWmIn) - 6 * pWmOut}px, 0)`;
+      }
+      const pUndIn = easeOutCubic(seg(elapsed, 550, 900));
+      if (underlineRef.current) {
+        underlineRef.current.style.opacity = String(pUndIn * (1 - pWmOut));
+        underlineRef.current.style.transform = `scaleX(${pUndIn * (1 - pWmOut)})`;
+      }
+
+      // 5. Real Date inside sun (550 -> 820ms), smoothly morphing color on FLIP landing (2100 -> 2400ms)
+      const pDateIn = easeOutCubic(seg(elapsed, 550, 820));
+      const pTextSwap = easeInOutCubic(seg(elapsed, 2100, 2400));
+      if (activeTextRef.current) {
+        activeTextRef.current.style.opacity = String(pDateIn * (1 - pTextSwap));
+        activeTextRef.current.style.transform = `scale(${lerp(0.86, 1, pDateIn)})`;
+      }
+      if (activeTextLandedRef.current) {
+        activeTextLandedRef.current.style.opacity = String(pTextSwap);
+      }
+
+      // 6. Simultaneous Morph (750 -> 1300ms) + Horizontal Slide (750 -> 1580ms)
+      const pMorph = easeInOutCubic(seg(elapsed, 750, 1300));
+      const pSlide = easeInOutCubic(seg(elapsed, 750, 1580));
+
+      // 7. True Geometric FLIP Handoff (1950 -> 2450ms) onto measured WeekStrip DOMRects
+      const pFlip = easeInOutCubic(seg(elapsed, 1950, 2450));
+      const pHandoffFade = easeOutCubic(seg(elapsed, 2420, 2520));
+
+      const baseScaleX = lerp(1, TILE_W / SUN_SIZE, pMorph);
+      const baseScaleY = lerp(1, TILE_H / SUN_SIZE, pMorph);
+      const baseRadius = lerp(45, 16, pMorph);
+
+      const activeTarget = targetRects?.[activeIso];
+      const activeFlipDx = activeTarget ? activeTarget.cx - (stageCx + activeSlotX) : 0;
+      const activeFlipDy = activeTarget ? activeTarget.cy - stageCy : -48;
+      const activeFlipSx = activeTarget ? activeTarget.w / TILE_W : 0.94;
+      const activeFlipSy = activeTarget ? activeTarget.h / TILE_H : 0.88;
+
+      const curActiveX = lerp(0, activeSlotX, pSlide) + activeFlipDx * pFlip;
+      const curActiveY = sunRiseY + activeFlipDy * pFlip;
+      const curActiveSx = baseScaleX * lerp(1, activeFlipSx, pFlip);
+      const curActiveSy = baseScaleY * lerp(1, activeFlipSy, pFlip);
+
+      if (activeWrapRef.current) {
+        activeWrapRef.current.style.transform = `translate3d(${curActiveX}px, ${curActiveY}px, 0)`;
+        activeWrapRef.current.style.opacity = String(1 - pHandoffFade);
+      }
+      if (activeBgRef.current) {
+        activeBgRef.current.style.transform = `scale(${curActiveSx}, ${curActiveSy})`;
+        activeBgRef.current.style.borderRadius = `${baseRadius}px`;
+        // Transition solid amber fill -> WeekStrip outlined active style during FLIP (2100 -> 2420ms)
+        const pFillOut = easeInOutCubic(seg(elapsed, 2100, 2420));
+        activeBgRef.current.style.opacity = String(1 - pFillOut);
+      }
+      if (activeOutlineRef.current) {
+        activeOutlineRef.current.style.transform = `scale(${curActiveSx}, ${curActiveSy})`;
+        activeOutlineRef.current.style.borderRadius = `${baseRadius}px`;
+        const pOutlineIn = easeInOutCubic(seg(elapsed, 2080, 2380));
+        activeOutlineRef.current.style.opacity = String(pOutlineIn);
+      }
+      if (activeDotRef.current) {
+        activeDotRef.current.style.opacity = String(easeOutCubic(seg(elapsed, 1950, 2200)));
+      }
+
+      // 8. Neighbor Weekday Tiles Fan-Out (1050 -> 1600ms) + FLIP Handoff (1950 -> 2450ms)
+      launchCalendar.items.forEach((item, idx) => {
+        if (item.isActive) return;
+        const el = neighborRefs.current[idx];
+        if (!el) return;
+        const dist = Math.abs(idx - activeIdx);
+        const startMs = 1050 + dist * 45;
+        const endMs = 1580 + dist * 45;
+        const pFan = easeInOutCubic(seg(elapsed, startMs, endMs));
+        const slotX = (idx - centerIdx) * SLOT_PITCH;
+        const tRect = targetRects?.[item.iso];
+        const flipDx = tRect ? tRect.cx - (stageCx + slotX) : 0;
+        const flipDy = tRect ? tRect.cy - stageCy : -48;
+        const flipSx = tRect ? tRect.w / TILE_W : 0.94;
+        const flipSy = tRect ? tRect.h / TILE_H : 0.88;
+
+        const nx = lerp(activeSlotX * 0.65, slotX, pFan) + flipDx * pFlip;
+        const ny = flipDy * pFlip;
+        const nsx = lerp(0.86, 1, pFan) * lerp(1, flipSx, pFlip);
+        const nsy = lerp(0.86, 1, pFan) * lerp(1, flipSy, pFlip);
+
+        el.style.transform = `translate3d(${nx}px, ${ny}px, 0) scale(${nsx}, ${nsy})`;
+        el.style.opacity = String(pFan * (1 - pHandoffFade));
+
+        const dot = neighborDotRefs.current[idx];
+        if (dot) {
+          dot.style.opacity = String(easeOutCubic(seg(elapsed, 1950, 2200)) * 0.55);
+        }
+      });
+
+      // 9. Bottom-Up Convex Dome Wave Reveal on Live AppShell (1920 -> 2560ms)
+      if (revealEl) {
+        if (elapsed < 1920) {
+          revealEl.style.clipPath = 'ellipse(125% 0% at 50% 100%)';
+        } else if (elapsed < 2560) {
+          const pWave = easeInOutCubic(seg(elapsed, 1920, 2560));
+          const rx = lerp(125, 175, pWave);
+          const ry = lerp(0, 148, pWave);
+          revealEl.style.clipPath = `ellipse(${rx.toFixed(1)}% ${ry.toFixed(1)}% at 50% 100%)`;
+        } else {
+          revealEl.style.clipPath = '';
+        }
+      }
+
+      // 10. Seamless WeekStrip Role Transfer at 2420ms (exact moment FLIP tiles land!)
+      if (weekStripRow && targetRects) {
+        if (elapsed >= 2420) {
+          weekStripRow.style.opacity = '1';
+        }
+      }
+
+      // Keep FLIP calendar layer ABOVE the rising wave dome during handoff (1920 -> 2520ms)
+      if (handoffLayerRef.current) {
+        handoffLayerRef.current.style.zIndex = elapsed >= 1900 && elapsed < 2540 ? '108' : '101';
+      }
+
+      // Hide splash canvas cleanly once wave has cleared the screen (2560ms)
+      if (overlayRef.current) {
+        overlayRef.current.style.opacity = elapsed >= 2560 ? '0' : '1';
+      }
+
+      if (elapsed >= TOTAL_DURATION_MS) {
+        cleanupDomOverrides();
+        emitPhase('done');
+        return false;
+      }
+      return true;
+    };
+
+    // Render frame 0 synchronously so there is zero flash before first rAF
+    renderFrame(0);
+
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const elapsed = Math.max(0, now - startTime);
+      const keepGoing = renderFrame(elapsed);
+      if (keepGoing && !cancelled) {
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
+    rafId = window.requestAnimationFrame(tick);
 
     return () => {
       cancelled = true;
-      for (const id of timers) window.clearTimeout(id);
+      if (rafId) window.cancelAnimationFrame(rafId);
+      cleanupDomOverrides();
     };
-    // Mount-only timeline controller — never depends on `phase`.
+    // Mount-only single timeline controller — never restarts on `phase`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reducedMotion]);
 
-  const showOverlay = phase !== 'done';
-  const isDatePhase =
-    phase === 'date' || phase === 'calendar' || phase === 'reveal' || phase === 'settle';
-  const isCalendarExpanded =
-    phase === 'calendar' || phase === 'reveal' || phase === 'settle';
-  const isRevealing = phase === 'reveal' || phase === 'settle';
-  const isSettled = phase === 'settle';
-  const isBlocking = phase === 'sunrise' || phase === 'date' || phase === 'calendar';
+  if (phase === 'done') return null;
 
-  const centerIdx = 2; // middle of 5-day strip
-  const activeTargetX = (launchCalendar.activeIndex - centerIdx) * SLOT_PITCH;
+  const isBlocking = phase === 'sunrise' || phase === 'date' || phase === 'calendar';
+  const activeItem = launchCalendar.items[launchCalendar.activeIndex] ?? {
+    iso: 'active',
+    shortDay: '',
+    dayOfMonth: new Date().getDate(),
+    isActive: true,
+  };
 
   return (
-    <AnimatePresence>
-      {showOverlay && (
-        <motion.div
-          key="app-launch-splash-hybrid25"
-          data-launch-phase={phase}
-          data-testid="app-splash-hybrid25"
-          aria-hidden="true"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: reducedMotion && isRevealing ? 0 : isSettled ? 0 : 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.05 } }}
-          transition={{ duration: reducedMotion ? 0.18 : 0.14, ease: EASE_SUNRISE }}
-          style={{ contain: 'layout style paint' }}
-          className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-canvas px-3 select-none ${
-            isBlocking ? 'pointer-events-auto' : 'pointer-events-none'
-          }`}
-        >
-          {/* Main focal stage — centered identically to approved Hybrid #25 render */}
-          <div
-            className="relative flex w-full max-w-[340px] flex-col items-center -mt-12"
-            style={{ contain: 'layout style' }}
-          >
-            {/* Stage box holding Symmetric Arch + Horizon-Clipped Sun -> Centered Date -> 5-Day Strip */}
-            <div className="relative flex h-[174px] w-full items-center justify-center">
-              {/* Symmetric Quiet Sunrise Amber Arch (draws smoothly left -> top -> right) */}
-              {!reducedMotion && (
-                <svg
-                  viewBox="0 0 210 166"
-                  className="pointer-events-none absolute h-[166px] w-[210px]"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <motion.path
-                    d="M 18 154 L 18 90 A 87 87 0 0 1 192 90 L 192 154"
-                    stroke="currentColor"
-                    strokeWidth="1.25"
-                    strokeLinecap="round"
-                    className="text-amber"
-                    initial={{ pathLength: 0.08, opacity: 0.85 }}
-                    animate={{
-                      pathLength: 1,
-                      opacity: isCalendarExpanded ? 0 : 0.9,
-                    }}
-                    transition={{
-                      pathLength: { duration: 0.72, ease: EASE_SUNRISE },
-                      opacity: { duration: 0.42, ease: EASE_SUNRISE },
-                    }}
-                  />
-                  {/* Two subtle concentric horizon lines under the rising sun */}
-                  <motion.line
-                    x1="46"
-                    y1="138"
-                    x2="164"
-                    y2="138"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    className="text-line-strong"
-                    initial={{ opacity: 0.35, scaleX: 0.4 }}
-                    animate={{
-                      opacity: isCalendarExpanded ? 0 : 0.6,
-                      scaleX: isCalendarExpanded ? 0.8 : 1,
-                    }}
-                    style={{ transformOrigin: '105px 138px' }}
-                    transition={{ duration: 0.45, ease: EASE_SUNRISE }}
-                  />
-                  <motion.line
-                    x1="70"
-                    y1="148"
-                    x2="140"
-                    y2="148"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    className="text-line-strong"
-                    initial={{ opacity: 0.2, scaleX: 0.3 }}
-                    animate={{
-                      opacity: isCalendarExpanded ? 0 : 0.4,
-                      scaleX: isCalendarExpanded ? 0.7 : 1,
-                    }}
-                    style={{ transformOrigin: '105px 148px' }}
-                    transition={{ duration: 0.5, delay: 0.08, ease: EASE_SUNRISE }}
-                  />
-                </svg>
-              )}
-
-              {/* Horizon-clipped rising sun layer (0..620ms) -> seamlessly hands off at dead center */}
-              <div
-                className="relative flex h-[112px] w-full items-center justify-center"
-                style={{
-                  // Clip below the horizon line during initial sunrise so the sun truly emerges upward
-                  clipPath:
-                    !reducedMotion && !isDatePhase
-                      ? 'inset(0px 0px 14px 0px)'
-                      : 'inset(-24px -24px -24px -24px)',
-                }}
+    <>
+      {/* Splash Background + Arch + Wordmark (z-[100], sits beneath rising AppShell dome z-[105]) */}
+      <div
+        ref={overlayRef}
+        data-launch-phase={phase}
+        data-testid="app-splash-hybrid25"
+        aria-hidden="true"
+        style={{ contain: 'layout style paint', willChange: 'opacity' }}
+        className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-canvas px-3 select-none ${
+          isBlocking ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
+      >
+        <div className="relative flex w-full max-w-[340px] flex-col items-center -mt-12">
+          {/* Symmetric Quiet Sunrise Arch & Concentric Horizon Lines */}
+          <div className="relative flex h-[174px] w-full items-center justify-center">
+            {!reducedMotion && (
+              <svg
+                ref={archSvgRef}
+                viewBox="0 0 195 162"
+                className="pointer-events-none absolute h-[162px] w-[195px]"
+                fill="none"
+                aria-hidden="true"
+                style={{ opacity: 0, willChange: 'opacity' }}
               >
-                {/* 4 Neighbor weekday tiles: emerge from behind active tile & fan out symmetrically */}
-                {launchCalendar.items.map((item, idx) => {
-                  if (item.isActive) return null;
-                  const targetX = (idx - centerIdx) * SLOT_PITCH;
-                  const dist = Math.abs(idx - launchCalendar.activeIndex);
-                  const delay = dist * 0.055;
-                  return (
-                    <motion.div
-                      key={item.iso}
-                      initial={{
-                        x: activeTargetX,
-                        opacity: 0,
-                        scale: 0.86,
-                      }}
-                      animate={
-                        isCalendarExpanded
-                          ? {
-                              x: targetX,
-                              opacity: 1,
-                              scale: 1,
-                            }
-                          : {
-                              x: 0,
-                              opacity: 0,
-                              scale: 0.86,
-                            }
-                      }
-                      transition={{
-                        duration: reducedMotion ? 0.1 : 0.48,
-                        delay: isCalendarExpanded && !reducedMotion ? delay : 0,
-                        ease: EASE_SIGNATURE,
-                      }}
-                      style={{
-                        width: TILE_W,
-                        height: TILE_H,
-                        willChange: 'transform, opacity',
-                      }}
-                      className="absolute flex flex-col items-center justify-center rounded-2xl border border-line bg-surface-elevated/90 text-ink"
-                    >
-                      <span className="font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-ink-muted">
-                        {item.shortDay}
-                      </span>
-                      <span className="mt-1 font-serif text-[21px] font-semibold leading-none tabular-nums text-ink">
-                        {item.dayOfMonth}
-                      </span>
-                      <motion.span
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: isRevealing ? 0.55 : 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="mt-1.5 h-1 w-1 rounded-full bg-ink-muted"
-                      />
-                    </motion.div>
-                  );
-                })}
+                <path
+                  ref={archPathRef}
+                  d="M 10 156 L 10 92 A 87.5 87.5 0 0 1 185 92 L 185 156"
+                  stroke="currentColor"
+                  strokeWidth="1.25"
+                  strokeLinecap="round"
+                  strokeDasharray={ARCH_PATH_LEN}
+                  strokeDashoffset={ARCH_PATH_LEN}
+                  className="text-amber"
+                />
+                <line
+                  ref={horizon1Ref}
+                  x1="36"
+                  y1="136"
+                  x2="159"
+                  y2="136"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  className="text-line-strong"
+                  style={{ opacity: 0, transformOrigin: '97.5px 136px' }}
+                />
+                <line
+                  ref={horizon2Ref}
+                  x1="62"
+                  y1="147"
+                  x2="133"
+                  y2="147"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  className="text-line-strong"
+                  style={{ opacity: 0, transformOrigin: '97.5px 147px' }}
+                />
+              </svg>
+            )}
+          </div>
 
-                {/* Active Amber Hero: rises from horizon dead-center -> reveals date -> morphs into tile -> glides to weekday slot */}
-                {(() => {
-                  const activeItem = launchCalendar.items[launchCalendar.activeIndex] ?? {
-                    iso: 'active',
-                    shortDay: '',
-                    dayOfMonth: new Date().getDate(),
-                    isActive: true,
-                  };
-                  return (
-                    <motion.div
-                      key={activeItem.iso}
-                      data-testid="splash-active-date-tile"
-                      initial={
-                        reducedMotion
-                          ? {
-                              x: activeTargetX,
-                              y: 0,
-                              width: TILE_W,
-                              height: TILE_H,
-                              borderRadius: 16,
-                            }
-                          : {
-                              x: 0,
-                              y: 54,
-                              width: 90,
-                              height: 90,
-                              borderRadius: 45,
-                            }
-                      }
-                      animate={
-                        reducedMotion
-                          ? {
-                              x: activeTargetX,
-                              y: 0,
-                              width: TILE_W,
-                              height: TILE_H,
-                              borderRadius: 16,
-                            }
-                          : isCalendarExpanded
-                            ? {
-                                x: activeTargetX,
-                                y: 0,
-                                width: TILE_W,
-                                height: TILE_H,
-                                borderRadius: 16,
-                              }
-                            : isDatePhase
-                              ? {
-                                  x: 0,
-                                  y: 0,
-                                  width: 72,
-                                  height: 82,
-                                  borderRadius: 24,
-                                }
-                              : {
-                                  x: 0,
-                                  y: 0,
-                                  width: 90,
-                                  height: 90,
-                                  borderRadius: 45,
-                                }
-                      }
-                      transition={{
-                        y: { duration: 0.58, ease: EASE_SUNRISE },
-                        x: { duration: 0.5, ease: EASE_SIGNATURE },
-                        width: { duration: 0.46, ease: EASE_SIGNATURE },
-                        height: { duration: 0.46, ease: EASE_SIGNATURE },
-                        borderRadius: { duration: 0.46, ease: EASE_SIGNATURE },
+          {/* Editorial serif wordmark `Uni Schedule` + centered amber underline */}
+          <div
+            ref={wordmarkRef}
+            style={{ opacity: reducedMotion ? 1 : 0, willChange: 'transform, opacity' }}
+            className="mt-2 flex flex-col items-center"
+          >
+            <span className="font-serif text-[32px] sm:text-[35px] font-medium tracking-[-0.02em] leading-none text-ink">
+              Uni Schedule
+            </span>
+            <span
+              ref={underlineRef}
+              style={{ opacity: reducedMotion ? 0.85 : 0, transform: 'scaleX(0)', willChange: 'transform, opacity' }}
+              className="mt-3.5 h-[1.5px] w-16 origin-center rounded-full bg-amber"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Dedicated FLIP Calendar Layer — elevates above rising dome (z-[108]) during 1900 -> 2520ms
+          so the 5 calendar tiles physically glide & morph onto the live WeekStrip without crossfade */}
+      <div
+        ref={handoffLayerRef}
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-[101] flex flex-col items-center justify-center px-3 select-none"
+      >
+        <div className="relative flex w-full max-w-[340px] flex-col items-center -mt-12">
+          <div className="relative flex h-[174px] w-full items-center justify-center">
+            <div
+              ref={horizonClipRef}
+              className="relative flex h-[112px] w-full items-center justify-center"
+            >
+              {/* 4 Neighbor Weekday Tiles */}
+              {launchCalendar.items.map((item, idx) => {
+                if (item.isActive) return null;
+                return (
+                  <div
+                    key={item.iso}
+                    ref={(el) => {
+                      neighborRefs.current[idx] = el;
+                    }}
+                    style={{
+                      width: TILE_W,
+                      height: TILE_H,
+                      opacity: 0,
+                      willChange: 'transform, opacity',
+                    }}
+                    className="absolute flex flex-col items-center justify-center rounded-2xl border border-line bg-surface-elevated/90 text-ink"
+                  >
+                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.06em] text-ink-muted">
+                      {item.shortDay}
+                    </span>
+                    <span className="mt-1 font-serif text-[21px] font-semibold leading-none tabular-nums text-ink">
+                      {item.dayOfMonth}
+                    </span>
+                    <span
+                      ref={(el) => {
+                        neighborDotRefs.current[idx] = el;
                       }}
-                      style={{ willChange: 'transform, width, height, border-radius' }}
-                      className="absolute z-20 flex flex-col items-center justify-center bg-amber text-[#242522] shadow-[0_14px_30px_-14px_rgba(216,139,69,0.45)]"
-                    >
-                      <motion.span
-                        initial={{ opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : 4 }}
-                        animate={{
-                          opacity: isDatePhase || reducedMotion ? 0.92 : 0,
-                          y: isDatePhase || reducedMotion ? 0 : 4,
-                        }}
-                        transition={{ duration: 0.26, ease: EASE_SUNRISE }}
-                        className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#FAF8F4] dark:text-[#242522]"
-                      >
-                        {activeItem.shortDay}
-                      </motion.span>
-                      <motion.span
-                        initial={{ opacity: reducedMotion ? 1 : 0, scale: reducedMotion ? 1 : 0.84 }}
-                        animate={{
-                          opacity: isDatePhase || reducedMotion ? 1 : 0,
-                          scale: isDatePhase || reducedMotion ? 1 : 0.84,
-                        }}
-                        transition={{ duration: 0.3, delay: isDatePhase ? 0.06 : 0, ease: EASE_SUNRISE }}
-                        className="mt-1 font-serif text-[23px] font-bold leading-none tabular-nums text-[#FAF8F4] dark:text-[#242522]"
-                      >
-                        {activeItem.dayOfMonth}
-                      </motion.span>
-                      <motion.span
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: isRevealing ? 0.75 : 0 }}
-                        transition={{ duration: 0.25 }}
-                        className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#FAF8F4] dark:bg-[#242522]"
-                      />
-                    </motion.div>
-                  );
-                })()}
+                      style={{ opacity: 0 }}
+                      className="mt-1.5 h-1 w-1 rounded-full bg-ink-muted"
+                    />
+                  </div>
+                );
+              })}
+
+              {/* Active Sun -> Date -> WeekStrip FLIP Hero */}
+              <div
+                ref={activeWrapRef}
+                data-testid="splash-active-date-tile"
+                style={{
+                  width: SUN_SIZE,
+                  height: SUN_SIZE,
+                  willChange: 'transform, opacity',
+                }}
+                className="absolute z-20 flex items-center justify-center"
+              >
+                {/* Solid Amber Sun / Tile Fill (GPU-scaled, zero width/height layout thrash) */}
+                <div
+                  ref={activeBgRef}
+                  style={{
+                    width: SUN_SIZE,
+                    height: SUN_SIZE,
+                    borderRadius: 45,
+                    willChange: 'transform, opacity, border-radius',
+                  }}
+                  className="absolute inset-0 bg-amber"
+                />
+                {/* Outlined WeekStrip Active Target Style (cross-morphs in during FLIP landing) */}
+                <div
+                  ref={activeOutlineRef}
+                  style={{
+                    width: SUN_SIZE,
+                    height: SUN_SIZE,
+                    borderRadius: 16,
+                    opacity: 0,
+                    willChange: 'transform, opacity',
+                  }}
+                  className="glass-amber-lit absolute inset-0"
+                />
+                {/* Crisp Unscaled Date Typography (solid amber phase) */}
+                <div
+                  ref={activeTextRef}
+                  style={{ opacity: reducedMotion ? 1 : 0, willChange: 'transform, opacity' }}
+                  className="relative z-10 flex flex-col items-center justify-center"
+                >
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-[#FAF8F4] dark:text-[#242522]">
+                    {activeItem.shortDay}
+                  </span>
+                  <span className="mt-1 font-serif text-[22px] font-bold leading-none tabular-nums text-[#FAF8F4] dark:text-[#242522]">
+                    {activeItem.dayOfMonth}
+                  </span>
+                </div>
+                {/* Landed WeekStrip-Matched Typography (fades in as amber fill transitions to outline) */}
+                <div
+                  ref={activeTextLandedRef}
+                  style={{ opacity: 0, willChange: 'opacity' }}
+                  className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-0.5"
+                >
+                  <span className="text-[10px] font-medium uppercase leading-none tracking-[0.03em] text-amber-fg">
+                    {activeItem.shortDay}
+                  </span>
+                  <span className="font-mono text-[14px] font-semibold leading-none tabular-nums text-ink">
+                    {activeItem.dayOfMonth}
+                  </span>
+                  <span
+                    ref={activeDotRef}
+                    style={{ opacity: 0 }}
+                    className="mt-0.5 h-1.5 w-1.5 rounded-full bg-amber"
+                  />
+                </div>
               </div>
             </div>
-
-            {/* Editorial serif wordmark `Uni Schedule` — proportioned to match approved render,
-                fades out cleanly BEFORE the bottom-up reveal wave reaches center (zero overlap) */}
-            <motion.div
-              initial={{ opacity: reducedMotion ? 1 : 0, y: reducedMotion ? 0 : 8 }}
-              animate={{
-                opacity: isRevealing ? 0 : 1,
-                y: isRevealing ? -6 : 0,
-              }}
-              transition={{
-                duration: isRevealing ? 0.22 : 0.45,
-                delay: !isRevealing && !reducedMotion ? 0.24 : 0,
-                ease: EASE_SUNRISE,
-              }}
-              className="mt-2 flex flex-col items-center"
-            >
-              <span className="font-serif text-[32px] sm:text-[35px] font-medium tracking-[-0.02em] leading-none text-ink">
-                Uni Schedule
-              </span>
-              <motion.span
-                initial={{ scaleX: reducedMotion ? 1 : 0, opacity: reducedMotion ? 0.85 : 0 }}
-                animate={{
-                  scaleX: isDatePhase && !isRevealing ? 1 : 0,
-                  opacity: isDatePhase && !isRevealing ? 0.9 : 0,
-                }}
-                transition={{ duration: 0.42, ease: EASE_SIGNATURE }}
-                className="mt-3.5 h-[1.5px] w-16 origin-center rounded-full bg-amber"
-              />
-            </motion.div>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          {/* Spacer matching wordmark block height so FLIP layer stays perfectly aligned with overlay */}
+          <div className="mt-2 h-[52px]" />
+        </div>
+      </div>
+    </>
   );
 };
